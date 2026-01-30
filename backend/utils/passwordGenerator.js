@@ -45,7 +45,7 @@ export const generateSimplePassword = () => {
 
 // Validate password strength
 export const validatePasswordStrength = (password) => {
-  const minLength = 8;
+  const minLength = 6;
   const hasUpperCase = /[A-Z]/.test(password);
   const hasLowerCase = /[a-z]/.test(password);
   const hasNumbers = /\d/.test(password);

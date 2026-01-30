@@ -1,53 +1,28 @@
-import React from "react";
 import { useState, useEffect } from "react";
-import {
-  Users,
-  MessageSquare,
-  Video,
-  Activity,
-  UserCheck,
-  Clock,
-} from "lucide-react";
 import axios from "axios";
+import { Users, UserCheck, UserX, TrendingUp, ArrowUpRight, ArrowDownRight, Activity, MoreHorizontal } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
-const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
+export default function Dashboard() {
   const [employees, setEmployees] = useState([]);
-  const adminToken = localStorage.getItem("token");
-  console.log(adminToken);
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    activeUsers: 0,
-  });
-
-  const activeEmployeesList = employees
-    .filter((employee) => employee.is_active)
-    .map((employee) => ({
-      id: employee._id,
-      name: `${employee.user_id.first_name} ${employee.user_id.last_name}`,
-      email: employee.user_id.email,
-      department: employee.department,
-      position: employee.position,
-      teamLead: employee.team_lead_id
-        ? `${employee.team_lead_id.user_id.first_name} ${employee.team_lead_id.user_id.last_name}`
-        : "N/A",
-    }));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadEmployees();
   }, []);
-  console.log(employees);
+
   const loadEmployees = async () => {
     try {
+      const token = localStorage.getItem("token");
       const response = await axios.get(`${BACKEND_URL}/employees`, {
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      console.log(response);
-      const employeeData = response.data.employees;
-      setEmployees(employeeData);
+      setEmployees(response.data.employees || []);
     } catch (error) {
       console.error("Error loading employees:", error);
     } finally {
@@ -55,203 +30,211 @@ const Dashboard = () => {
     }
   };
 
-  const statsData = [
-    {
-      label: "Total Employees",
-      value: employees?.length,
+  const activeCount = employees.filter((e) => e.is_active).length;
+  const inactiveCount = employees.length - activeCount;
+
+  const stats = [
+    { 
+      label: "Total Employees", 
+      value: employees.length, 
       icon: Users,
-      color: "from-cyan-500 to-blue-500",
+      change: "+12%",
+      trend: "up",
+      color: "bg-blue-500/10 text-blue-600 dark:text-blue-400"
     },
-    {
-      label: "Active Users",
-      value: activeEmployeesList.length,
+    { 
+      label: "Active", 
+      value: activeCount, 
       icon: UserCheck,
-      color: "from-teal-500 to-cyan-500",
+      change: "+8%",
+      trend: "up",
+      color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
     },
-    {
-      label: "Messages Today",
-      // value: "2,847",
-      icon: MessageSquare,
-      color: "from-blue-500 to-purple-500",
+    { 
+      label: "Inactive", 
+      value: inactiveCount, 
+      icon: UserX,
+      change: "-2%",
+      trend: "down",
+      color: "bg-orange-500/10 text-orange-600 dark:text-orange-400"
     },
-    {
-      label: "Active Meetings",
-      // value: "12",
-      icon: Video,
-      color: "from-purple-500 to-pink-500",
-    },
-  ];
-
-  const recentEmployees =
-    employees.length > 0
-      ? employees.slice(0, 4)
-      : [
-          {
-            name: "John Doe",
-            email: "john.doe@company.com",
-            status: "Active",
-            joined: "2 hours ago",
-          },
-          {
-            name: "Jane Smith",
-            email: "jane.smith@company.com",
-            status: "Active",
-            joined: "5 hours ago",
-          },
-          {
-            name: "Bob Johnson",
-            email: "bob.j@company.com",
-            status: "Pending",
-            joined: "1 day ago",
-          },
-          {
-            name: "Alice Williams",
-            email: "alice.w@company.com",
-            status: "Active",
-            joined: "2 days ago",
-          },
-        ];
-
-  const activities = [
-    {
-      user: "Sarah Connor",
-      action: "created a new channel",
-      time: "5 min ago",
-    },
-    { user: "Mike Ross", action: "uploaded a document", time: "12 min ago" },
-    {
-      user: "Rachel Green",
-      action: "joined video meeting",
-      time: "23 min ago",
-    },
-    {
-      user: "John Watson",
-      action: "sent a message in #general",
-      time: "45 min ago",
+    { 
+      label: "Growth Rate", 
+      value: "24%", 
+      icon: TrendingUp,
+      change: "+5%",
+      trend: "up",
+      color: "bg-violet-500/10 text-violet-600 dark:text-violet-400"
     },
   ];
 
-  if (loading) return <div>LOADING</div>;
+  const departmentStats = employees.reduce((acc, emp) => {
+    const dept = emp.department || "Unassigned";
+    acc[dept] = (acc[dept] || 0) + 1;
+    return acc;
+  }, {});
+
+  const departmentColors = {
+    frontend: "bg-blue-500",
+    backend: "bg-emerald-500",
+    devops: "bg-orange-500",
+    qa: "bg-violet-500",
+    hr: "bg-pink-500",
+    finance: "bg-cyan-500",
+    Unassigned: "bg-gray-400",
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-muted-foreground text-sm">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-teal-900 mb-2">
-          Dashboard Overview
-        </h1>
-        <p className="text-teal-700">
-          Welcome back! Here's what's happening today.
-        </p>
+    <div className="space-y-8 animate-fade-in">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-1">Welcome back! Here's an overview of your organization.</p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-2">
+          <Activity className="h-4 w-4" />
+          View Reports
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statsData.map((stat, idx) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={idx}
-              className="bg-white rounded-2xl p-6 border-2 border-teal-200 shadow-sm hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center`}
-                >
-                  <Icon className="w-6 h-6 text-white" />
+      {/* Stats Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat, index) => (
+          <Card key={stat.label} className="overflow-hidden group hover:shadow-md transition-all duration-300" style={{ animationDelay: `${index * 50}ms` }}>
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between">
+                <div className={`h-11 w-11 rounded-xl ${stat.color} flex items-center justify-center transition-transform duration-300 group-hover:scale-110`}>
+                  <stat.icon className="h-5 w-5" />
                 </div>
-                <span className="text-sm font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded-lg">
+                <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                  stat.trend === "up" 
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                    : "bg-red-500/10 text-red-600 dark:text-red-400"
+                }`}>
+                  {stat.trend === "up" ? (
+                    <ArrowUpRight className="h-3 w-3" />
+                  ) : (
+                    <ArrowDownRight className="h-3 w-3" />
+                  )}
                   {stat.change}
-                </span>
+                </div>
               </div>
-              <p className="text-sm text-teal-600 mb-1">{stat.label}</p>
-              <p className="text-3xl font-bold text-teal-900">{stat.value}</p>
-            </div>
-          );
-        })}
+              <div className="mt-4">
+                <p className="text-3xl font-bold tracking-tight">{stat.value}</p>
+                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-          <div className="p-6 border-b-2 border-teal-200">
-            <h2 className="text-xl font-bold text-teal-900">
-              Recent Employees
-            </h2>
-          </div>
-          <div className="p-6 space-y-4">
-            {employees
-              .filter((employee) => employee.is_active)
-              .slice(0, 5) // 👈 ONLY FIRST 5
-              .map((employee) => {
-                const fullName = `${employee.user_id.first_name} ${employee.user_id.last_name}`;
-                const initials = fullName
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("");
-
-                return (
-                  <div
-                    key={employee._id}
-                    className="flex items-center justify-between p-4 bg-teal-50 rounded-xl hover:bg-teal-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                        {initials}
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-teal-900">
-                          {fullName}
+      {/* Content Grid */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        {/* Recent Employees */}
+        <Card className="lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-base font-semibold">Recent Employees</CardTitle>
+              <CardDescription>Latest additions to your team</CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {employees.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground text-sm">
+                No employees found
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {employees.slice(0, 5).map((employee, index) => {
+                  const name = `${employee.user_id?.first_name || ""} ${employee.user_id?.last_name || ""}`.trim();
+                  const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase();
+                  
+                  return (
+                    <div 
+                      key={employee._id} 
+                      className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <Avatar className="h-10 w-10 ring-2 ring-background shadow-sm">
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                          {initials || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+                          {name || "Unknown"}
                         </p>
-                        <p className="text-sm text-teal-600">
-                          {employee.user_id.email}
+                        <p className="text-xs text-muted-foreground truncate">
+                          {employee.user_id?.email}
                         </p>
                       </div>
+                      <div className="hidden sm:flex flex-col items-end gap-1">
+                        <Badge variant="outline" className="text-xs font-normal capitalize">
+                          {employee.department}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{employee.position}</span>
+                      </div>
+                      <div className={`h-2 w-2 rounded-full ${employee.is_active ? "bg-emerald-500" : "bg-gray-300"}`} />
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-                    <div className="text-right">
-                      <span className="inline-block px-3 py-1 rounded-lg text-xs font-semibold bg-teal-100 text-teal-700">
-                        Active
-                      </span>
-                      <p className="text-xs text-teal-600 mt-1">
-                        Joined{" "}
-                        {new Date(employee.hire_date).toLocaleDateString()}
-                      </p>
+        {/* Department Distribution */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">By Department</CardTitle>
+            <CardDescription>Employee distribution</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(departmentStats).map(([dept, count], index) => {
+                const percentage = Math.round((count / employees.length) * 100);
+                const color = departmentColors[dept] || "bg-gray-400";
+                return (
+                  <div key={dept} className="space-y-2" style={{ animationDelay: `${index * 50}ms` }}>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium capitalize">{dept}</span>
+                      <span className="text-muted-foreground">{count} ({percentage}%)</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${color} rounded-full transition-all duration-500 ease-out`}
+                        style={{ width: `${percentage}%` }}
+                      />
                     </div>
                   </div>
                 );
               })}
-          </div>
-        </div>
+            </div>
 
-        <div className="bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-          <div className="p-6 border-b-2 border-teal-200">
-            <h2 className="text-xl font-bold text-teal-900">Recent Activity</h2>
-          </div>
+            <Separator className="my-6" />
 
-          <div className="p-6 space-y-4">
-            {activeEmployeesList.slice(0, 5).map((emp) => (
-              <div key={emp.id} className="flex gap-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-white" />
-                </div>
-
-                <div className="flex-1">
-                  <p className="text-sm text-teal-900">
-                    <span className="font-semibold">{emp.name}</span> joined the{" "}
-                    <span className="font-medium">{emp.department}</span> team
-                    as <span className="font-medium">{emp.position}</span>
-                  </p>
-
-                  <p className="text-xs text-teal-600 flex items-center gap-1 mt-1">
-                    <Clock className="w-3 h-3" /> Active employee
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Total Departments</span>
+              <span className="font-semibold">{Object.keys(departmentStats).length}</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </>
+    </div>
   );
-};
-
-export default Dashboard;
+}

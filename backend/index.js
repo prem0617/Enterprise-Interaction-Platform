@@ -1,14 +1,14 @@
+// Load environment variables FIRST (side-effect import for ES modules)
+import "dotenv/config";
+
 import express from "express";
-import dotenv from "dotenv";
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
+import whiteboardRoutes from "./routes/whiteboard.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import cors from "cors";
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 
@@ -50,6 +50,7 @@ app.get("/", (req, res) => {
     endpoints: {
       auth: "/api/auth",
       employees: "/api/employees",
+      whiteboard: "/api/whiteboard",
     },
   });
 });
@@ -57,6 +58,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/helper", helperRoutes);
+app.use("/api/whiteboard", whiteboardRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

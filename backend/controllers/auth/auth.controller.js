@@ -204,9 +204,9 @@ export const changePassword = async (req, res) => {
     const userId = req.user.id;
 
     // Validate password length
-    if (newPassword.length < 8) {
+    if (newPassword.length < 6) {
       return res.status(400).json({
-        error: "New password must be at least 8 characters long",
+        error: "New password must be at least 6 characters long",
       });
     }
 
@@ -314,9 +314,9 @@ export const resetPassword = async (req, res) => {
     const { password } = req.body;
 
     // Validate password
-    if (password.length < 8) {
+    if (password.length < 6) {
       return res.status(400).json({
-        error: "Password must be at least 8 characters long",
+        error: "Password must be at least 6 characters long",
       });
     }
 

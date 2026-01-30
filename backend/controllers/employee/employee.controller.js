@@ -283,6 +283,79 @@ export const updateEmployee = async (req, res) => {
   }
 };
 
+// Update Own Profile (for logged-in user)
+export const updateOwnProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { first_name, last_name, phone, timezone } = req.body;
+
+    // Find employee by user_id
+    const employee = await Employee.findOne({ user_id: userId }).populate("user_id");
+    if (!employee) {
+      return res.status(404).json({ error: "Employee profile not found" });
+    }
+
+    // Update only allowed user fields (not email, country, department, position)
+    if (first_name) employee.user_id.first_name = first_name;
+    if (last_name) employee.user_id.last_name = last_name;
+    if (phone !== undefined) employee.user_id.phone = phone;
+    if (timezone) employee.user_id.timezone = timezone;
+
+    await employee.user_id.save();
+
+    // Return updated profile
+    const updatedEmployee = await Employee.findById(employee._id)
+      .populate({
+        path: "user_id",
+        select: "-password_hash",
+      })
+      .populate({
+        path: "team_lead_id",
+        populate: {
+          path: "user_id",
+          select: "first_name last_name email",
+        },
+      });
+
+    res.json({
+      message: "Profile updated successfully",
+      user: updatedEmployee,
+    });
+  } catch (error) {
+    console.error("Update own profile error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get Own Profile (for logged-in user)
+export const getOwnProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const employee = await Employee.findOne({ user_id: userId })
+      .populate({
+        path: "user_id",
+        select: "-password_hash",
+      })
+      .populate({
+        path: "team_lead_id",
+        populate: {
+          path: "user_id",
+          select: "first_name last_name email",
+        },
+      });
+
+    if (!employee) {
+      return res.status(404).json({ error: "Employee profile not found" });
+    }
+
+    res.json({ user: employee });
+  } catch (error) {
+    console.error("Get own profile error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Delete Employee (soft delete - mark as inactive)
 export const deleteEmployee = async (req, res) => {
   try {
