@@ -2,15 +2,31 @@
 import "dotenv/config";
 
 import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
 import whiteboardRoutes from "./routes/whiteboard.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
+import { setupWhiteboardSocket } from "./sockets/whiteboard.socket.js";
 import cors from "cors";
 
 const app = express();
+const httpServer = createServer(app);
+
+// Socket.IO setup with CORS
+const io = new Server(httpServer, {
+  cors: {
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// Setup whiteboard socket handlers
+setupWhiteboardSocket(io);
 
 // Middleware
 app.use(express.json());
@@ -76,8 +92,9 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔌 WebSocket server ready`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 });
 

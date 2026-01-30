@@ -7,6 +7,7 @@ import {
   deleteEmployee,
   updateOwnProfile,
   getOwnProfile,
+  sendEmployeeEmail,
 } from "../controllers/employee/employee.controller.js";
 import { verifyToken, isAdmin, isHR } from "../middlewares/auth.middleware.js";
 
@@ -24,6 +25,9 @@ router.post("/", isHR, createEmployee);
 
 // Get all employees
 router.get("/", getAllEmployees);
+
+// Send email to employee
+router.post("/send-email", sendEmployeeEmail);
 
 // Get employee by ID
 router.get("/:id", getEmployeeById);

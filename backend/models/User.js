@@ -51,6 +51,10 @@ const userSchema = new mongoose.Schema(
     last_login: {
       type: Date,
     },
+    password_changed: {
+      type: Boolean,
+      default: false,
+    },
     // Password reset fields
     resetPasswordToken: {
       type: String,

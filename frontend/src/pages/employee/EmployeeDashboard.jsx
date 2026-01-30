@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   MessageSquare, 
@@ -11,19 +11,20 @@ import {
   Bell,
   Search,
   Home,
-  PanelLeftClose,
-  PanelLeft,
-  Sparkles,
+  Menu,
+  X,
+  Building2,
   Calendar,
   Clock,
-  PenTool
+  PenTool,
+  ChevronDown,
+  ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,23 +37,29 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import Whiteboard from "../admin/Whiteboard";
 
 const navItems = [
-  { id: "home", icon: Home, label: "Home", badge: null },
+  { id: "home", icon: Home, label: "Home" },
   { id: "messages", icon: MessageSquare, label: "Messages", badge: "5" },
-  { id: "team", icon: Users, label: "Team", badge: null },
-  { id: "files", icon: FileText, label: "Files", badge: null },
+  { id: "team", icon: Users, label: "Team" },
+  { id: "files", icon: FileText, label: "Files" },
   { id: "meetings", icon: Video, label: "Meetings", badge: "2" },
-  { id: "whiteboard", icon: PenTool, label: "Whiteboard", badge: null },
+  { id: "whiteboard", icon: PenTool, label: "Whiteboard" },
+  { id: "settings", icon: Settings, label: "Settings" },
 ];
 
 export default function EmployeeDashboard() {
   const [activeNav, setActiveNav] = useState("home");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userData, setUserData] = useState({});
   const navigate = useNavigate();
-  const userData = JSON.parse(localStorage.getItem("user") || "{}");
+
+  useEffect(() => {
+    const data = localStorage.getItem("userData");
+    if (data) setUserData(JSON.parse(data));
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    localStorage.removeItem("userData");
     navigate("/login");
   };
 
@@ -60,146 +67,136 @@ export default function EmployeeDashboard() {
   const fullName = `${userData?.first_name || ""} ${userData?.last_name || ""}`.trim() || "User";
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-sky-50 dark:bg-gray-950">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden" 
+          onClick={() => setSidebarOpen(false)} 
+        />
+      )}
+
       {/* Sidebar */}
-      <aside 
-        className={`fixed left-0 top-0 h-full z-40 bg-card border-r flex flex-col transition-all duration-300 ease-in-out ${
-          sidebarCollapsed ? "w-[70px]" : "w-64"
-        }`}
-      >
+      <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
         {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center">
+              <Building2 className="h-5 w-5 text-white" />
             </div>
-            {!sidebarCollapsed && (
-              <div className="animate-fade-in">
-                <p className="font-semibold text-sm">Enterprise</p>
-                <p className="text-xs text-muted-foreground">Workspace</p>
-              </div>
-            )}
+            <div>
+              <h1 className="font-semibold text-sm">Enterprise</h1>
+              <p className="text-xs text-gray-500">Workspace</p>
+            </div>
           </div>
+          <button 
+            onClick={() => setSidebarOpen(false)} 
+            className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveNav(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
+              onClick={() => {
+                setActiveNav(item.id);
+                setSidebarOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.id 
-                  ? "bg-primary text-primary-foreground shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  ? "bg-emerald-600 text-white" 
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
-              title={sidebarCollapsed ? item.label : undefined}
             >
-              <item.icon className={`h-5 w-5 flex-shrink-0 transition-transform duration-200 ${
-                activeNav !== item.id ? "group-hover:scale-110" : ""
-              }`} />
-              {!sidebarCollapsed && (
-                <span className="flex-1 text-left animate-fade-in">{item.label}</span>
-              )}
-              {!sidebarCollapsed && item.badge && (
-                <Badge variant={activeNav === item.id ? "secondary" : "default"} className="h-5 px-1.5 text-xs animate-fade-in">
+              <item.icon className="h-5 w-5" />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge && (
+                <Badge variant={activeNav === item.id ? "secondary" : "default"} className="h-5 px-1.5 text-xs">
                   {item.badge}
                 </Badge>
-              )}
-              {sidebarCollapsed && item.badge && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center">
-                  {item.badge}
-                </span>
               )}
             </button>
           ))}
         </nav>
 
-        <Separator />
-
-        {/* Settings */}
-        <div className="p-3">
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
-            title={sidebarCollapsed ? "Profile" : undefined}
-          >
-            <Settings className="h-5 w-5 flex-shrink-0" />
-            {!sidebarCollapsed && <span className="animate-fade-in">Settings</span>}
-          </button>
-        </div>
-
-        {/* Collapse */}
-        <div className="p-3 border-t">
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="w-full flex items-center justify-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
-          >
-            {sidebarCollapsed ? (
-              <PanelLeft className="h-5 w-5" />
-            ) : (
-              <>
-                <PanelLeftClose className="h-5 w-5" />
-                <span className="animate-fade-in">Collapse</span>
-              </>
-            )}
-          </button>
+        {/* User section */}
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+            <Avatar className="h-9 w-9">
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{fullName}</p>
+              <p className="text-xs text-gray-500 truncate">{userData?.email}</p>
+            </div>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className={`flex-1 transition-all duration-300 ease-in-out ${sidebarCollapsed ? "ml-[70px]" : "ml-64"}`}>
+      {/* Main content */}
+      <div className="lg:pl-64">
         {/* Header */}
-        <header className="sticky top-0 z-30 h-16 bg-background/80 backdrop-blur-md border-b flex items-center justify-between px-6">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <header className="sticky top-0 z-30 h-16 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 lg:px-6">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setSidebarOpen(true)} 
+              className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            
+            {/* Search */}
+            <div className="hidden sm:block relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input 
                 placeholder="Search..." 
-                className="pl-9 bg-muted/50 border-0 focus-visible:bg-background transition-colors"
+                className="w-64 pl-9 h-9 bg-gray-100 dark:bg-gray-800 border-0"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <ThemeToggle />
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background" />
+              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500" />
             </Button>
-            <Separator orientation="vertical" className="h-8 mx-2" />
+            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-3 pl-2 pr-3">
-                  <Avatar className="h-8 w-8 ring-2 ring-primary/10">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                <Button variant="ghost" className="gap-2 h-9 px-2">
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-xs font-semibold">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="hidden sm:block text-left">
-                    <p className="text-sm font-medium leading-none">{fullName}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{userData?.email}</p>
-                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-400 hidden sm:block" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium">{fullName}</p>
-                    <p className="text-xs text-muted-foreground">{userData?.email}</p>
-                  </div>
+                <DropdownMenuLabel>
+                  <p className="font-medium">{fullName}</p>
+                  <p className="text-xs text-gray-500 font-normal">{userData?.email}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/profile")}>
                   <User className="mr-2 h-4 w-4" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveNav("settings")}>
                   <Settings className="mr-2 h-4 w-4" />
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
                 </DropdownMenuItem>
@@ -208,10 +205,10 @@ export default function EmployeeDashboard() {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="p-6 animate-fade-in">
+        {/* Page content */}
+        <main className="p-4 lg:p-6">
           {activeNav === "home" && <HomePage userData={userData} />}
-          {activeNav === "whiteboard" && <Whiteboard />}
+          {activeNav === "whiteboard" && <Whiteboard embedded={true} />}
           {activeNav !== "home" && activeNav !== "whiteboard" && (
             <PlaceholderPage 
               title={navItems.find(i => i.id === activeNav)?.label || ""} 
@@ -225,17 +222,13 @@ export default function EmployeeDashboard() {
 }
 
 function HomePage({ userData }) {
-  const stats = [
-    { label: "Channels", value: "5", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-    { label: "Team Members", value: "12", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-    { label: "Active Tasks", value: "8", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
-    { label: "Meetings Today", value: "3", color: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
-  ];
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
 
   const messages = [
-    { name: "Sarah Connor", message: "Can you review the latest design?", time: "2m ago", unread: true },
-    { name: "John Smith", message: "Meeting rescheduled to 3pm", time: "15m ago", unread: true },
-    { name: "Emily Davis", message: "Thanks for your help!", time: "1h ago", unread: false },
+    { name: "Sarah Connor", message: "Can you review the latest design?", time: "2m", unread: true },
+    { name: "John Smith", message: "Meeting rescheduled to 3pm", time: "15m", unread: true },
+    { name: "Emily Davis", message: "Thanks for your help!", time: "1h", unread: false },
   ];
 
   const meetings = [
@@ -245,30 +238,38 @@ function HomePage({ userData }) {
   ];
 
   return (
-    <div className="space-y-8">
-      {/* Welcome */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Good morning, {userData?.first_name || "User"} 👋
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">Here's what's happening today</p>
+          <p className="text-gray-500 text-sm">{greeting} 👋</p>
+          <h1 className="text-2xl font-bold mt-1">{userData?.first_name || "Welcome"}</h1>
         </div>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700">
           <Calendar className="h-4 w-4" />
           View Calendar
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => (
-          <Card key={stat.label} className="group hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5">
-              <div className={`h-10 w-10 rounded-xl ${stat.color} flex items-center justify-center mb-3 transition-transform duration-300 group-hover:scale-110`}>
-                <span className="text-lg font-bold">{stat.value}</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Messages", value: "5", icon: MessageSquare, color: "bg-blue-500" },
+          { label: "Team", value: "12", icon: Users, color: "bg-emerald-500" },
+          { label: "Tasks", value: "8", icon: FileText, color: "bg-amber-500" },
+          { label: "Meetings", value: "3", icon: Video, color: "bg-violet-500" },
+        ].map((stat) => (
+          <Card key={stat.label} className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className={`h-10 w-10 rounded-lg ${stat.color} flex items-center justify-center`}>
+                  <stat.icon className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-sm text-gray-500">{stat.label}</p>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
             </CardContent>
           </Card>
         ))}
@@ -278,35 +279,37 @@ function HomePage({ userData }) {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Messages */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
             <div>
-              <CardTitle className="text-base font-semibold">Recent Messages</CardTitle>
-              <CardDescription>Your latest conversations</CardDescription>
+              <CardTitle className="text-lg">Messages</CardTitle>
+              <CardDescription>Recent conversations</CardDescription>
             </div>
-            <Badge variant="secondary">5 new</Badge>
+            <Button variant="ghost" size="sm" className="gap-1 text-emerald-600">
+              View all <ArrowRight className="h-4 w-4" />
+            </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {messages.map((msg, i) => (
                 <div 
                   key={i} 
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
                 >
-                  <Avatar className="h-9 w-9 ring-2 ring-background">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300 text-xs">
                       {msg.name.split(" ").map(n => n[0]).join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+                      <p className="text-sm font-medium truncate group-hover:text-emerald-600 transition-colors">
                         {msg.name}
                       </p>
-                      {msg.unread && <span className="h-2 w-2 rounded-full bg-primary" />}
+                      {msg.unread && <span className="h-2 w-2 rounded-full bg-emerald-500" />}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{msg.message}</p>
+                    <p className="text-xs text-gray-500 truncate">{msg.message}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{msg.time}</span>
+                  <span className="text-xs text-gray-400">{msg.time}</span>
                 </div>
               ))}
             </div>
@@ -315,33 +318,33 @@ function HomePage({ userData }) {
 
         {/* Meetings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
             <div>
-              <CardTitle className="text-base font-semibold">Today's Meetings</CardTitle>
-              <CardDescription>Your scheduled calls</CardDescription>
+              <CardTitle className="text-lg">Today's Meetings</CardTitle>
+              <CardDescription>Scheduled calls</CardDescription>
             </div>
-            <Badge variant="secondary">3 today</Badge>
+            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">3 today</Badge>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {meetings.map((meeting, i) => (
                 <div 
                   key={i} 
-                  className="flex items-center justify-between p-3 rounded-lg border hover:border-primary/50 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg border hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Video className="h-5 w-5 text-primary" />
+                    <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                      <Video className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">{meeting.title}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
                         <Clock className="h-3 w-3" />
                         {meeting.time} • {meeting.duration}
                       </div>
                     </div>
                   </div>
-                  <Button size="sm">Join</Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">Join</Button>
                 </div>
               ))}
             </div>
@@ -354,13 +357,13 @@ function HomePage({ userData }) {
 
 function PlaceholderPage({ title, icon: Icon }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-        <Icon className="h-8 w-8 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center py-24">
+      <div className="h-20 w-20 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-6">
+        <Icon className="h-10 w-10 text-gray-400" />
       </div>
-      <h2 className="text-xl font-semibold mb-1">{title}</h2>
-      <p className="text-muted-foreground text-sm">This feature is coming soon</p>
-      <Badge variant="secondary" className="mt-4">Coming Soon</Badge>
+      <h2 className="text-2xl font-bold mb-2">{title}</h2>
+      <p className="text-gray-500 mb-6">This feature is coming soon</p>
+      <Badge>Coming Soon</Badge>
     </div>
   );
 }

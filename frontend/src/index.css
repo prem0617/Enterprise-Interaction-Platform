@@ -5,55 +5,51 @@
   --radius: 0.5rem;
 }
 
-/* Light theme - Modern Aesthetic */
+/* Light theme */
 :root,
 .light {
-  --color-background: hsl(0 0% 98%);
-  --color-foreground: hsl(240 10% 3.9%);
+  --color-background: hsl(199 89% 96%);
+  --color-foreground: hsl(240 10% 4%);
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(240 10% 3.9%);
+  --color-card-foreground: hsl(240 10% 4%);
   --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(240 10% 3.9%);
-  --color-primary: hsl(240 5.9% 10%);
-  --color-primary-foreground: hsl(0 0% 98%);
-  --color-secondary: hsl(240 4.8% 95.9%);
-  --color-secondary-foreground: hsl(240 5.9% 10%);
-  --color-muted: hsl(240 4.8% 95.9%);
-  --color-muted-foreground: hsl(240 3.8% 46.1%);
-  --color-accent: hsl(240 4.8% 95.9%);
-  --color-accent-foreground: hsl(240 5.9% 10%);
-  --color-destructive: hsl(0 84.2% 60.2%);
-  --color-destructive-foreground: hsl(0 0% 98%);
-  --color-border: hsl(240 5.9% 90%);
-  --color-input: hsl(240 5.9% 90%);
-  --color-ring: hsl(240 5.9% 10%);
-  --color-sidebar: hsl(0 0% 100%);
-  --color-sidebar-border: hsl(240 5.9% 90%);
+  --color-popover-foreground: hsl(240 10% 4%);
+  --color-primary: hsl(262 83% 58%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(240 5% 96%);
+  --color-secondary-foreground: hsl(240 10% 4%);
+  --color-muted: hsl(240 5% 96%);
+  --color-muted-foreground: hsl(240 4% 46%);
+  --color-accent: hsl(240 5% 96%);
+  --color-accent-foreground: hsl(240 10% 4%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(240 6% 90%);
+  --color-input: hsl(240 6% 90%);
+  --color-ring: hsl(262 83% 58%);
 }
 
-/* Dark theme - Modern Aesthetic */
+/* Dark theme */
 .dark {
-  --color-background: hsl(240 10% 3.9%);
-  --color-foreground: hsl(0 0% 98%);
-  --color-card: hsl(240 10% 5.9%);
-  --color-card-foreground: hsl(0 0% 98%);
-  --color-popover: hsl(240 10% 5.9%);
-  --color-popover-foreground: hsl(0 0% 98%);
-  --color-primary: hsl(0 0% 98%);
-  --color-primary-foreground: hsl(240 5.9% 10%);
-  --color-secondary: hsl(240 3.7% 15.9%);
-  --color-secondary-foreground: hsl(0 0% 98%);
-  --color-muted: hsl(240 3.7% 15.9%);
-  --color-muted-foreground: hsl(240 5% 64.9%);
-  --color-accent: hsl(240 3.7% 15.9%);
-  --color-accent-foreground: hsl(0 0% 98%);
-  --color-destructive: hsl(0 62.8% 30.6%);
-  --color-destructive-foreground: hsl(0 0% 98%);
-  --color-border: hsl(240 3.7% 15.9%);
-  --color-input: hsl(240 3.7% 15.9%);
-  --color-ring: hsl(240 4.9% 83.9%);
-  --color-sidebar: hsl(240 10% 5.9%);
-  --color-sidebar-border: hsl(240 3.7% 15.9%);
+  --color-background: hsl(240 10% 4%);
+  --color-foreground: hsl(0 0% 95%);
+  --color-card: hsl(240 10% 6%);
+  --color-card-foreground: hsl(0 0% 95%);
+  --color-popover: hsl(240 10% 6%);
+  --color-popover-foreground: hsl(0 0% 95%);
+  --color-primary: hsl(262 83% 65%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(240 5% 13%);
+  --color-secondary-foreground: hsl(0 0% 95%);
+  --color-muted: hsl(240 5% 13%);
+  --color-muted-foreground: hsl(240 5% 55%);
+  --color-accent: hsl(240 5% 13%);
+  --color-accent-foreground: hsl(0 0% 95%);
+  --color-destructive: hsl(0 62% 50%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(240 5% 17%);
+  --color-input: hsl(240 5% 17%);
+  --color-ring: hsl(262 83% 65%);
 }
 
 * {
@@ -68,7 +64,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -79,28 +75,27 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(240 3.7% 15.9% / 0.3);
+  background: hsl(240 5% 50% / 0.2);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(240 3.7% 15.9% / 0.5);
+  background: hsl(240 5% 50% / 0.35);
 }
 
-/* Animations */
+/* Simple animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slideInFromRight {
+@keyframes slideInRight {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
 
-@keyframes fadeInBackdrop {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .animate-fade-in {
@@ -108,20 +103,12 @@ body {
 }
 
 .animate-slide-in {
-  animation: slideInFromRight 0.3s ease-out;
+  animation: slideInRight 0.3s ease-out;
 }
 
-.animate-backdrop {
-  animation: fadeInBackdrop 0.2s ease-out;
-}
-
-/* Glass effect */
-.glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.dark .glass {
-  background: rgba(0, 0, 0, 0.6);
+/* Input focus */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: hsl(262 83% 58%);
+  box-shadow: 0 0 0 2px hsl(262 83% 58% / 0.2);
 }

@@ -184,6 +184,7 @@ export const employeeLogin = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         user_type: user.user_type,
+        password_changed: user.password_changed || false,
         employee: {
           id: employee._id,
           department: employee.department,
@@ -225,11 +226,9 @@ export const changePassword = async (req, res) => {
     // Hash new password
     const salt = await bcrypt.genSalt(10);
     user.password_hash = await bcrypt.hash(newPassword, salt);
-
-    // If user was in pending status, activate them
-    // if (user.status === "pending") {
-    //   user.status = "active";
-    // }
+    
+    // Mark password as changed (for first-time login flow)
+    user.password_changed = true;
 
     await user.save();
 

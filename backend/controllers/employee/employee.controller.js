@@ -146,6 +146,8 @@ export const createEmployee = async (req, res) => {
         position: employee.position,
         team_lead_id: employee.team_lead_id,
       },
+      // Include temp password for admin reference (useful if email fails)
+      tempPassword: tempPassword,
     });
   } catch (error) {
     console.error("Create employee error:", error);
@@ -379,5 +381,43 @@ export const deleteEmployee = async (req, res) => {
   } catch (error) {
     console.error("Delete employee error:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Send Email to Employee
+export const sendEmployeeEmail = async (req, res) => {
+  try {
+    const { to, subject, body } = req.body;
+
+    if (!to || !subject || !body) {
+      return res.status(400).json({ error: "To, subject, and body are required" });
+    }
+
+    // Get sender info
+    const sender = req.user;
+    const senderName = `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'Admin';
+
+    // Send the email
+    await sendEmail({
+      to,
+      subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="padding: 20px;">
+            ${body.replace(/\n/g, '<br>')}
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #666; font-size: 12px;">
+            This email was sent by ${senderName} via Enterprise Platform.
+          </p>
+        </div>
+      `,
+      text: body,
+    });
+
+    res.json({ message: "Email sent successfully" });
+  } catch (error) {
+    console.error("Send email error:", error);
+    res.status(500).json({ error: "Failed to send email" });
   }
 };

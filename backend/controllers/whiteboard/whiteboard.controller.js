@@ -1,13 +1,116 @@
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import WhiteboardSession from "../../models/WhiteboardSession.js";
 import { sendEmail } from "../../config/email.js";
+import crypto from "crypto";
+
+// Generate unique session ID
+const generateSessionId = () => {
+  return crypto.randomBytes(8).toString("hex");
+};
+
+// Create a new whiteboard session
+export const createSession = async (req, res) => {
+  try {
+    const { name } = req.body;
+    const hostId = req.user._id;
+
+    const sessionId = generateSessionId();
+
+    const session = await WhiteboardSession.create({
+      session_id: sessionId,
+      name: name || "Untitled Whiteboard",
+      host_id: hostId,
+      participants: [],
+      is_active: true
+    });
+
+    res.status(201).json({
+      sessionId: session.session_id,
+      name: session.name,
+      message: "Whiteboard session created"
+    });
+  } catch (error) {
+    console.error("Create session error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get session details
+export const getSession = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await WhiteboardSession.findOne({ session_id: sessionId })
+      .populate("host_id", "first_name last_name email")
+      .populate("participants.user_id", "first_name last_name email");
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    res.json({
+      sessionId: session.session_id,
+      name: session.name,
+      host: {
+        id: session.host_id._id,
+        name: `${session.host_id.first_name} ${session.host_id.last_name}`,
+        email: session.host_id.email
+      },
+      participants: session.participants.map(p => ({
+        userId: p.user_id?._id,
+        name: p.user_id ? `${p.user_id.first_name} ${p.user_id.last_name}` : "Unknown",
+        email: p.user_id?.email,
+        status: p.status,
+        joinedAt: p.joined_at
+      })),
+      canvasData: session.canvas_data,
+      isActive: session.is_active,
+      createdAt: session.createdAt
+    });
+  } catch (error) {
+    console.error("Get session error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get user's sessions (hosted and participated)
+export const getMySessions = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const sessions = await WhiteboardSession.find({
+      $or: [
+        { host_id: userId },
+        { "participants.user_id": userId }
+      ],
+      is_active: true
+    })
+      .populate("host_id", "first_name last_name")
+      .sort({ updatedAt: -1 })
+      .limit(20);
+
+    res.json({
+      sessions: sessions.map(s => ({
+        sessionId: s.session_id,
+        name: s.name,
+        isHost: s.host_id._id.toString() === userId.toString(),
+        hostName: `${s.host_id.first_name} ${s.host_id.last_name}`,
+        participantCount: s.participants.length,
+        updatedAt: s.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error("Get my sessions error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // Get all users for participant selection
 export const getAvailableParticipants = async (req, res) => {
   try {
     const currentUserId = req.user._id.toString();
     
-    // Get all employees (both active and inactive for now, or filter as needed)
     const employees = await Employee.find({})
       .populate({
         path: "user_id",
@@ -15,12 +118,9 @@ export const getAvailableParticipants = async (req, res) => {
       })
       .select("user_id department position is_active");
 
-    // Filter out current user and employees without user data
     const participants = employees
       .filter(emp => {
-        // Skip if no user data
         if (!emp.user_id) return false;
-        // Skip current user
         if (emp.user_id._id.toString() === currentUserId) return false;
         return true;
       })
@@ -40,13 +140,25 @@ export const getAvailableParticipants = async (req, res) => {
   }
 };
 
-// Send whiteboard invitation email
+// Send whiteboard invitation
 export const sendWhiteboardInvite = async (req, res) => {
   try {
-    const { participantIds, boardName, boardId } = req.body;
+    const { participantIds, sessionId, boardName } = req.body;
     const inviterUserId = req.user._id;
 
-    // Get inviter details
+    // Get or create session
+    let session = await WhiteboardSession.findOne({ session_id: sessionId });
+    
+    if (!session) {
+      session = await WhiteboardSession.create({
+        session_id: sessionId,
+        name: boardName || "Whiteboard Session",
+        host_id: inviterUserId,
+        participants: [],
+        is_active: true
+      });
+    }
+
     const inviter = await User.findById(inviterUserId);
     if (!inviter) {
       return res.status(404).json({ error: "Inviter not found" });
@@ -54,7 +166,6 @@ export const sendWhiteboardInvite = async (req, res) => {
 
     const inviterName = `${inviter.first_name} ${inviter.last_name}`;
 
-    // Get participant emails
     const employees = await Employee.find({ _id: { $in: participantIds } })
       .populate("user_id", "first_name last_name email");
 
@@ -63,16 +174,32 @@ export const sendWhiteboardInvite = async (req, res) => {
     }
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const whiteboardUrl = `${frontendUrl}/whiteboard/${boardId || "session"}`;
+    const whiteboardUrl = `${frontendUrl}/whiteboard/${sessionId}`;
 
-    // Get participant details for response
+    // Add participants to session
+    for (const emp of employees) {
+      const existingParticipant = session.participants.find(
+        p => p.user_id?.toString() === emp.user_id._id.toString()
+      );
+      
+      if (!existingParticipant) {
+        session.participants.push({
+          user_id: emp.user_id._id,
+          employee_id: emp._id,
+          status: "pending"
+        });
+      }
+    }
+    await session.save();
+
     const invitedParticipants = employees.map(emp => ({
       _id: emp._id,
+      userId: emp.user_id._id,
       name: `${emp.user_id.first_name} ${emp.user_id.last_name}`,
       email: emp.user_id.email
     }));
 
-    // Try to send emails (gracefully handle failures)
+    // Send emails
     let emailsSent = 0;
     let emailError = null;
 
@@ -106,27 +233,27 @@ export const sendWhiteboardInvite = async (req, res) => {
                 </p>
                 
                 <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-                  <strong>${inviterName}</strong> has invited you to collaborate on a whiteboard session${boardName ? `: <strong>${boardName}</strong>` : ""}.
+                  <strong>${inviterName}</strong> has invited you to collaborate on a whiteboard session: <strong>${boardName || "Whiteboard Session"}</strong>.
                 </p>
                 
                 <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 32px;">
-                  Click the button below to join the whiteboard and start collaborating in real-time.
+                  Click the button below to accept and join the whiteboard in real-time.
                 </p>
                 
                 <div style="text-align: center; margin-bottom: 32px;">
-                  <a href="${whiteboardUrl}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                    Join Whiteboard
+                  <a href="${whiteboardUrl}?action=accept" style="display: inline-block; background-color: #22c55e; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; margin-right: 10px;">
+                    Accept & Join
                   </a>
                 </div>
                 
-                <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">
-                  Or copy this link: <a href="${whiteboardUrl}" style="color: #3b82f6;">${whiteboardUrl}</a>
+                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                  Session ID: <code style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">${sessionId}</code>
                 </p>
                 
                 <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
                 
                 <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                  Enterprise Platform - Internal Communication System
+                  Enterprise Platform - Collaborative Whiteboard
                 </p>
               </div>
             </div>
@@ -136,7 +263,7 @@ export const sendWhiteboardInvite = async (req, res) => {
 
         return sendEmail({
           to: participantEmail,
-          subject: `${inviterName} invited you to a Whiteboard session`,
+          subject: `${inviterName} invited you to collaborate on Whiteboard`,
           html: emailHtml
         });
       });
@@ -148,11 +275,11 @@ export const sendWhiteboardInvite = async (req, res) => {
       emailError = "Email service not configured";
     }
 
-    // Return success with participant info (even if emails failed)
     res.json({ 
       message: emailsSent > 0 
         ? `Invitation sent to ${emailsSent} participant(s)` 
         : `Added ${employees.length} participant(s) (email notifications disabled)`,
+      sessionId,
       invitedCount: employees.length,
       emailsSent,
       participants: invitedParticipants,
@@ -160,6 +287,65 @@ export const sendWhiteboardInvite = async (req, res) => {
     });
   } catch (error) {
     console.error("Send whiteboard invite error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Accept invitation
+export const acceptInvitation = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user._id;
+
+    const session = await WhiteboardSession.findOne({ session_id: sessionId });
+    
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    // Find participant and update status
+    const participant = session.participants.find(
+      p => p.user_id?.toString() === userId.toString()
+    );
+
+    if (participant) {
+      participant.status = "accepted";
+      participant.joined_at = new Date();
+      await session.save();
+    } else {
+      // Add as new participant if not found
+      session.participants.push({
+        user_id: userId,
+        status: "accepted",
+        joined_at: new Date()
+      });
+      await session.save();
+    }
+
+    res.json({ 
+      message: "Invitation accepted",
+      sessionId: session.session_id
+    });
+  } catch (error) {
+    console.error("Accept invitation error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Save canvas state
+export const saveCanvas = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { canvasData } = req.body;
+
+    await WhiteboardSession.findOneAndUpdate(
+      { session_id: sessionId },
+      { canvas_data: canvasData }
+    );
+
+    res.json({ message: "Canvas saved" });
+  } catch (error) {
+    console.error("Save canvas error:", error);
     res.status(500).json({ error: error.message });
   }
 };
