@@ -13,8 +13,11 @@ import CreateEmployeePage from "./CreateEmployeePage";
 import { useNavigate } from "react-router-dom";
 import AllEmployees from "./AllEmployees";
 import Dashboard from "./Dashboard";
+import ChatInterface from "../../components/ChatInterface";
+import { useAuthContext } from "../../context/AuthContextProvider";
 
 export default function AdminDashboard() {
+  const { socket } = useAuthContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
 
@@ -56,14 +59,15 @@ export default function AdminDashboard() {
 
       case "messages":
         return (
-          <div>
-            <h1 className="text-3xl font-bold text-teal-900 mb-6">Messages</h1>
-            <div className="bg-white rounded-2xl border-2 border-teal-200 p-8">
-              <p className="text-teal-700 text-lg">
-                Messages interface goes here...
-              </p>
-            </div>
-          </div>
+          <ChatInterface />
+          // <div>
+          /* <h1 className="text-3xl font-bold text-teal-900 mb-6">Messages</h1> */
+          /* <div className="bg-white rounded-2xl border-2 border-teal-200 p-8"> */
+          /* <p className="text-teal-700 text-lg"> */
+
+          /* </p> */
+          /* </div> */
+          // </div>
         );
 
       case "meetings":
@@ -87,7 +91,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50">
       <nav className="sticky top-0 z-50 bg-white border-b-2 border-teal-200 shadow-lg">
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-16">
             <div className="text-xl font-bold text-teal-900 w-full">
               Admin Portal
             </div>
@@ -189,7 +193,9 @@ export default function AdminDashboard() {
         )}
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main
+      // className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+      >
         {renderPageContent()}
       </main>
     </div>

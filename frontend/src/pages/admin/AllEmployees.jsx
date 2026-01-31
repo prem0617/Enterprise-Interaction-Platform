@@ -36,17 +36,17 @@ const AllEmployees = () => {
   // Filter employees
   const filteredEmployees = employees.filter((employee) => {
     const fullName =
-      `${employee.user_id.first_name} ${employee.user_id.last_name}`.toLowerCase();
-    const email = employee.user_id.email.toLowerCase();
+      `${employee.user_id?.first_name} ${employee.user_id?.last_name}`.toLowerCase();
+    const email = employee.user_id?.email.toLowerCase();
     const matchesSearch =
-      fullName.includes(searchTerm.toLowerCase()) ||
-      email.includes(searchTerm.toLowerCase());
+      fullName?.includes(searchTerm?.toLowerCase()) ||
+      email?.includes(searchTerm?.toLowerCase());
     const matchesDepartment =
-      filterDepartment === "all" || employee.department === filterDepartment;
+      filterDepartment === "all" || employee?.department === filterDepartment;
     const matchesStatus =
       filterStatus === "all" ||
-      (filterStatus === "active" && employee.is_active) ||
-      (filterStatus === "inactive" && !employee.is_active);
+      (filterStatus === "active" && employee?.is_active) ||
+      (filterStatus === "inactive" && !employee?.is_active);
 
     return matchesSearch && matchesDepartment && matchesStatus;
   });
@@ -191,9 +191,9 @@ const AllEmployees = () => {
                 </thead>
                 <tbody className="divide-y divide-teal-100">
                   {filteredEmployees.map((employee, index) => {
-                    const fullName = `${employee.user_id.first_name} ${employee.user_id.last_name}`;
+                    const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                     const teamLeadName = employee.team_lead_id
-                      ? `${employee.team_lead_id.user_id.first_name} ${employee.team_lead_id.user_id.last_name}`
+                      ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
                       : "—";
 
                     return (
@@ -204,35 +204,35 @@ const AllEmployees = () => {
                         <td className="px-6 py-4">
                           <div className="flex items-center">
                             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold mr-3">
-                              {employee.user_id.first_name[0]}
-                              {employee.user_id.last_name[0]}
+                              {employee.user_id?.first_name[0]}
+                              {employee.user_id?.last_name[0]}
                             </div>
                             <div>
                               <div className="font-semibold text-teal-900">
                                 {fullName}
                               </div>
                               <div className="text-sm text-teal-600">
-                                {employee.user_id.email}
+                                {employee.user_id?.email}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="inline-flex px-3 py-1 rounded-full text-sm font-medium bg-cyan-100 text-cyan-800">
-                            {employee.department}
+                            {employee?.department}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-teal-700">
-                          {employee.position}
+                          {employee?.position}
                         </td>
                         <td className="px-6 py-4 text-teal-700">
                           {teamLeadName}
                         </td>
                         <td className="px-6 py-4 text-teal-700">
-                          {new Date(employee.hire_date).toLocaleDateString()}
+                          {new Date(employee?.hire_date).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4">
-                          {employee.is_active ? (
+                          {employee?.is_active ? (
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                               <svg
                                 className="w-4 h-4 mr-1"
@@ -274,9 +274,9 @@ const AllEmployees = () => {
             {/* Mobile Card View */}
             <div className="lg:hidden divide-y divide-teal-100">
               {filteredEmployees.map((employee) => {
-                const fullName = `${employee.user_id.first_name} ${employee.user_id.last_name}`;
+                const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                 const teamLeadName = employee.team_lead_id
-                  ? `${employee.team_lead_id.user_id.first_name} ${employee.team_lead_id.user_id.last_name}`
+                  ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
                   : "—";
 
                 return (
@@ -286,18 +286,18 @@ const AllEmployees = () => {
                   >
                     <div className="flex items-start mb-4">
                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold mr-4">
-                        {employee.user_id.first_name[0]}
-                        {employee.user_id.last_name[0]}
+                        {employee.user_id?.first_name[0]}
+                        {employee.user_id?.last_name[0]}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-teal-900 text-lg">
                           {fullName}
                         </h3>
                         <p className="text-sm text-teal-600">
-                          {employee.user_id.email}
+                          {employee.user_id?.email}
                         </p>
                       </div>
-                      {employee.is_active ? (
+                      {employee?.is_active ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           Active
                         </span>
@@ -311,13 +311,13 @@ const AllEmployees = () => {
                       <div>
                         <span className="text-teal-600">Department:</span>
                         <p className="font-medium text-teal-900">
-                          {employee.department}
+                          {employee?.department}
                         </p>
                       </div>
                       <div>
                         <span className="text-teal-600">Position:</span>
                         <p className="font-medium text-teal-900">
-                          {employee.position}
+                          {employee?.position}
                         </p>
                       </div>
                       <div>

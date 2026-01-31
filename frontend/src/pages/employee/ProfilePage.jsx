@@ -93,7 +93,7 @@ const EmployeeProfilePage = () => {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 p-4 lg:p-8">
       <div className="max-w-4xl mx-auto">
         <button
-          onClick={() => (window.location.href = "/dashboard")}
+          onClick={() => (window.location.href = "/")}
           className="flex items-center gap-2 text-teal-700 hover:text-teal-900 mb-6 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />

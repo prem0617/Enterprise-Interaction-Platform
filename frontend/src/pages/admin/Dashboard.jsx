@@ -15,29 +15,26 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
   const adminToken = localStorage.getItem("token");
-  console.log(adminToken);
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    activeUsers: 0,
-  });
+  // console.log(adminToken);
 
+  // console.log(employees);
   const activeEmployeesList = employees
     .filter((employee) => employee.is_active)
     .map((employee) => ({
       id: employee._id,
-      name: `${employee.user_id.first_name} ${employee.user_id.last_name}`,
-      email: employee.user_id.email,
-      department: employee.department,
-      position: employee.position,
-      teamLead: employee.team_lead_id
-        ? `${employee.team_lead_id.user_id.first_name} ${employee.team_lead_id.user_id.last_name}`
+      name: `${employee.user_id?.first_name} ${employee.user_id?.last_name}`,
+      email: employee.user_id?.email,
+      department: employee?.department,
+      position: employee?.position,
+      teamLead: employee?.team_lead_id
+        ? `${employee?.team_lead_id.user_id?.first_name} ${employee?.team_lead_id.user_id?.last_name}`
         : "N/A",
     }));
 
   useEffect(() => {
     loadEmployees();
   }, []);
-  console.log(employees);
+  // console.log(employees);
   const loadEmployees = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/employees`, {
@@ -134,7 +131,7 @@ const Dashboard = () => {
   if (loading) return <div>LOADING</div>;
 
   return (
-    <>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-teal-900 mb-2">
           Dashboard Overview
@@ -250,7 +247,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

@@ -1,40 +1,35 @@
 import express from "express";
 import dotenv from "dotenv";
+import cors from "cors";
+import http from "http";
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
+import chatRouter from "./routes/chat.routes.js";
+import directChatRouter from "./routes/directChat.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
-import cors from "cors";
+import { server, app } from "./socket/socketServer.js";
 
 // Load environment variables
 dotenv.config();
 
-const app = express();
+// const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS (if needed)
+// CORS configuration
 app.use(
   cors({
-    origin: "http://localhost:5173", // Your frontend URL
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  next();
-});
 
 // Connect to MongoDB
 connectDB();
@@ -50,6 +45,9 @@ app.get("/", (req, res) => {
     endpoints: {
       auth: "/api/auth",
       employees: "/api/employees",
+      helper: "/api/helper",
+      chat: "/api/chat",
+      direct_chat: "/api/direct_chat",
     },
   });
 });
@@ -57,6 +55,8 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/helper", helperRoutes);
+app.use("/api/chat", chatRouter);
+app.use("/api/direct_chat", directChatRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -72,11 +72,12 @@ app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
+server.listen(PORT, () => {
+  console.log(`=================================`);
   console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`HTTP: http://localhost:${PORT}`);
+  console.log(`Socket.IO: ws://localhost:${PORT}`);
+  console.log(`=================================`);
 });
 
 export default app;

@@ -4,9 +4,7 @@ import {
   Users,
   FileText,
   Video,
-  Folder,
   User,
-  Bell,
   Settings,
   LogOut,
   Menu,
@@ -17,16 +15,19 @@ import {
   Calendar,
   Activity,
 } from "lucide-react";
+import ChatInterface from "../../components/ChatInterface";
 
 const EmployeeDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("messages"); // messages, team, files, meetings
 
   const userData = JSON.parse(localStorage.getItem("user"));
   console.log(userData);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     window.location.href = "/login";
   };
 
@@ -74,10 +75,30 @@ const EmployeeDashboard = () => {
             </div>
 
             <div className="hidden md:flex items-center space-x-1">
-              <NavLink icon={MessageSquare} label="Messages" active />
-              <NavLink icon={Users} label="Team" />
-              <NavLink icon={FileText} label="Files" />
-              <NavLink icon={Video} label="Meetings" />
+              <NavLink
+                icon={MessageSquare}
+                label="Messages"
+                active={activeTab === "messages"}
+                onClick={() => setActiveTab("messages")}
+              />
+              <NavLink
+                icon={Users}
+                label="Team"
+                active={activeTab === "team"}
+                onClick={() => setActiveTab("team")}
+              />
+              <NavLink
+                icon={FileText}
+                label="Files"
+                active={activeTab === "files"}
+                onClick={() => setActiveTab("files")}
+              />
+              <NavLink
+                icon={Video}
+                label="Meetings"
+                active={activeTab === "meetings"}
+                onClick={() => setActiveTab("meetings")}
+              />
             </div>
 
             <div className="flex items-center gap-3">
@@ -102,11 +123,9 @@ const EmployeeDashboard = () => {
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border-2 border-teal-200 py-2">
                     <div className="px-4 py-3 border-b-2 border-teal-100">
                       <p className="text-sm font-semibold text-teal-900">
-                        {userData?.user?.full_name}
+                        {userData?.first_name} {userData?.last_name}
                       </p>
-                      <p className="text-xs text-teal-600">
-                        {userData?.user?.email}
-                      </p>
+                      <p className="text-xs text-teal-600">{userData?.email}</p>
                     </div>
                     <button
                       onClick={() => (window.location.href = "/profile")}
@@ -147,120 +166,84 @@ const EmployeeDashboard = () => {
 
           {mobileMenuOpen && (
             <div className="md:hidden border-t-2 border-teal-200 py-4 space-y-2">
-              <MobileNavLink icon={MessageSquare} label="Messages" active />
-              <MobileNavLink icon={Users} label="Team" />
-              <MobileNavLink icon={Video} label="Meetings" />
+              <MobileNavLink
+                icon={MessageSquare}
+                label="Messages"
+                active={activeTab === "messages"}
+                onClick={() => {
+                  setActiveTab("messages");
+                  setMobileMenuOpen(false);
+                }}
+              />
+              <MobileNavLink
+                icon={Users}
+                label="Team"
+                active={activeTab === "team"}
+                onClick={() => {
+                  setActiveTab("team");
+                  setMobileMenuOpen(false);
+                }}
+              />
+              <MobileNavLink
+                icon={FileText}
+                label="Files"
+                active={activeTab === "files"}
+                onClick={() => {
+                  setActiveTab("files");
+                  setMobileMenuOpen(false);
+                }}
+              />
+              <MobileNavLink
+                icon={Video}
+                label="Meetings"
+                active={activeTab === "meetings"}
+                onClick={() => {
+                  setActiveTab("meetings");
+                  setMobileMenuOpen(false);
+                }}
+              />
             </div>
           )}
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-teal-900 mb-2">
-            Welcome back, {userData?.user?.full_name?.split(" ")[0] || "User"}!
-            👋
-          </h1>
-          <p className="text-teal-700">Here's what's happening today.</p>
-        </div>
+      <main className="h-[calc(100vh-4rem)]">
+        {activeTab === "messages" && <ChatInterface />}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              <div
-                key={index}
-                className="bg-white rounded-2xl p-6 border-2 border-teal-200 shadow-sm hover:shadow-lg transition-shadow"
-              >
-                <div
-                  className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center mb-4`}
-                >
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <p className="text-sm text-teal-600 mb-1">{stat.label}</p>
-                <p className="text-3xl font-bold text-teal-900">{stat.value}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-            <div className="p-6 border-b-2 border-teal-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                <Hash className="w-6 h-6 text-cyan-500" />
-                My Channels
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {userData?.channels?.length > 0 ? (
-                  userData.channels.slice(0, 6).map((channel, index) => (
-                    <div
-                      key={index}
-                      className="p-4 bg-teal-50 rounded-xl hover:bg-teal-100 transition-colors cursor-pointer border border-teal-200"
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <Hash className="w-5 h-5 text-cyan-600" />
-                        <h3 className="font-semibold text-teal-900">
-                          {channel.channel_name}
-                        </h3>
-                      </div>
-                      <p className="text-xs text-teal-600">
-                        Last active: 2h ago
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-teal-600 col-span-2">No channels yet</p>
-                )}
-              </div>
+        {activeTab === "team" && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 className="text-3xl font-bold text-teal-900 mb-6">Team</h1>
+            <div className="bg-white rounded-2xl shadow-lg border-2 border-teal-200 p-8">
+              <p className="text-teal-700">Team management coming soon...</p>
             </div>
           </div>
+        )}
 
-          <div className="bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-            <div className="p-6 border-b-2 border-teal-200">
-              <h2 className="text-xl font-bold text-teal-900 flex items-center gap-2">
-                <Users className="w-6 h-6 text-blue-500" />
-                Team
-              </h2>
-            </div>
-            <div className="p-6 space-y-3">
-              {userData?.teamMembers?.length > 0 ? (
-                userData.teamMembers.slice(0, 6).map((member, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-3 p-3 hover:bg-teal-50 rounded-xl"
-                  >
-                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                      {member.full_name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("") || "?"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-teal-900 text-sm truncate">
-                        {member.full_name}
-                      </p>
-                      <p className="text-xs text-teal-600 truncate">
-                        {member.email}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-teal-600 text-sm">No team members</p>
-              )}
+        {activeTab === "files" && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 className="text-3xl font-bold text-teal-900 mb-6">Files</h1>
+            <div className="bg-white rounded-2xl shadow-lg border-2 border-teal-200 p-8">
+              <p className="text-teal-700">File management coming soon...</p>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "meetings" && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 className="text-3xl font-bold text-teal-900 mb-6">Meetings</h1>
+            <div className="bg-white rounded-2xl shadow-lg border-2 border-teal-200 p-8">
+              <p className="text-teal-700">Meetings schedule coming soon...</p>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
 };
 
-const NavLink = ({ icon: Icon, label, active }) => (
+const NavLink = ({ icon: Icon, label, active, onClick }) => (
   <button
+    onClick={onClick}
     className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
       active
         ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md"
@@ -272,8 +255,9 @@ const NavLink = ({ icon: Icon, label, active }) => (
   </button>
 );
 
-const MobileNavLink = ({ icon: Icon, label, active }) => (
+const MobileNavLink = ({ icon: Icon, label, active, onClick }) => (
   <button
+    onClick={onClick}
     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl ${
       active
         ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white"

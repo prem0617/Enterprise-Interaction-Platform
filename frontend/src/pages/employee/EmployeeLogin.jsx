@@ -90,7 +90,7 @@ function EmployeeLogin() {
       // Example:
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/dashboard");
+      navigate("/");
     } catch (error) {
       console.error("Login error:", error);
       setErrors({
@@ -241,7 +241,7 @@ function EmployeeLogin() {
 
             {/* Remember Me & Forgot Password */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+              {/* <div className="flex items-center">
                 <input
                   id="remember-me"
                   name="remember-me"
@@ -254,7 +254,8 @@ function EmployeeLogin() {
                 >
                   Remember me
                 </label>
-              </div>
+              </div> */}
+              <div></div>
               <button
                 type="button"
                 className="text-sm font-medium text-primary hover:text-cyan-600 transition"
@@ -270,7 +271,7 @@ function EmployeeLogin() {
               className={`w-full py-3 px-4 rounded-lg font-medium text-white transition ${
                 isLoading
                   ? "bg-teal-400 cursor-not-allowed"
-                  : "bg-primary hover:bg-cyan-600 active:scale-95"
+                  : "bg-cyan-600 active:scale-95"
               } flex items-center justify-center`}
             >
               {isLoading ? (
