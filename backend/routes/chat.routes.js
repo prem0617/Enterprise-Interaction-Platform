@@ -29,7 +29,7 @@ router.use(verifyToken);
 // ============ Channel Routes ============
 
 // Create a new channel
-router.post("/channels", createChannel);
+router.post("/", createChannel);
 
 // Get all channels for current user
 router.get("/channels", getUserChannels);

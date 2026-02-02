@@ -220,6 +220,7 @@ export const startDirectChat = async (req, res) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("direct_chat_created", {
         _id: channel._id,
+        channel_type: "direct",
         other_user: {
           _id: currentUser._id,
           first_name: currentUser.first_name,
@@ -248,46 +249,42 @@ export const startDirectChat = async (req, res) => {
 export const getDirectChats = async (req, res) => {
   try {
     const currentUserId = req.userId;
-    console.log({ currentUserId });
-    // Find all channel memberships for user
+
     const memberships = await ChannelMember.find({ user_id: currentUserId });
     const channelIds = memberships.map((m) => m.channel_id);
-    // Get all direct channels
+
     const directChannels = await ChatChannel.find({
       _id: { $in: channelIds },
       channel_type: "direct",
     })
       .populate("created_by", "first_name last_name email")
       .sort({ created_at: -1 });
-    // Get details for each chat
+
     const chatsWithDetails = await Promise.all(
-      directChannels.map(async (channel, index) => {
-        // Get all members
-        console.log(channel, index);
+      directChannels.map(async (channel) => {
         const members = await ChannelMember.find({
           channel_id: channel._id,
         }).populate("user_id", "first_name last_name email user_type status");
-        // Find the other user (not current user)
+
         const otherMember = members.find(
           (m) => m.user_id._id.toString() !== currentUserId
         );
-        // Get last message
+
         const lastMessage = await Message.findOne({
           channel_id: channel._id,
           deleted_at: null,
         })
           .sort({ created_at: -1 })
           .populate("sender_id", "first_name last_name");
-        // Get unread count
-        const currentMembership = members.find(
-          (m) => m.user_id._id.toString() === currentUserId
-        );
+
+        // NEW: Calculate unread count based on seen_by
         const unreadCount = await Message.countDocuments({
           channel_id: channel._id,
-          created_at: { $gt: currentMembership.joined_at },
           sender_id: { $ne: currentUserId },
+          "seen_by.user_id": { $ne: currentUserId },
           deleted_at: null,
         });
+
         return {
           _id: channel._id,
           channel_type: channel.channel_type,
@@ -309,6 +306,7 @@ export const getDirectChats = async (req, res) => {
         };
       })
     );
+
     res.json({
       count: chatsWithDetails.length,
       chats: chatsWithDetails,
@@ -426,13 +424,11 @@ export const getMessages = async (req, res) => {
     const currentUserId = req.userId;
     const { limit = 50, before } = req.query;
 
-    // Verify channel exists
     const channel = await ChatChannel.findById(channelId);
     if (!channel) {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Verify user is a member of the channel
     const membership = await ChannelMember.findOne({
       channel_id: channelId,
       user_id: currentUserId,
@@ -444,34 +440,22 @@ export const getMessages = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Build query
     const query = {
       channel_id: channelId,
       deleted_at: null,
     };
 
-    // Add pagination support
     if (before) {
       query.created_at = { $lt: new Date(before) };
     }
 
-    // Fetch messages
     const messages = await Message.find(query)
       .populate("sender_id", "first_name last_name email user_type")
+      .populate("seen_by.user_id", "first_name last_name")
       .sort({ created_at: -1 })
       .limit(parseInt(limit));
 
-    // Reverse to get chronological order
     const sortedMessages = messages.reverse();
-
-    // Mark messages as read (update last_read_at for the user)
-    if (sortedMessages.length > 0) {
-      const latestMessage = sortedMessages[sortedMessages.length - 1];
-      await ChannelMember.findOneAndUpdate(
-        { channel_id: channelId, user_id: currentUserId },
-        { last_read_at: latestMessage.created_at }
-      );
-    }
 
     res.json({
       count: sortedMessages.length,
@@ -492,6 +476,11 @@ export const getMessages = async (req, res) => {
         updated_at: msg.updated_at,
         is_edited: msg.updated_at > msg.created_at,
         is_own: msg.sender_id._id.toString() === currentUserId,
+        seen_by: msg.seen_by,
+        seen_count: msg.seen_by.length,
+        is_seen: msg.seen_by.some(
+          (s) => s.user_id._id.toString() === currentUserId
+        ),
       })),
     });
   } catch (error) {
@@ -499,7 +488,6 @@ export const getMessages = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 // Send a message
 export const sendMessage = async (req, res) => {
   try {
@@ -507,18 +495,15 @@ export const sendMessage = async (req, res) => {
     const { content } = req.body;
     const currentUserId = req.userId;
 
-    // Validate input
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: "Message content is required" });
     }
 
-    // Verify channel exists
     const channel = await ChatChannel.findById(channelId);
     if (!channel) {
       return res.status(404).json({ error: "Channel not found" });
     }
 
-    // Verify user is a member of the channel
     const membership = await ChannelMember.findOne({
       channel_id: channelId,
       user_id: currentUserId,
@@ -530,60 +515,55 @@ export const sendMessage = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Create message
     const message = new Message({
       channel_id: channelId,
       sender_id: currentUserId,
       content: content.trim(),
+      seen_by: [], // Initialize empty
     });
 
     await message.save();
 
-    // Update channel's last activity
     await ChatChannel.findByIdAndUpdate(channelId, {
       last_message_at: message.created_at,
     });
 
-    // Populate sender details
-    const populatedMessage = await Message.findById(message._id).populate(
-      "sender_id",
-      "first_name last_name email user_type"
-    );
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender_id", "first_name last_name email user_type")
+      .populate("seen_by.user_id", "first_name last_name");
 
-    const secondMember = await ChannelMember.findOne({
+    const channelMembers = await ChannelMember.find({
       channel_id: channelId,
-      user_id: { $ne: currentUserId }, // not equal to current user
     });
 
-    if (!secondMember) {
-      return res.status(404).json({ error: "Second user not found" });
-    }
+    channelMembers.forEach((member) => {
+      if (member.user_id.toString() !== currentUserId) {
+        const receiverSocketId = getReceiverSocketId(member.user_id.toString());
 
-    const secondUserId = secondMember.user_id;
-    console.log({ secondUser: secondUserId.toString() });
-
-    const secondUserSocketId = getReceiverSocketId(secondUserId.toString());
-    console.log({ secondUserSocketId });
-
-    if (secondUserSocketId) {
-      io.to(secondUserSocketId).emit("new_message", {
-        _id: populatedMessage._id,
-        content: populatedMessage.content,
-        sender_id: populatedMessage.sender_id._id,
-        sender: {
-          _id: populatedMessage.sender_id._id,
-          first_name: populatedMessage.sender_id.first_name,
-          last_name: populatedMessage.sender_id.last_name,
-          full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
-          email: populatedMessage.sender_id.email,
-          user_type: populatedMessage.sender_id.user_type,
-        },
-        created_at: populatedMessage.created_at,
-        updated_at: populatedMessage.updated_at,
-        is_edited: false,
-        is_own: false, // important for receiver
-      });
-    }
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("new_message", {
+            _id: populatedMessage._id,
+            channel_id: channelId,
+            content: populatedMessage.content,
+            sender_id: populatedMessage.sender_id._id,
+            sender: {
+              _id: populatedMessage.sender_id._id,
+              first_name: populatedMessage.sender_id.first_name,
+              last_name: populatedMessage.sender_id.last_name,
+              full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
+              email: populatedMessage.sender_id.email,
+              user_type: populatedMessage.sender_id.user_type,
+            },
+            created_at: populatedMessage.created_at,
+            updated_at: populatedMessage.updated_at,
+            is_edited: false,
+            is_own: false,
+            seen_by: [],
+            seen_count: 0,
+          });
+        }
+      }
+    });
 
     res.status(201).json({
       message: "Message sent successfully",
@@ -603,6 +583,8 @@ export const sendMessage = async (req, res) => {
         updated_at: populatedMessage.updated_at,
         is_edited: false,
         is_own: true,
+        seen_by: [],
+        seen_count: 0,
       },
     });
   } catch (error) {
@@ -749,5 +731,173 @@ export const getUnreadCount = async (req, res) => {
   } catch (error) {
     console.error("Get unread count error:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Mark all messages as seen when user opens a chat
+export const markMessagesAsSeen = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.userId;
+
+    // Verify channel exists
+    const channel = await ChatChannel.findById(channelId);
+    if (!channel) {
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    // Verify user is a member of the channel
+    const isMember = await ChannelMember.findOne({
+      channel_id: channelId,
+      user_id: userId,
+    });
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ error: "User is not a member of this channel" });
+    }
+
+    // Find all unseen messages in this channel (excluding user's own messages)
+    const unseenMessages = await Message.find({
+      channel_id: channelId,
+      sender_id: { $ne: userId },
+      "seen_by.user_id": { $ne: userId },
+      deleted_at: null,
+    });
+
+    if (unseenMessages.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No unseen messages",
+        markedCount: 0,
+      });
+    }
+
+    // Mark all messages as seen by this user
+    const result = await Message.updateMany(
+      {
+        channel_id: channelId,
+        sender_id: { $ne: userId },
+        "seen_by.user_id": { $ne: userId },
+        deleted_at: null,
+      },
+      {
+        $addToSet: {
+          seen_by: {
+            user_id: userId,
+            seen_at: new Date(),
+          },
+        },
+      }
+    );
+
+    // Emit socket event to notify sender that message was seen
+    const channelMembers = await ChannelMember.find({
+      channel_id: channelId,
+    });
+
+    channelMembers.forEach((member) => {
+      if (member.user_id.toString() !== userId) {
+        const receiverSocketId = getReceiverSocketId(member.user_id.toString());
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("messages_seen", {
+            channel_id: channelId,
+            seen_by_user_id: userId,
+            message_ids: unseenMessages.map((m) => m._id),
+          });
+        }
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Messages marked as seen",
+      markedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error marking messages as seen:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get message seen status (for read receipts)
+export const getMessageSeenStatus = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.userId;
+
+    const message = await Message.findById(messageId)
+      .populate("seen_by.user_id", "first_name last_name email")
+      .populate("channel_id");
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    // Verify user is a member
+    const isMember = await ChannelMember.findOne({
+      channel_id: message.channel_id._id,
+      user_id: userId,
+    });
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ error: "User is not a member of this channel" });
+    }
+
+    // Get all channel members
+    const allMembers = await ChannelMember.find({
+      channel_id: message.channel_id._id,
+    }).populate("user_id", "first_name last_name email");
+
+    // Exclude the sender from the count
+    const membersExcludingSender = allMembers.filter(
+      (member) => member.user_id._id.toString() !== message.sender_id.toString()
+    );
+
+    const totalMembers = membersExcludingSender.length;
+    const seenCount = message.seen_by.length;
+    const isSeenByAll = seenCount === totalMembers;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        messageId: message._id,
+        seenBy: message.seen_by,
+        seenCount,
+        totalMembers,
+        isSeenByAll,
+        channelType: message.channel_id.channel_type,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting message seen status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get unread message count for a channel
+export const getUnreadMessageCount = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.userId;
+
+    const unreadCount = await Message.countDocuments({
+      channel_id: channelId,
+      sender_id: { $ne: userId },
+      "seen_by.user_id": { $ne: userId },
+      deleted_at: null,
+    });
+
+    return res.status(200).json({
+      success: true,
+      channelId,
+      unreadCount,
+    });
+  } catch (error) {
+    console.error("Error getting unread count:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

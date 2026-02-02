@@ -10,44 +10,33 @@ import {
   editMessage,
   deleteMessage,
   getUnreadCount,
+  markMessagesAsSeen,
+  getMessageSeenStatus,
+  getUnreadMessageCount,
 } from "../controllers/chat/direct_message.controller.js";
 
 import { verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// All routes require authentication
 router.use(verifyToken);
 
-// Search users for starting direct chat
 router.get("/search", searchUsers);
-
-// Get user details by ID
 router.get("/users/:userId", getUserById);
-
-// Start or get existing direct chat
 router.post("/start", startDirectChat);
-
-// Get all direct chats for current user
 router.get("/list", getDirectChats);
-
-// Get recent contacts
 router.get("/contacts", getRecentContacts);
 
 // Message routes
-// Get messages for a channel
 router.get("/channels/:channelId/messages", getMessages);
-
-// Send a message to a channel
 router.post("/channels/:channelId/messages", sendMessage);
-
-// Edit a message
 router.put("/messages/:messageId", editMessage);
-
-// Delete a message
 router.delete("/messages/:messageId", deleteMessage);
-
-// Get unread count for a channel
 router.get("/channels/:channelId/unread", getUnreadCount);
+
+// NEW: Seen/Read receipt routes
+router.post("/channels/:channelId/messages/seen", markMessagesAsSeen);
+router.get("/messages/:messageId/seen-status", getMessageSeenStatus);
+router.get("/channels/:channelId/unread-count", getUnreadMessageCount);
 
 export default router;

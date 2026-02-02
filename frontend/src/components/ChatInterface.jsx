@@ -5,6 +5,7 @@ import {
   Phone,
   Video,
   MoreVertical,
+  Check,
   CheckCheck,
   Smile,
   Paperclip,
@@ -25,6 +26,7 @@ import { BACKEND_URL } from "../../config";
 const ChatInterface = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [userChannel, setUserChannel] = useState([]);
+  const [messageSeenStatus, setMessageSeenStatus] = useState({});
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -88,6 +90,21 @@ const ChatInterface = () => {
       console.error("Error fetching direct chats:", error);
     } finally {
       setDirectMessageLoading(false);
+    }
+  };
+
+  const markMessagesAsSeenInChannel = async (channelId) => {
+    try {
+      await axios.post(
+        `http://localhost:8000/api/direct_chat/channels/${channelId}/messages/seen`,
+        {},
+        axiosConfig
+      );
+      // Refresh the chat list to update unread counts
+      await fetchDirectChats();
+      await getUserChannel();
+    } catch (error) {
+      console.error("Error marking messages as seen:", error);
     }
   };
 
@@ -178,8 +195,12 @@ const ChatInterface = () => {
     }
   };
 
-  const selectChat = (chat) => {
+  const selectChat = async (chat) => {
     setSelectedChat(chat);
+    // Mark messages as seen when chat is opened
+    if (chat?._id) {
+      await markMessagesAsSeenInChannel(chat._id);
+    }
   };
 
   const sendMessage = async (e) => {
@@ -200,6 +221,7 @@ const ChatInterface = () => {
       if (response.data.data) {
         setMessages([...messages, response.data.data]);
         await fetchDirectChats();
+        await getUserChannel();
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -235,7 +257,6 @@ const ChatInterface = () => {
         payload,
         axiosConfig
       );
-      console.log({ response });
       toast.success("Group created successfully!");
       await getUserChannel();
       setShowGroupModal(false);
@@ -256,7 +277,6 @@ const ChatInterface = () => {
       );
       const channels = response.data.channels;
       setUserChannel(channels);
-      console.log({ response });
     } catch (error) {
       console.log({ error });
     }
@@ -269,8 +289,6 @@ const ChatInterface = () => {
         { member_ids: memberIds },
         axiosConfig
       );
-
-      console.log("Members added:", response.data);
 
       if (response.data.added_members?.length > 0) {
         toast.success(
@@ -303,7 +321,6 @@ const ChatInterface = () => {
         axiosConfig
       );
 
-      console.log("Member role updated:", response.data);
       toast.success(`Successfully updated member role to ${newRole}`);
 
       await getUserChannel();
@@ -325,7 +342,6 @@ const ChatInterface = () => {
         axiosConfig
       );
 
-      console.log("Member removed:", response.data);
       toast.success("Member removed successfully");
 
       await getUserChannel();
@@ -349,21 +365,107 @@ const ChatInterface = () => {
       });
     };
 
+    const handleMessagesSeen = (data) => {
+      const { channel_id, seen_by_user_id, message_ids } = data;
+
+      // Update messages in the current chat
+      if (selectedChat && selectedChat._id === channel_id) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (message_ids.includes(msg._id)) {
+              const existingSeen = msg.seen_by || [];
+              const alreadySeen = existingSeen.some(
+                (s) => s.user_id._id === seen_by_user_id
+              );
+
+              if (!alreadySeen) {
+                return {
+                  ...msg,
+                  seen_by: [
+                    ...existingSeen,
+                    {
+                      user_id: { _id: seen_by_user_id },
+                      seen_at: new Date(),
+                    },
+                  ],
+                  seen_count: (msg.seen_count || 0) + 1,
+                };
+              }
+            }
+            return msg;
+          })
+        );
+      }
+
+      // Update chat list unread counts
+      fetchDirectChats();
+      getUserChannel();
+    };
+
     const appendMessage = (data) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m._id === data._id)) return prev;
-        return [...prev, data];
-      });
+      // Only add message to display if it belongs to the currently selected chat
+      if (selectedChat && data.channel_id === selectedChat._id) {
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === data._id)) return prev;
+          return [...prev, data];
+        });
+
+        // Auto-mark as seen if chat is open
+        markMessagesAsSeenInChannel(data.channel_id);
+      } else {
+        // If message is for another chat, just update the chat list
+        fetchDirectChats();
+        getUserChannel();
+      }
+
+      // Update the last_message for the chat
+      const updateChatList = (chats) => {
+        return chats.map((chat) => {
+          if (chat._id === data.channel_id) {
+            return {
+              ...chat,
+              last_message: {
+                ...data,
+                sender_id: data.sender_id || chat.last_message?.sender_id,
+              },
+              unread_count:
+                selectedChat?._id === data.channel_id
+                  ? 0
+                  : (chat.unread_count || 0) + 1,
+            };
+          }
+          return chat;
+        });
+      };
+
+      setDirectChats((prev) => updateChatList(prev));
+      setUserChannel((prev) => updateChatList(prev));
     };
 
     socket.on("direct_chat_created", handleNewChat);
     socket.on("new_message", appendMessage);
+    socket.on("messages_seen", handleMessagesSeen);
 
     return () => {
       socket.off("direct_chat_created", handleNewChat);
       socket.off("new_message", appendMessage);
+      socket.off("messages_seen", handleMessagesSeen);
     };
-  }, [socket]);
+  }, [socket, selectedChat]);
+
+  // Helper function to sort chats by last message timestamp
+  const sortChatsByLastMessage = (chats) => {
+    return [...chats].sort((a, b) => {
+      const aTime = a.last_message?.created_at
+        ? new Date(a.last_message.created_at).getTime()
+        : new Date(a.created_at).getTime();
+      const bTime = b.last_message?.created_at
+        ? new Date(b.last_message.created_at).getTime()
+        : new Date(b.created_at).getTime();
+
+      return bTime - aTime;
+    });
+  };
 
   const getAllChats = () => {
     const allChats = [...directChats, ...userChannel];
@@ -385,7 +487,7 @@ const ChatInterface = () => {
 
     if (chatSearchQuery.trim()) {
       const query = chatSearchQuery.toLowerCase();
-      return filteredByTab.filter((chat) => {
+      const searchResults = filteredByTab.filter((chat) => {
         if (chat.channel_type === "direct") {
           const userName = chat.other_user?.full_name?.toLowerCase() || "";
           const userEmail = chat.other_user?.email?.toLowerCase() || "";
@@ -395,9 +497,10 @@ const ChatInterface = () => {
           return groupName.includes(query);
         }
       });
+      return sortChatsByLastMessage(searchResults);
     }
 
-    return filteredByTab;
+    return sortChatsByLastMessage(filteredByTab);
   };
 
   const displayedChats = getAllChats();
@@ -533,45 +636,64 @@ const ChatInterface = () => {
                       : ""
                   }`}
                 >
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 ${
-                      displayInfo.isGroup
-                        ? "bg-gradient-to-br from-cyan-500 to-blue-500"
-                        : "bg-gradient-to-br from-purple-500 to-pink-500"
-                    }`}
-                  >
-                    {displayInfo.isGroup ? (
-                      <Users className="w-6 h-6" />
-                    ) : (
-                      displayInfo.initials
+                  <div className="relative">
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 ${
+                        displayInfo.isGroup
+                          ? "bg-gradient-to-br from-cyan-500 to-blue-500"
+                          : "bg-gradient-to-br from-purple-500 to-pink-500"
+                      }`}
+                    >
+                      {displayInfo.isGroup ? (
+                        <Users className="w-6 h-6" />
+                      ) : (
+                        displayInfo.initials
+                      )}
+                    </div>
+                    {/* Unread badge on avatar */}
+                    {chat.unread_count > 0 && (
+                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold border-2 border-white">
+                        {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                      </div>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-teal-900 truncate">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <h3
+                          className={`font-semibold text-teal-900 truncate ${
+                            chat.unread_count > 0 ? "font-bold" : ""
+                          }`}
+                        >
                           {displayInfo.name}
                         </h3>
                         {displayInfo.isGroup && (
-                          <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full font-medium flex-shrink-0">
                             Group
                           </span>
                         )}
                       </div>
-                      {chat.last_message && (
-                        <span className="text-xs text-teal-600">
-                          {formatTime(chat.last_message.created_at)}
-                        </span>
-                      )}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-teal-600 truncate">
-                        {chat.last_message?.content ||
-                          displayInfo.subtitle ||
-                          "No messages yet"}
-                      </p>
-                    </div>
+                    {/* Last message preview */}
+                    {chat.last_message && (
+                      <div className="flex items-center gap-1">
+                        <p
+                          className={`text-xs truncate flex-1 ${
+                            chat.unread_count > 0
+                              ? "text-teal-900 font-semibold"
+                              : "text-teal-600"
+                          }`}
+                        >
+                          {chat.last_message.content}
+                        </p>
+                        {chat.unread_count > 0 && (
+                          <span className="px-2 py-0.5 bg-cyan-500 text-white text-xs rounded-full font-bold min-w-[20px] text-center flex-shrink-0">
+                            {chat.unread_count > 99 ? "99+" : chat.unread_count}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -678,6 +800,14 @@ const ChatInterface = () => {
                           : "bg-white border-2 border-teal-200 text-teal-900"
                       }`}
                     >
+                      {/* Show sender name in group chats for received messages */}
+                      {!message.is_own &&
+                        selectedChat.channel_type === "group" && (
+                          <p className="text-xs font-semibold text-teal-700 mb-1">
+                            {message.sender?.first_name}{" "}
+                            {message.sender?.last_name}
+                          </p>
+                        )}
                       <p className="text-sm">{message.content}</p>
                       <div
                         className={`flex items-center gap-1 justify-end mt-1 ${
@@ -690,7 +820,24 @@ const ChatInterface = () => {
                         {message.is_edited && (
                           <span className="text-xs ml-1">(edited)</span>
                         )}
-                        {message.is_own && <CheckCheck className="w-3 h-3" />}
+                        {message.is_own && (
+                          <div className="flex items-center gap-1">
+                            {message.seen_count > 0 ? (
+                              // Double blue tick for read
+                              <CheckCheck className="w-3.5 h-3.5 text-blue-300" />
+                            ) : (
+                              // Single grey tick for sent but not read
+                              <Check className="w-3.5 h-3.5 text-white/50" />
+                            )}
+                            {/* Show count for group chats */}
+                            {selectedChat?.channel_type === "group" &&
+                              message.seen_count > 0 && (
+                                <span className="text-xs">
+                                  {message.seen_count}
+                                </span>
+                              )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

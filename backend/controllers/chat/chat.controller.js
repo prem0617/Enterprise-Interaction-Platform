@@ -122,10 +122,22 @@ export const getUserChannels = async (req, res) => {
           ...channel.toObject(),
           last_message: lastMessage,
           member_count: members.length,
-          members, // 👈 THIS IS THE IMPORTANT PART
+          members,
         };
       })
     );
+
+    // Sort channels by last message timestamp (most recent first)
+    channelsWithExtras.sort((a, b) => {
+      const aTime = a.last_message?.created_at
+        ? new Date(a.last_message.created_at).getTime()
+        : new Date(a.created_at).getTime();
+      const bTime = b.last_message?.created_at
+        ? new Date(b.last_message.created_at).getTime()
+        : new Date(b.created_at).getTime();
+
+      return bTime - aTime; // Descending order (most recent first)
+    });
 
     res.json({
       count: channelsWithExtras.length,
