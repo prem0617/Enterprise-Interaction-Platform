@@ -252,7 +252,6 @@ export const getDirectChats = async (req, res) => {
     // Find all channel memberships for user
     const memberships = await ChannelMember.find({ user_id: currentUserId });
     const channelIds = memberships.map((m) => m.channel_id);
-
     // Get all direct channels
     const directChannels = await ChatChannel.find({
       _id: { $in: channelIds },
@@ -260,41 +259,35 @@ export const getDirectChats = async (req, res) => {
     })
       .populate("created_by", "first_name last_name email")
       .sort({ created_at: -1 });
-
     // Get details for each chat
     const chatsWithDetails = await Promise.all(
-      directChannels.map(async (channel) => {
+      directChannels.map(async (channel, index) => {
         // Get all members
+        console.log(channel, index);
         const members = await ChannelMember.find({
           channel_id: channel._id,
         }).populate("user_id", "first_name last_name email user_type status");
-
         // Find the other user (not current user)
         const otherMember = members.find(
           (m) => m.user_id._id.toString() !== currentUserId
         );
-
         // Get last message
-
         const lastMessage = await Message.findOne({
           channel_id: channel._id,
           deleted_at: null,
         })
           .sort({ created_at: -1 })
           .populate("sender_id", "first_name last_name");
-
         // Get unread count
         const currentMembership = members.find(
           (m) => m.user_id._id.toString() === currentUserId
         );
-
         const unreadCount = await Message.countDocuments({
           channel_id: channel._id,
           created_at: { $gt: currentMembership.joined_at },
           sender_id: { $ne: currentUserId },
           deleted_at: null,
         });
-
         return {
           _id: channel._id,
           channel_type: channel.channel_type,
@@ -316,7 +309,6 @@ export const getDirectChats = async (req, res) => {
         };
       })
     );
-
     res.json({
       count: chatsWithDetails.length,
       chats: chatsWithDetails,

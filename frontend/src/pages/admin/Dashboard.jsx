@@ -178,7 +178,7 @@ const Dashboard = () => {
               .filter((employee) => employee.is_active)
               .slice(0, 5) // 👈 ONLY FIRST 5
               .map((employee) => {
-                const fullName = `${employee.user_id.first_name} ${employee.user_id.last_name}`;
+                const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                 const initials = fullName
                   .split(" ")
                   .map((n) => n[0])
@@ -199,7 +199,7 @@ const Dashboard = () => {
                           {fullName}
                         </p>
                         <p className="text-sm text-teal-600">
-                          {employee.user_id.email}
+                          {employee.user_id?.email}
                         </p>
                       </div>
                     </div>

@@ -3,6 +3,7 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import User from "../../models/User.js";
 import { SupportTicket } from "../../models/SupportTicket.js";
+import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 
 // Create a new chat channel
 export const createChannel = async (req, res) => {
@@ -49,22 +50,28 @@ export const createChannel = async (req, res) => {
       role: "admin",
     });
     await creatorMember.save();
-
+    console.log(member_ids);
     // Add other members if provided
-    if (member_ids && Array.isArray(member_ids)) {
-      for (const memberId of member_ids) {
-        // Check if user exists
-        const userExists = await User.findById(memberId);
-        if (userExists) {
-          const member = new ChannelMember({
+    if (member_ids?.length) {
+      await Promise.all(
+        member_ids.map(async (member) => {
+          const user = (await User.findById(member)) || console.log({ member });
+          console.log({ user });
+          if (!user) return;
+          if (user._id.toString() === userId) return;
+
+          await ChannelMember.create({
             channel_id: channel._id,
-            user_id: memberId,
+            user_id: user._id,
             role: "member",
           });
-          await member.save();
-        }
-      }
+        })
+      );
     }
+
+    const members = await ChannelMember.find({
+      channel_id: channel._id,
+    }).populate("user_id", "first_name last_name email user_type status");
 
     // Populate and return channel
     const populatedChannel = await ChatChannel.findById(channel._id)
@@ -74,6 +81,7 @@ export const createChannel = async (req, res) => {
     res.status(201).json({
       message: "Channel created successfully",
       channel: populatedChannel,
+      members,
     });
   } catch (error) {
     console.error("Create channel error:", error);
@@ -87,43 +95,41 @@ export const getUserChannels = async (req, res) => {
     const userId = req.userId;
     const { channel_type, country } = req.query;
 
-    // Find all channel memberships for user
+    // Find memberships
     const memberships = await ChannelMember.find({ user_id: userId });
     const channelIds = memberships.map((m) => m.channel_id);
 
-    // Build filter
     const filter = { _id: { $in: channelIds } };
     if (channel_type) filter.channel_type = channel_type;
     if (country) filter.country_restriction = country;
 
-    // Get channels
     const channels = await ChatChannel.find(filter)
       .populate("created_by", "first_name last_name email")
       .populate("ticket_id")
       .sort({ created_at: -1 });
 
-    // Get last message for each channel
-    const channelsWithLastMessage = await Promise.all(
+    const channelsWithExtras = await Promise.all(
       channels.map(async (channel) => {
         const lastMessage = await Message.findOne({ channel_id: channel._id })
           .sort({ created_at: -1 })
           .populate("sender_id", "first_name last_name");
 
-        const memberCount = await ChannelMember.countDocuments({
+        const members = await ChannelMember.find({
           channel_id: channel._id,
-        });
+        }).populate("user_id", "first_name last_name email user_type status");
 
         return {
           ...channel.toObject(),
           last_message: lastMessage,
-          member_count: memberCount,
+          member_count: members.length,
+          members, // 👈 THIS IS THE IMPORTANT PART
         };
       })
     );
 
     res.json({
-      count: channelsWithLastMessage.length,
-      channels: channelsWithLastMessage,
+      count: channelsWithExtras.length,
+      channels: channelsWithExtras,
     });
   } catch (error) {
     console.error("Get user channels error:", error);
@@ -330,6 +336,9 @@ export const updateMemberRole = async (req, res) => {
     if (!updatedMember) {
       return res.status(404).json({ error: "Member not found" });
     }
+
+    const userSocketid = getReceiverSocketId(userId);
+    io.to(userSocketid).emit("changesRole", updatedMember);
 
     res.json({
       message: "Member role updated successfully",

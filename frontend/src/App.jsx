@@ -8,12 +8,12 @@ import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import EmployeeProfilePage from "./pages/employee/ProfilePage";
 import ChangePasswordPage from "./pages/employee/ChangePasswordPage";
 
-import AuthContextProvider, {
-  useAuthContext,
-} from "./context/AuthContextProvider";
+import AuthContextProvider from "./context/AuthContextProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
+
+import { Toaster } from "react-hot-toast";
 
 function App() {
   return (
@@ -85,6 +85,33 @@ function App() {
           }
         />
       </Routes>
+
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: "#fff",
+            color: "#0f766e",
+            border: "2px solid #14b8a6",
+            padding: "16px",
+            borderRadius: "12px",
+            fontWeight: "500",
+          },
+          success: {
+            iconTheme: {
+              primary: "#14b8a6",
+              secondary: "#fff",
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: "#ef4444",
+              secondary: "#fff",
+            },
+          },
+        }}
+      />
     </AuthContextProvider>
   );
 }

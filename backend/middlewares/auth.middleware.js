@@ -7,6 +7,7 @@ export const verifyToken = async (req, res, next) => {
   try {
     // ONLY changed part
     const authHeader = req.headers.authorization;
+    console.log(authHeader);
     const token = authHeader?.replace("Bearer ", "");
     if (!token) {
       console.log("no token ");

@@ -72,7 +72,7 @@ export const createEmployee = async (req, res) => {
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(tempPassword, salt);
-
+    console.log({ tempPassword, email });
     // Create user
     const user = new User({
       email: email.toLowerCase(),
