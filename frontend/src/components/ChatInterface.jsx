@@ -20,6 +20,10 @@ import { useAuthContext } from "../context/AuthContextProvider";
 import CreateGroupModal from "./CreateGroupModal";
 import StartChatModal from "./StartChatModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
+import IncomingCallModal from "./IncomingCallModal";
+import OutgoingCallModal from "./OutgoingCallModal";
+import ActiveCallBar from "./ActiveCallBar";
+import { useAudioCall } from "../hooks/useAudioCall";
 
 import { BACKEND_URL } from "../../config";
 
@@ -51,7 +55,11 @@ const ChatInterface = () => {
   const messagesEndRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  const { socket } = useAuthContext();
+  const { socket, user } = useAuthContext();
+  const currentUserName = user
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || "User"
+    : "User";
+  const audioCall = useAudioCall(socket, user?.id, currentUserName);
 
   const token = localStorage.getItem("token");
   const axiosConfig = {
@@ -74,6 +82,12 @@ const ChatInterface = () => {
       fetchMessages(selectedChat._id);
     }
   }, [selectedChat?._id]);
+
+  useEffect(() => {
+    if (audioCall.errorMessage) {
+      toast.error(audioCall.errorMessage);
+    }
+  }, [audioCall.errorMessage]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -744,9 +758,22 @@ const ChatInterface = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                <button className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors">
-                  <Phone className="w-5 h-5" />
-                </button>
+                {selectedChat.channel_type === "direct" && selectedChat.other_user && (
+                  <button
+                    onClick={() =>
+                      audioCall.startCall(
+                        selectedChat.other_user._id,
+                        selectedChat.other_user.full_name ||
+                          `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
+                      )
+                    }
+                    disabled={audioCall.callState !== "idle"}
+                    className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Voice call"
+                  >
+                    <Phone className="w-5 h-5" />
+                  </button>
+                )}
                 <button className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors">
                   <Video className="w-5 h-5" />
                 </button>
@@ -952,6 +979,33 @@ const ChatInterface = () => {
         isSearching={isSearching}
         roleUpdateTrigger={roleUpdateTrigger}
       />
+
+      {/* Audio call UI */}
+      {audioCall.callState === "incoming" && (
+        <IncomingCallModal
+          remoteUser={audioCall.remoteUser}
+          onAccept={audioCall.acceptCall}
+          onReject={audioCall.rejectCall}
+        />
+      )}
+      {audioCall.callState === "calling" && (
+        <OutgoingCallModal
+          remoteUser={audioCall.remoteUser}
+          onHangUp={audioCall.endCall}
+        />
+      )}
+      {(audioCall.callState === "connecting" ||
+        audioCall.callState === "active") && (
+        <ActiveCallBar
+          remoteUser={audioCall.remoteUser}
+          remoteStream={audioCall.remoteStream}
+          isMuted={audioCall.isMuted}
+          onToggleMute={audioCall.toggleMute}
+          onHangUp={audioCall.endCall}
+          isConnecting={audioCall.callState === "connecting"}
+          errorMessage={audioCall.errorMessage}
+        />
+      )}
     </div>
   );
 };

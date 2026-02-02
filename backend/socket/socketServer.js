@@ -15,8 +15,16 @@ const io = new Server(server, {
 
 const users = {};
 
+function forwardToUser(eventName, toUserId, payload) {
+  const normalizedTo = toUserId?.toString?.() ?? toUserId;
+  const socketId = users[normalizedTo];
+  console.log(`[SIGNALLING] forward "${eventName}" to userId=${normalizedTo} -> socketId=${socketId || "NOT FOUND"} | users map:`, Object.keys(users));
+  if (socketId) {
+    io.to(socketId).emit(eventName, payload);
+  }
+}
+
 io.on("connection", async (socket) => {
-  console.log("first");
   console.log(`Socket connected: ${socket.id}`);
 
   socket.on("message", (msg) => {
@@ -24,32 +32,92 @@ io.on("connection", async (socket) => {
   });
 
   const userId = socket.handshake.auth.userId;
-  // console.log(userId, "user id");
-  if (userId) {
-    users[userId] = socket.id;
-    // console.log("Users Map:", users);
-
-    //   const usersRoom = await userModel.findById(userId).select("rooms");
-
-    //   // console.log(usersRoom, "users room");
-
-    //   usersRoom.rooms.forEach((room) => socket.join(room));
+  const normalizedUserId = userId?.toString?.() ?? userId;
+  if (normalizedUserId) {
+    users[normalizedUserId] = socket.id;
+    socket.userId = normalizedUserId;
+    console.log(`[SIGNALLING] user registered: userId=${normalizedUserId} -> socketId=${socket.id}`);
   }
-  console.log({ users });
-  // console.log(users, "users");
+
+  // ---------- WebRTC Audio Call Signalling ----------
+  socket.on("audio-call-request", (data) => {
+    const { toUserId, fromUserName } = data;
+    console.log("[SIGNALLING] received audio-call-request", { from: socket.userId, toUserId, fromUserName });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("incoming-audio-call", toUserId, {
+      fromUserId: socket.userId,
+      fromUserName: fromUserName || "Someone",
+    });
+  });
+
+  socket.on("audio-call-accept", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received audio-call-accept", { from: socket.userId, toUserId });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("call-accepted", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
+
+  socket.on("audio-call-reject", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received audio-call-reject", { from: socket.userId, toUserId });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("call-rejected", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
+
+  socket.on("webrtc-offer", (data) => {
+    const { toUserId, sdp } = data;
+    console.log("[SIGNALLING] received webrtc-offer", { from: socket.userId, toUserId, hasSdp: !!sdp });
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("webrtc-offer", toUserId, {
+      fromUserId: socket.userId,
+      sdp,
+    });
+  });
+
+  socket.on("webrtc-answer", (data) => {
+    const { toUserId, sdp } = data;
+    console.log("[SIGNALLING] received webrtc-answer", { from: socket.userId, toUserId, hasSdp: !!sdp });
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("webrtc-answer", toUserId, {
+      fromUserId: socket.userId,
+      sdp,
+    });
+  });
+
+  socket.on("webrtc-ice", (data) => {
+    const { toUserId, candidate } = data;
+    console.log("[SIGNALLING] received webrtc-ice", { from: socket.userId, toUserId, hasCandidate: !!candidate });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("webrtc-ice", toUserId, {
+      fromUserId: socket.userId,
+      candidate,
+    });
+  });
+
+  socket.on("audio-call-end", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received audio-call-end", { from: socket.userId, toUserId });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("call-ended", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
 
   socket.on("disconnect", () => {
-    console.log(`Socket disconnected: ${socket.id}`);
-
-    if (userId) {
-      delete users[userId];
+    console.log(`Socket disconnected: ${socket.id} (userId=${normalizedUserId})`);
+    if (normalizedUserId) {
+      delete users[normalizedUserId];
     }
   });
 });
 
 export const getReceiverSocketId = (receiverId) => {
-  // console.log(receiverId, "receiver id");
-  return users[receiverId];
+  const normalized = receiverId?.toString?.() ?? receiverId;
+  return users[normalized];
 };
 
 export { app, server, io };
