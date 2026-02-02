@@ -5,14 +5,17 @@ import {
   EyeOff,
   ArrowLeft,
   CheckCircle,
-  AlertCircle,
   Loader2,
   Key,
   Shield,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
+import toast from "react-hot-toast";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const ChangePasswordPage = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -99,22 +102,25 @@ const ChangePasswordPage = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${BACKEND_URL}/auth/change-password`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+
+      const response = await axios.post(
+        `${BACKEND_URL}/auth/change-password`,
+        {
           currentPassword: formData.currentPassword,
           newPassword: formData.newPassword,
           confirmPassword: formData.confirmPassword,
-        }),
-      });
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const result = await response.json();
+      const result = response.data;
 
-      if (response.ok && result.success) {
+      if (result.success) {
         setSuccess(true);
         setFormData({
           currentPassword: "",
@@ -122,16 +128,23 @@ const ChangePasswordPage = () => {
           confirmPassword: "",
         });
         setPasswordStrength(0);
+        navigate("/profile");
 
         // Redirect after 2 seconds
-        setTimeout(() => {
-          window.location.href = "/profile";
-        }, 2000);
+
+        toast.success("Password Changed");
       } else {
-        setError(result.message || "Failed to change password");
+        setError(result.error || "Failed to change password");
+        toast.error(result.message || "Failed to change password");
       }
     } catch (err) {
-      setError("Network error. Please try again.");
+      console.log(err);
+      // Axios gives better error info
+      const message =
+        err.response?.data?.error || "Network error. Please try again.";
+
+      setError(message);
+      toast.error(message);
       console.error("Error:", err);
     } finally {
       setLoading(false);
@@ -178,29 +191,6 @@ const ChangePasswordPage = () => {
           </div>
 
           <div className="p-8">
-            {/* Success Message */}
-            {success && (
-              <div className="mb-6 bg-teal-50 border-2 border-teal-500 rounded-2xl p-4 flex items-start gap-3">
-                <CheckCircle className="w-6 h-6 text-teal-600 flex-shrink-0" />
-                <div>
-                  <p className="font-semibold text-teal-900 mb-1">
-                    Password Changed Successfully!
-                  </p>
-                  <p className="text-sm text-teal-700">
-                    Redirecting to your profile...
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div className="mb-6 bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 flex items-start gap-3">
-                <AlertCircle className="w-6 h-6 text-orange-500 flex-shrink-0" />
-                <p className="text-sm font-medium text-orange-800">{error}</p>
-              </div>
-            )}
-
             <div className="space-y-6">
               {/* Current Password */}
               <div>

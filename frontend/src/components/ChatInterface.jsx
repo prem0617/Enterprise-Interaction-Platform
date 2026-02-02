@@ -253,10 +253,11 @@ const ChatInterface = () => {
 
     try {
       const response = await axios.post(
-        `${BACKEND_URL}/chat/channels`,
+        `${BACKEND_URL}/chat/`,
         payload,
         axiosConfig
       );
+      console.log({ response });
       toast.success("Group created successfully!");
       await getUserChannel();
       setShowGroupModal(false);
