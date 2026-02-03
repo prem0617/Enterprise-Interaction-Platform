@@ -96,7 +96,7 @@ const ChatInterface = () => {
   const fetchDirectChats = async () => {
     try {
       const response = await axios.get(
-        "http://localhost:8000/api/direct_chat/list",
+        `${BACKEND_URL}/direct_chat/list`,
         axiosConfig
       );
       setDirectChats(response.data.chats || []);
@@ -110,7 +110,7 @@ const ChatInterface = () => {
   const markMessagesAsSeenInChannel = async (channelId) => {
     try {
       await axios.post(
-        `http://localhost:8000/api/direct_chat/channels/${channelId}/messages/seen`,
+        `${BACKEND_URL}/direct_chat/channels/${channelId}/messages/seen`,
         {},
         axiosConfig
       );
@@ -126,7 +126,7 @@ const ChatInterface = () => {
     try {
       setLoadingMessages(true);
       const response = await axios.get(
-        `http://localhost:8000/api/direct_chat/channels/${channelId}/messages`,
+        `${BACKEND_URL}/direct_chat/channels/${channelId}/messages`,
         axiosConfig
       );
       setMessages(response.data.messages || []);
@@ -147,7 +147,7 @@ const ChatInterface = () => {
     setIsSearching(true);
     try {
       const response = await axios.get(
-        `http://localhost:8000/api/direct_chat/search?query=${query}`,
+        `${BACKEND_URL}/direct_chat/search?query=${query}`,
         axiosConfig
       );
       setSearchResults(response.data.users || []);
@@ -175,7 +175,7 @@ const ChatInterface = () => {
     try {
       setLoading(true);
       const response = await axios.post(
-        "http://localhost:8000/api/direct_chat/start",
+        `${BACKEND_URL}/direct_chat/start`,
         { user_id: user._id },
         axiosConfig
       );
@@ -227,7 +227,7 @@ const ChatInterface = () => {
 
     try {
       const response = await axios.post(
-        `http://localhost:8000/api/direct_chat/channels/${selectedChat._id}/messages`,
+        `${BACKEND_URL}/direct_chat/channels/${selectedChat._id}/messages`,
         { content: messageContent },
         axiosConfig
       );

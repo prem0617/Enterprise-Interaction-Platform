@@ -186,7 +186,7 @@ const CreateEmployeePage = () => {
         const adminToken = localStorage.getItem("token");
 
         const response = await axios.get(
-          "http://localhost:8000/api/helper/getTeamLead",
+          `${BACKEND_URL}/helper/getTeamLead`,
           {
             headers: {
               authorization: `Bearer ${adminToken}`,

@@ -39,7 +39,7 @@ const EmployeeProfilePage = () => {
       const token = localStorage.getItem("token");
 
       const response = await axios.get(
-        `http://localhost:8000/api/employees/${userId}`,
+        `${BACKEND_URL}/employees/${userId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

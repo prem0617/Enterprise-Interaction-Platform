@@ -5,14 +5,27 @@ import { createServer } from "http";
 const app = express();
 const server = createServer(app);
 
+// const io = new Server(server, {
+//   // cors: {
+//   //   origin: ["http://localhost:5173"],
+//   //   methods: ["GET", "POST"],
+//   //   credentials: true,
+//   // },
+//   cors:{
+//     origin: "*",        // allow all origins
+//     credentials: true
+//   }
+// });
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173"],
-    methods: ["GET", "POST"],
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://sticker-genesis-deeper-cheque.trycloudflare.com",
+    ],
     credentials: true,
   },
 });
-
 const users = {};
 
 function forwardToUser(eventName, toUserId, payload) {
