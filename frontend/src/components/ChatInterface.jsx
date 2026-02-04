@@ -911,7 +911,6 @@ const ChatInterface = () => {
               </div>
 
               <div className="flex items-center gap-2">
-<<<<<<< HEAD
                 {selectedChat.channel_type === "direct" && selectedChat.other_user && (
                   <button
                     onClick={() =>
@@ -940,28 +939,6 @@ const ChatInterface = () => {
                   className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Video call"
                 >
-=======
-                {selectedChat.channel_type === "direct" &&
-                  selectedChat.other_user && (
-                    <button
-                      onClick={() =>
-                        audioCall.startCall(
-                          selectedChat.other_user._id,
-                          selectedChat.other_user.full_name ||
-                            `${selectedChat.other_user.first_name || ""} ${
-                              selectedChat.other_user.last_name || ""
-                            }`.trim()
-                        )
-                      }
-                      disabled={audioCall.callState !== "idle"}
-                      className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Voice call"
-                    >
-                      <Phone className="w-5 h-5" />
-                    </button>
-                  )}
-                <button className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors">
->>>>>>> 68a4ef2715a24562c921287bcf4882cfc25f9ff6
                   <Video className="w-5 h-5" />
                 </button>
                 {selectedChat.channel_type === "group" && (
