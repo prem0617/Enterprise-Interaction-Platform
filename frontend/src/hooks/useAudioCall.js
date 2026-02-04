@@ -7,7 +7,13 @@ const ICE_SERVERS = {
   ],
 };
 
-export function useAudioCall(socket, currentUserId, currentUserName) {
+/**
+ * @param {object} socket - Socket.IO client (same as chat)
+ * @param {string} currentUserId - Current user id
+ * @param {string} currentUserName - Current user display name
+ * @param { (toUserId: string) => Promise<void> } requestCallApi - HTTP request to trigger incoming call on server (same mechanism as chat: server emits to target socket)
+ */
+export function useAudioCall(socket, currentUserId, currentUserName, requestCallApi) {
   const [callState, setCallState] = useState("idle"); // idle | calling | incoming | connecting | active | ended
   const [remoteUser, setRemoteUser] = useState(null); // { id, name }
   const [localStream, setLocalStream] = useState(null);
@@ -64,11 +70,16 @@ export function useAudioCall(socket, currentUserId, currentUserName) {
   }, [isMuted]);
 
   const startCall = useCallback(
-    (remoteUserId, remoteUserName) => {
-      const toId = remoteUserId?.toString?.() ?? remoteUserId;
-      console.log("[AUDIO_CALL] startCall: starting signalling", { currentUserId, toUserId: toId, remoteUserName });
-      if (!socket?.connected || !currentUserId) {
-        console.log("[AUDIO_CALL] startCall: abort - socket or currentUserId missing", { socketConnected: !!socket?.connected, currentUserId });
+    async (remoteUserId, remoteUserName) => {
+      const toId = remoteUserId != null ? String(remoteUserId) : remoteUserId;
+      console.log("[AUDIO_CALL] startCall: sending call request via HTTP (same as chat)", { currentUserId, toUserId: toId, remoteUserName });
+      if (!currentUserId || !toId) {
+        console.log("[AUDIO_CALL] startCall: abort - missing currentUserId or toUserId");
+        return;
+      }
+      if (!requestCallApi) {
+        console.error("[AUDIO_CALL] startCall: requestCallApi not provided");
+        setErrorMessage("Call not configured");
         return;
       }
       if (callingTimeoutRef.current) {
@@ -79,11 +90,19 @@ export function useAudioCall(socket, currentUserId, currentUserName) {
       setCallState("calling");
       setErrorMessage(null);
       isCallerRef.current = true;
-      console.log("[AUDIO_CALL] emitting audio-call-request", { toUserId: toId });
-      socket.emit("audio-call-request", {
-        toUserId: toId,
-        fromUserName: currentUserName || "Someone",
-      });
+
+      try {
+        await requestCallApi(toId);
+        console.log("[AUDIO_CALL] startCall: server accepted, waiting for answer");
+      } catch (err) {
+        console.error("[AUDIO_CALL] startCall: request failed", err);
+        isCallerRef.current = false;
+        setCallState("idle");
+        setRemoteUser(null);
+        setErrorMessage(err.response?.data?.message || err.response?.data?.error || "User unavailable");
+        return;
+      }
+
       callingTimeoutRef.current = setTimeout(() => {
         if (isCallerRef.current) {
           setErrorMessage("No answer");
@@ -92,7 +111,7 @@ export function useAudioCall(socket, currentUserId, currentUserName) {
         callingTimeoutRef.current = null;
       }, 45000);
     },
-    [socket, currentUserId, currentUserName, endCall]
+    [currentUserId, endCall, requestCallApi]
   );
 
   const rejectCall = useCallback(() => {

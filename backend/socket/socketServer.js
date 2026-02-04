@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import express from "express";
 import { createServer } from "http";
+import { FRONTEND_URL } from "../../frontend/config.js";
 
 const app = express();
 const server = createServer(app);
@@ -21,7 +22,7 @@ const io = new Server(server, {
     origin: [
       "http://localhost:5173",
       "http://localhost:3000",
-      "https://sticker-genesis-deeper-cheque.trycloudflare.com",
+      FRONTEND_URL    
     ],
     credentials: true,
   },
@@ -53,15 +54,8 @@ io.on("connection", async (socket) => {
   }
 
   // ---------- WebRTC Audio Call Signalling ----------
-  socket.on("audio-call-request", (data) => {
-    const { toUserId, fromUserName } = data;
-    console.log("[SIGNALLING] received audio-call-request", { from: socket.userId, toUserId, fromUserName });
-    if (!toUserId || !socket.userId) return;
-    forwardToUser("incoming-audio-call", toUserId, {
-      fromUserId: socket.userId,
-      fromUserName: fromUserName || "Someone",
-    });
-  });
+  // Initial call request is sent via HTTP (POST /api/call/request), same as chat - server emits to target socket.
+  // Only accept/reject/offer/answer/ice/end use socket here.
 
   socket.on("audio-call-accept", (data) => {
     const { toUserId } = data;

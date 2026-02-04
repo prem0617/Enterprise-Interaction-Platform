@@ -8,9 +8,10 @@ import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
 import chatRouter from "./routes/chat.routes.js";
 import directChatRouter from "./routes/directChat.routes.js";
+import callRoutes from "./routes/call.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
-
+import { FRONTEND_URL } from "../frontend/config.js";
 // Load environment variables
 dotenv.config();
 
@@ -31,7 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://sticker-genesis-deeper-cheque.trycloudflare.com",
+  FRONTEND_URL
 ];
 
 app.use(cors({
@@ -58,6 +59,7 @@ app.get("/", (req, res) => {
       helper: "/api/helper",
       chat: "/api/chat",
       direct_chat: "/api/direct_chat",
+      call: "/api/call",
     },
   });
 });
@@ -67,6 +69,7 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/helper", helperRoutes);
 app.use("/api/chat", chatRouter);
 app.use("/api/direct_chat", directChatRouter);
+app.use("/api/call", callRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

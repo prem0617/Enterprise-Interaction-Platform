@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   Send,
@@ -59,7 +59,6 @@ const ChatInterface = () => {
   const currentUserName = user
     ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || "User"
     : "User";
-  const audioCall = useAudioCall(socket, user?.id, currentUserName);
 
   const token = localStorage.getItem("token");
   const axiosConfig = {
@@ -67,6 +66,21 @@ const ChatInterface = () => {
       Authorization: `Bearer ${token}`,
     },
   };
+
+  /** Same mechanism as chat: HTTP request -> server emits "incoming-audio-call" to target socket (getReceiverSocketId + io.to().emit) */
+  const requestCallApi = useCallback(
+    async (toUserId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/request`,
+        { toUserId: String(toUserId) },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+
+  const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi);
 
   useEffect(() => {
     fetchDirectChats();
@@ -762,7 +776,7 @@ const ChatInterface = () => {
                   <button
                     onClick={() =>
                       audioCall.startCall(
-                        selectedChat.other_user._id,
+                        String(selectedChat.other_user._id),
                         selectedChat.other_user.full_name ||
                           `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
                       )
@@ -774,7 +788,18 @@ const ChatInterface = () => {
                     <Phone className="w-5 h-5" />
                   </button>
                 )}
-                <button className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors">
+                <button
+                  disabled={
+                    audioCall.callState !== "idle" &&
+                    !(
+                      selectedChat.channel_type === "direct" &&
+                      selectedChat.other_user &&
+                      String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id)
+                    )
+                  }
+                  className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Video call"
+                >
                   <Video className="w-5 h-5" />
                 </button>
                 {selectedChat.channel_type === "group" && (
