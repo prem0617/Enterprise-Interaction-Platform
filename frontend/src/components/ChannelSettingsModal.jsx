@@ -9,9 +9,13 @@ import {
   Crown,
   Trash2,
   ChevronDown,
+  Edit2,
+  Check,
 } from "lucide-react";
 import { useAuthContext } from "../context/AuthContextProvider";
 import toast from "react-hot-toast";
+import axios from "axios";
+import { BACKEND_URL } from "../../config";
 
 const ChannelSettingsModal = ({
   show,
@@ -32,12 +36,24 @@ const ChannelSettingsModal = ({
   const [channelMembers, setChannelMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [expandedMember, setExpandedMember] = useState(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedChannelName, setEditedChannelName] = useState("");
+  const [savingChannelName, setSavingChannelName] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
-  const { socket } = useAuthContext();
+  const { socket, user } = useAuthContext();
+
+  const token = localStorage.getItem("token");
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
 
   useEffect(() => {
     if (show && channel?._id) {
       fetchChannelMembers();
+      setEditedChannelName(channel?.name || "");
     }
   }, [show, channel]);
 
@@ -48,7 +64,8 @@ const ChannelSettingsModal = ({
     }
   }, [roleUpdateTrigger]);
 
-  // Socket listener for real-time role changes
+  // Socket listener for real-time role changes and channel name updates
+  console.log(socket);
   useEffect(() => {
     if (!socket || !show) return;
 
@@ -104,6 +121,11 @@ const ChannelSettingsModal = ({
                     : "👤",
               });
 
+              // Update userRole if it's the current user
+              if (memberUserId === user?.id?.toString()) {
+                setUserRole(newRole);
+              }
+
               return {
                 ...member,
                 role: newRole,
@@ -157,6 +179,20 @@ const ChannelSettingsModal = ({
       }
     };
 
+    // Handler for channel name updates
+    const handleChannelNameUpdate = (data) => {
+      // console.log("📝 Channel name update event:", data);
+
+      if (data.channel_id === channel?._id) {
+        setEditedChannelName(data.new_name);
+        setIsEditingName(false);
+
+        console.log();
+
+        toast.success(`Channel name updated`);
+      }
+    };
+
     // Listen to multiple possible event names (in case backend uses different naming)
     socket.on("changesRole", handleRoleChange);
     socket.on("roleChanged", handleRoleChange);
@@ -172,6 +208,8 @@ const ChannelSettingsModal = ({
     socket.on("member-removed", handleMemberRemoved);
     socket.on("removeMember", handleMemberRemoved);
 
+    socket.on("channel_name_changed", handleChannelNameUpdate);
+
     return () => {
       console.log("🔌 Cleaning up socket listeners");
       socket.offAny(onAny);
@@ -186,21 +224,27 @@ const ChannelSettingsModal = ({
       socket.off("memberRemoved", handleMemberRemoved);
       socket.off("member-removed", handleMemberRemoved);
       socket.off("removeMember", handleMemberRemoved);
+      socket.off("channel-name-updated", handleChannelNameUpdate);
+      socket.off("channelNameUpdated", handleChannelNameUpdate);
     };
-  }, [socket, show, channel?._id]);
+  }, [socket, show, channel?._id, user?.id]);
 
   const fetchChannelMembers = async () => {
     if (!channel?._id) return;
 
     setLoadingMembers(true);
     try {
-      // You'll need to implement this endpoint to get channel members
-      // For now, using mock data structure
-      // const response = await axios.get(`${BACKEND_URL}/chat/channels/${channel._id}/members`);
-      // setChannelMembers(response.data.members || []);
-
-      // Mock data - replace with actual API call
       console.log("📥 Fetching channel members for:", channel._id);
+
+      // Get current user's role
+      const currentUserMember = channel.members?.find(
+        (m) => (m.user_id?._id || m.user_id) === user?.id?.toString()
+      );
+
+      if (currentUserMember) {
+        setUserRole(currentUserMember.role);
+      }
+
       setChannelMembers(channel.members || []);
     } catch (error) {
       console.error("Error fetching channel members:", error);
@@ -289,12 +333,57 @@ const ChannelSettingsModal = ({
     }
   };
 
+  const handleSaveChannelName = async () => {
+    if (!editedChannelName.trim()) {
+      toast.error("Channel name cannot be empty");
+      return;
+    }
+
+    if (editedChannelName.trim() === channel?.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setSavingChannelName(true);
+    try {
+      console.log(`${BACKEND_URL}/chat/channels/${channel._id}/name`);
+      const response = await axios.post(
+        `${BACKEND_URL}/chat/channels/${channel._id}/name`,
+        { name: editedChannelName.trim() },
+        axiosConfig
+      );
+
+      if (response.data.success) {
+        setIsEditingName(false);
+        // Update parent component if needed
+        if (channel) {
+          channel.name = editedChannelName.trim();
+        }
+      }
+      onClose();
+    } catch (error) {
+      console.error("Error updating channel name:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to update channel name"
+      );
+      // Reset to original name on error
+      setEditedChannelName(channel?.name || "");
+    } finally {
+      setSavingChannelName(false);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setEditedChannelName(channel?.name || "");
+    setIsEditingName(false);
+  };
+
   const getRoleIcon = (role) => {
     switch (role) {
       case "admin":
         return <Crown className="w-4 h-4 text-yellow-600" />;
-      case "moderator":
-        return <Shield className="w-4 h-4 text-blue-600" />;
+      // case "moderator":
+      //   return <Shield className="w-4 h-4 text-blue-600" />;
       default:
         return <User className="w-4 h-4 text-gray-600" />;
     }
@@ -304,12 +393,14 @@ const ChannelSettingsModal = ({
     switch (role) {
       case "admin":
         return "bg-yellow-100 text-yellow-800";
-      case "moderator":
-        return "bg-blue-100 text-blue-800";
+      // case "moderator":
+      //   return "bg-blue-100 text-blue-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  const isAdmin = userRole === "admin";
 
   if (!show) return null;
 
@@ -319,12 +410,75 @@ const ChannelSettingsModal = ({
         {/* Header */}
         <div className="p-6 border-b-2 border-teal-200">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-teal-900">
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-teal-900 mb-2">
                 Channel Settings
               </h2>
-              <p className="text-sm text-teal-600 mt-1">{channel?.name}</p>
+
+              {/* Channel Name with Edit Option */}
+              <div className="flex items-center gap-2">
+                {isEditingName ? (
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="text"
+                      value={editedChannelName}
+                      onChange={(e) => setEditedChannelName(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-teal-50 border-2 border-teal-300 rounded-lg focus:outline-none focus:border-cyan-500 text-sm font-medium"
+                      placeholder="Enter channel name"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveChannelName();
+                        if (e.key === "Escape") handleCancelEditName();
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveChannelName}
+                      disabled={savingChannelName}
+                      className="p-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50"
+                      title="Save"
+                    >
+                      {savingChannelName ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button
+                      onClick={handleCancelEditName}
+                      disabled={savingChannelName}
+                      className="p-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-teal-600 font-medium">
+                      {editedChannelName || channel?.name}
+                    </p>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setIsEditingName(true)}
+                        className="p-1.5 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                        title="Edit channel name"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Admin badge */}
+              {isAdmin && !isEditingName && (
+                <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-medium">
+                  <Crown className="w-3 h-3" />
+                  Admin
+                </span>
+              )}
             </div>
+
             <button
               onClick={onClose}
               className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
@@ -411,32 +565,38 @@ const ChannelSettingsModal = ({
                           {member.role}
                         </span>
 
-                        <button
-                          onClick={() =>
-                            setExpandedMember(
-                              expandedMember === member._id ? null : member._id
-                            )
-                          }
-                          className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
-                        >
-                          <ChevronDown
-                            className={`w-5 h-5 transition-transform ${
-                              expandedMember === member._id ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() =>
+                              setExpandedMember(
+                                expandedMember === member._id
+                                  ? null
+                                  : member._id
+                              )
+                            }
+                            className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                          >
+                            <ChevronDown
+                              className={`w-5 h-5 transition-transform ${
+                                expandedMember === member._id
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Expanded Actions */}
-                    {expandedMember === member._id && (
+                    {/* Expanded Actions - Only visible to admins */}
+                    {isAdmin && expandedMember === member._id && (
                       <div className="border-t-2 border-teal-100 p-4 bg-teal-50/50">
                         <div className="space-y-2">
                           <p className="text-sm font-medium text-teal-900 mb-3">
                             Change Role:
                           </p>
                           <div className="flex gap-2">
-                            {["member", "moderator", "admin"].map((role) => (
+                            {["member", "admin"].map((role) => (
                               <button
                                 key={role}
                                 onClick={() =>

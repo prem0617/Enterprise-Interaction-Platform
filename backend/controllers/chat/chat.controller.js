@@ -4,6 +4,7 @@ import { Message } from "../../models/Message.js";
 import User from "../../models/User.js";
 import { SupportTicket } from "../../models/SupportTicket.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
+import mongoose from "mongoose";
 
 // Create a new chat channel
 export const createChannel = async (req, res) => {
@@ -397,6 +398,10 @@ export const leaveChannel = async (req, res) => {
 
     await ChannelMember.findByIdAndDelete(membership._id);
 
+    const receiverSocketId = getReceiverSocketId(userId);
+
+    io.to(receiverSocketId).emit("leavechannel", id);
+
     res.json({ message: "Left channel successfully" });
   } catch (error) {
     console.error("Leave channel error:", error);
@@ -435,5 +440,116 @@ export const deleteChannel = async (req, res) => {
   } catch (error) {
     console.error("Delete channel error:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Controller to update channel name
+export const updateChannelName = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { name } = req.body;
+    const userId = req.userId;
+
+    // 1️⃣ Validate input
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Channel name is required",
+      });
+    }
+
+    if (name.trim().length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: "Channel name must be less than 100 characters",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(channelId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid channel ID",
+      });
+    }
+
+    // 2️⃣ Check channel exists
+    const channel = await ChatChannel.findById(channelId);
+    if (!channel) {
+      return res.status(404).json({
+        success: false,
+        error: "Channel not found",
+      });
+    }
+
+    // 3️⃣ Check membership + admin
+    const membership = await ChannelMember.findOne({
+      channel_id: channelId,
+      user_id: userId,
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        error: "You are not a member of this channel",
+      });
+    }
+
+    if (membership.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Only admins can update the channel name",
+      });
+    }
+
+    // 4️⃣ Get ALL members of the channel
+    const channelMembers = await ChannelMember.find({
+      channel_id: channelId,
+    }).populate("user_id", "_id");
+
+    // 5️⃣ Update channel name
+    const oldName = channel.name;
+    channel.name = name.trim();
+    await channel.save();
+
+    // 6️⃣ Notify ALL channel members via socket
+    console.log({ channelMembers });
+    channelMembers.forEach((member) => {
+      const memberId = member.user_id._id.toString();
+      const socketIds = getReceiverSocketId(memberId);
+      // console.log({ memberId, socketIds });
+      if (!socketIds) return;
+      io.to(socketIds).emit("channel_name_changed", {
+        channel_id: channel._id,
+        name: channel.name,
+        old_name: oldName,
+      });
+      // support single or multiple sockets
+      // const ids = Array.isArray(socketIds) ? socketIds : [socketIds];
+      // console.log(ids);
+      // ids.forEach((sid) => {
+      //   io.to(sid).emit("channel_name_changed", {
+      //     channel_id: channel._id,
+      //     name: channel.name,
+      //     old_name: oldName,
+      //   });
+      // });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Channel name updated successfully",
+      data: {
+        channel_id: channel._id,
+        name: channel.name,
+        old_name: oldName,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating channel name:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to update channel name",
+      details: error.message,
+    });
   }
 };
