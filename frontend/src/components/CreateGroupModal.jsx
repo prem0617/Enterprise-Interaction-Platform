@@ -14,6 +14,7 @@ const CreateGroupModal = ({
   setSelectedUsers,
   isSearching,
   createGroup,
+  createGroupLoading,
 }) => {
   if (!show) return null;
 
@@ -126,11 +127,20 @@ const CreateGroupModal = ({
         {/* Footer */}
         <div className="p-6 border-t">
           <button
-            disabled={!groupName || selectedUsers.length < 2}
             onClick={createGroup}
+            disabled={
+              createGroupLoading || !groupName || selectedUsers.length < 2
+            }
             className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg disabled:opacity-50"
           >
-            Create Group
+            {createGroupLoading ? (
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Loading</span>
+              </div>
+            ) : (
+              "Create Group"
+            )}
           </button>
         </div>
       </div>

@@ -28,35 +28,63 @@ export const createEmployee = async (req, res) => {
         error: "Cannot create admin accounts through this endpoint",
       });
     }
+
     // Define positions that require a team lead
     const positionsRequiringTeamLead = ["senior", "mid", "junior"];
+    const positionsRequiringDepartment = [
+      "team_lead",
+      "senior",
+      "mid",
+      "junior",
+    ];
     const leadershipPositions = ["ceo", "cto", "team_lead"];
 
-    // Validate team_lead_id based on position
-    if (positionsRequiringTeamLead.includes(position)) {
-      if (!team_lead_id) {
-        console.log("first");
+    // Validation based on employee_type
+    if (employee_type === "internal_team") {
+      // Position is required for internal_team
+      if (!position) {
         return res.status(400).json({
-          error: `Team lead is required for ${position} position`,
+          error: "Position is required for internal team members",
         });
       }
 
-      // Verify that the team lead exists and has appropriate position
-      const teamLead = await Employee.findById(team_lead_id).populate(
-        "user_id"
-      );
-      if (!teamLead) {
-        return res.status(400).json({
-          error: "Invalid team lead ID",
-        });
+      // Department is required for specific positions
+      if (positionsRequiringDepartment.includes(position)) {
+        if (!department) {
+          return res.status(400).json({
+            error: `Department is required for ${position} position`,
+          });
+        }
       }
 
-      // Optional: Verify team lead has appropriate position
-      if (!["team_lead", "cto", "ceo"].includes(teamLead.position)) {
-        return res.status(400).json({
-          error: "Team lead must have a leadership position",
-        });
+      // Team lead validation for specific positions
+      if (positionsRequiringTeamLead.includes(position)) {
+        if (!team_lead_id) {
+          return res.status(400).json({
+            error: `Team lead is required for ${position} position`,
+          });
+        }
+
+        // Verify that the team lead exists and has appropriate position
+        const teamLead = await Employee.findById(team_lead_id).populate(
+          "user_id"
+        );
+        if (!teamLead) {
+          return res.status(400).json({
+            error: "Invalid team lead ID",
+          });
+        }
+
+        // Verify team lead has appropriate position
+        if (!["team_lead", "cto", "ceo"].includes(teamLead.position)) {
+          return res.status(400).json({
+            error: "Team lead must have a leadership position",
+          });
+        }
       }
+    } else if (employee_type === "customer_support") {
+      // For customer_support, position, department, and team_lead_id should not be set
+      // We'll ignore these fields even if they're sent
     }
 
     // Check if user already exists
@@ -66,6 +94,17 @@ export const createEmployee = async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
+    // Check phone number if provided
+    if (phone) {
+      const existingPhoneNumber = await User.findOne({ phone });
+      if (existingPhoneNumber) {
+        console.log("Phone number already Exists");
+        return res.status(400).json({
+          error: "Phone number already exists. Try with diff phone number",
+        });
+      }
+    }
+
     // Generate temporary password
     const tempPassword = generateTempPassword();
 
@@ -73,6 +112,7 @@ export const createEmployee = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(tempPassword, salt);
     console.log({ tempPassword, email });
+
     // Create user
     const user = new User({
       email: email.toLowerCase(),
@@ -81,28 +121,41 @@ export const createEmployee = async (req, res) => {
       status: "active",
       first_name,
       last_name,
-      phone,
+      phone: phone || undefined,
       country,
       timezone: timezone || "UTC",
-      // company_id,
     });
 
     await user.save();
 
-    // Create employee record
-    // Only set team_lead_id for positions that require it
-    const employee = new Employee({
+    // Create employee record based on employee_type
+    const employeeData = {
       user_id: user._id,
       employee_type,
-      department,
-      position,
-      team_lead_id: positionsRequiringTeamLead.includes(position)
-        ? team_lead_id
-        : null, // or undefined, depending on your schema
       hire_date: hire_date || new Date(),
       is_active: true,
-    });
+    };
 
+    // Add position-specific fields only for internal_team
+    if (employee_type === "internal_team") {
+      employeeData.position = position;
+
+      // Add department if position requires it
+      if (positionsRequiringDepartment.includes(position)) {
+        employeeData.department = department;
+      }
+
+      // Add team_lead_id if position requires it
+      if (positionsRequiringTeamLead.includes(position)) {
+        employeeData.team_lead_id = team_lead_id;
+      }
+    } else if (employee_type === "customer_support") {
+      // For customer_support, we need to set a default department
+      // Since department is required in schema, set a default value
+      employeeData.department = "customer_support";
+    }
+
+    const employee = new Employee(employeeData);
     await employee.save();
 
     // Send welcome email with credentials
@@ -134,7 +187,8 @@ export const createEmployee = async (req, res) => {
       `,
     });
 
-    res.status(201).json({
+    // Prepare response data
+    const responseData = {
       message: "Employee created successfully. Credentials sent to email.",
       employee: {
         id: employee._id,
@@ -142,11 +196,22 @@ export const createEmployee = async (req, res) => {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-        department: employee.department,
-        position: employee.position,
-        team_lead_id: employee.team_lead_id,
+        employee_type: employee.employee_type,
       },
-    });
+    };
+
+    // Add optional fields to response if they exist
+    if (employee.department) {
+      responseData.employee.department = employee.department;
+    }
+    if (employee.position) {
+      responseData.employee.position = employee.position;
+    }
+    if (employee.team_lead_id) {
+      responseData.employee.team_lead_id = employee.team_lead_id;
+    }
+
+    res.status(201).json(responseData);
   } catch (error) {
     console.error("Create employee error:", error);
     res.status(500).json({ error: error.message });

@@ -8,6 +8,7 @@ import {
   updateMemberRole,
   leaveChannel,
   deleteChannel,
+  updateChannelName,
 } from "../controllers/chat/chat.controller.js";
 import {
   sendMessage,
@@ -51,6 +52,9 @@ router.post("/channels/:id/leave", leaveChannel);
 
 // Delete channel
 router.delete("/channels/:id", deleteChannel);
+
+// Update channel name (admin only)
+router.post("/channels/:channelId/name", updateChannelName);
 
 // ============ Message Routes ============
 

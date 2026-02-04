@@ -7,7 +7,7 @@ export const verifyToken = async (req, res, next) => {
   try {
     // ONLY changed part
     const authHeader = req.headers.authorization;
-    console.log(authHeader);
+    // console.log({ authHeader });
     const token = authHeader?.replace("Bearer ", "");
     if (!token) {
       console.log("no token ");
@@ -15,9 +15,9 @@ export const verifyToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+    // console.log({ decoded });
     const user = await User.findById(decoded.id).select("-password_hash");
-
+    console.log({ user });
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }

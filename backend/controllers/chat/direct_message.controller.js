@@ -277,7 +277,7 @@ export const getDirectChats = async (req, res) => {
           .sort({ created_at: -1 })
           .populate("sender_id", "first_name last_name");
 
-        // NEW: Calculate unread count based on seen_by
+        // Calculate unread count based on seen_by
         const unreadCount = await Message.countDocuments({
           channel_id: channel._id,
           sender_id: { $ne: currentUserId },
@@ -412,12 +412,7 @@ export const getRecentContacts = async (req, res) => {
   }
 };
 
-// // controllers/message.controller.js
-// import { ChatChannel } from "../../models/ChatChannel.js";
-// import { ChannelMember } from "../../models/ChannelMember.js";
-// import Message from "../../models/Message.js";
-
-// Get messages for a channel
+// Get messages for a channel (UPDATED with parent_message_id population)
 export const getMessages = async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -451,7 +446,15 @@ export const getMessages = async (req, res) => {
 
     const messages = await Message.find(query)
       .populate("sender_id", "first_name last_name email user_type")
-      .populate("seen_by.user_id", "first_name last_name")
+      .populate("seen_by.user_id", "first_name last_name email user_type")
+      .populate({
+        path: "parent_message_id",
+        select: "content sender_id created_at",
+        populate: {
+          path: "sender_id",
+          select: "first_name last_name email user_type",
+        },
+      })
       .sort({ created_at: -1 })
       .limit(parseInt(limit));
 
@@ -472,11 +475,35 @@ export const getMessages = async (req, res) => {
           email: msg.sender_id.email,
           user_type: msg.sender_id.user_type,
         },
+        parent_message_id: msg.parent_message_id?._id || null,
+        parent_message: msg.parent_message_id
+          ? {
+              _id: msg.parent_message_id._id,
+              content: msg.parent_message_id.content,
+              sender_id: msg.parent_message_id.sender_id._id,
+              sender: {
+                _id: msg.parent_message_id.sender_id._id,
+                first_name: msg.parent_message_id.sender_id.first_name,
+                last_name: msg.parent_message_id.sender_id.last_name,
+                full_name: `${msg.parent_message_id.sender_id.first_name} ${msg.parent_message_id.sender_id.last_name}`,
+              },
+              created_at: msg.parent_message_id.created_at,
+            }
+          : null,
         created_at: msg.created_at,
         updated_at: msg.updated_at,
         is_edited: msg.updated_at > msg.created_at,
         is_own: msg.sender_id._id.toString() === currentUserId,
-        seen_by: msg.seen_by,
+        seen_by: msg.seen_by.map((s) => ({
+          user_id: {
+            _id: s.user_id._id,
+            first_name: s.user_id.first_name,
+            last_name: s.user_id.last_name,
+            full_name: `${s.user_id.first_name} ${s.user_id.last_name}`,
+            email: s.user_id.email,
+          },
+          seen_at: s.seen_at,
+        })),
         seen_count: msg.seen_by.length,
         is_seen: msg.seen_by.some(
           (s) => s.user_id._id.toString() === currentUserId
@@ -488,11 +515,12 @@ export const getMessages = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-// Send a message
+
+// ✅ FIXED: Send a message with proper sender information in socket event
 export const sendMessage = async (req, res) => {
   try {
     const { channelId } = req.params;
-    const { content } = req.body;
+    const { content, parent_message_id } = req.body;
     const currentUserId = req.userId;
 
     if (!content || content.trim().length === 0) {
@@ -515,11 +543,24 @@ export const sendMessage = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
+    // Verify parent message exists if provided
+    if (parent_message_id) {
+      const parentMessage = await Message.findById(parent_message_id);
+      if (
+        !parentMessage ||
+        parentMessage.channel_id.toString() !== channelId ||
+        parentMessage.deleted_at
+      ) {
+        return res.status(400).json({ error: "Invalid parent message" });
+      }
+    }
+
     const message = new Message({
       channel_id: channelId,
       sender_id: currentUserId,
       content: content.trim(),
-      seen_by: [], // Initialize empty
+      parent_message_id: parent_message_id || null,
+      seen_by: [],
     });
 
     await message.save();
@@ -530,61 +571,81 @@ export const sendMessage = async (req, res) => {
 
     const populatedMessage = await Message.findById(message._id)
       .populate("sender_id", "first_name last_name email user_type")
-      .populate("seen_by.user_id", "first_name last_name");
+      .populate("seen_by.user_id", "first_name last_name email user_type")
+      .populate({
+        path: "parent_message_id",
+        select: "content sender_id created_at",
+        populate: {
+          path: "sender_id",
+          select: "first_name last_name email user_type",
+        },
+      });
 
     const channelMembers = await ChannelMember.find({
       channel_id: channelId,
     });
 
-    channelMembers.forEach((member) => {
-      if (member.user_id.toString() !== currentUserId) {
-        const receiverSocketId = getReceiverSocketId(member.user_id.toString());
-
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("new_message", {
-            _id: populatedMessage._id,
-            channel_id: channelId,
-            content: populatedMessage.content,
-            sender_id: populatedMessage.sender_id._id,
+    // ✅ FIX: Create complete message data with sender information
+    const messageData = {
+      _id: populatedMessage._id,
+      channel_id: channelId,
+      content: populatedMessage.content,
+      sender_id: populatedMessage.sender_id._id,
+      sender: {
+        _id: populatedMessage.sender_id._id,
+        first_name: populatedMessage.sender_id.first_name,
+        last_name: populatedMessage.sender_id.last_name,
+        full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
+        email: populatedMessage.sender_id.email,
+        user_type: populatedMessage.sender_id.user_type,
+      },
+      parent_message_id: populatedMessage.parent_message_id?._id || null,
+      parent_message: populatedMessage.parent_message_id
+        ? {
+            _id: populatedMessage.parent_message_id._id,
+            content: populatedMessage.parent_message_id.content,
+            sender_id: populatedMessage.parent_message_id.sender_id._id,
             sender: {
-              _id: populatedMessage.sender_id._id,
-              first_name: populatedMessage.sender_id.first_name,
-              last_name: populatedMessage.sender_id.last_name,
-              full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
-              email: populatedMessage.sender_id.email,
-              user_type: populatedMessage.sender_id.user_type,
+              _id: populatedMessage.parent_message_id.sender_id._id,
+              first_name:
+                populatedMessage.parent_message_id.sender_id.first_name,
+              last_name: populatedMessage.parent_message_id.sender_id.last_name,
+              full_name: `${populatedMessage.parent_message_id.sender_id.first_name} ${populatedMessage.parent_message_id.sender_id.last_name}`,
             },
-            created_at: populatedMessage.created_at,
-            updated_at: populatedMessage.updated_at,
-            is_edited: false,
-            is_own: false,
-            seen_by: [],
-            seen_count: 0,
-          });
-        }
+            created_at: populatedMessage.parent_message_id.created_at,
+          }
+        : null,
+      created_at: populatedMessage.created_at,
+      updated_at: populatedMessage.updated_at,
+      is_edited: false,
+      seen_by: [],
+      seen_count: 0,
+    };
+
+    // ✅ FIX: Emit to ALL members INCLUDING the sender with complete sender info
+    channelMembers.forEach((member) => {
+      const memberUserId = member.user_id.toString();
+      const receiverSocketId = getReceiverSocketId(memberUserId);
+
+      if (receiverSocketId) {
+        console.log(`📤 Emitting message to user ${memberUserId}:`, {
+          ...messageData,
+          is_own: memberUserId === currentUserId,
+        });
+
+        // Send to ALL members with proper is_own flag and sender info
+        io.to(receiverSocketId).emit("new_message", {
+          ...messageData,
+          is_own: memberUserId === currentUserId,
+        });
       }
     });
 
     res.status(201).json({
       message: "Message sent successfully",
       data: {
-        _id: populatedMessage._id,
-        content: populatedMessage.content,
-        sender_id: populatedMessage.sender_id._id,
-        sender: {
-          _id: populatedMessage.sender_id._id,
-          first_name: populatedMessage.sender_id.first_name,
-          last_name: populatedMessage.sender_id.last_name,
-          full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
-          email: populatedMessage.sender_id.email,
-          user_type: populatedMessage.sender_id.user_type,
-        },
-        created_at: populatedMessage.created_at,
-        updated_at: populatedMessage.updated_at,
-        is_edited: false,
+        ...messageData,
         is_own: true,
-        seen_by: [],
-        seen_count: 0,
       },
     });
   } catch (error) {
@@ -734,7 +795,7 @@ export const getUnreadCount = async (req, res) => {
   }
 };
 
-// Mark all messages as seen when user opens a chat
+// Mark all messages as seen when user opens a chat (UPDATED with user info in socket event)
 export const markMessagesAsSeen = async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -792,6 +853,11 @@ export const markMessagesAsSeen = async (req, res) => {
       }
     );
 
+    // Get user information to send with the socket event
+    const user = await User.findById(userId).select(
+      "first_name last_name email user_type"
+    );
+
     // Emit socket event to notify sender that message was seen
     const channelMembers = await ChannelMember.find({
       channel_id: channelId,
@@ -804,6 +870,13 @@ export const markMessagesAsSeen = async (req, res) => {
           io.to(receiverSocketId).emit("messages_seen", {
             channel_id: channelId,
             seen_by_user_id: userId,
+            seen_by_user: {
+              _id: user._id,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              full_name: `${user.first_name} ${user.last_name}`,
+              email: user.email,
+            },
             message_ids: unseenMessages.map((m) => m._id),
           });
         }
@@ -865,7 +938,16 @@ export const getMessageSeenStatus = async (req, res) => {
       success: true,
       data: {
         messageId: message._id,
-        seenBy: message.seen_by,
+        seenBy: message.seen_by.map((s) => ({
+          user_id: {
+            _id: s.user_id._id,
+            first_name: s.user_id.first_name,
+            last_name: s.user_id.last_name,
+            full_name: `${s.user_id.first_name} ${s.user_id.last_name}`,
+            email: s.user_id.email,
+          },
+          seen_at: s.seen_at,
+        })),
         seenCount,
         totalMembers,
         isSeenByAll,

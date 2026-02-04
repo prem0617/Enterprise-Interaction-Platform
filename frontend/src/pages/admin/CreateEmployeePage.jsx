@@ -12,15 +12,14 @@ import {
   Loader2,
   ArrowLeft,
   Phone,
-  Globe,
   Clock,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import axios from "axios";
+import toast from "react-hot-toast";
 
 const CreateEmployeePage = () => {
   const [teamLead, setTeamLead] = useState();
-  console.log({ teamLead });
   const [formData, setFormData] = useState({
     email: "",
     first_name: "",
@@ -83,13 +82,54 @@ const CreateEmployeePage = () => {
     { value: "Australia/Sydney", label: "Sydney (AEDT)" },
   ];
 
+  // Positions that require a team lead
+  const positionsRequiringTeamLead = ["senior", "mid", "junior"];
+
+  // Check if position field should be shown
+  const shouldShowPosition = formData.employee_type === "internal_team";
+
+  // Check if department field should be shown
+  const shouldShowDepartment =
+    formData.employee_type === "internal_team" &&
+    formData.position &&
+    ["team_lead", "senior", "mid", "junior"].includes(formData.position);
+
+  // Check if team lead field should be shown
+  const shouldShowTeamLead =
+    formData.employee_type === "internal_team" &&
+    formData.position &&
+    positionsRequiringTeamLead.includes(formData.position);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    // Reset dependent fields when employee_type changes
+    if (name === "employee_type") {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        position: "",
+        department: "",
+        team_lead_id: "",
+      }));
+    }
+    // Reset department and team_lead when position changes
+    else if (name === "position") {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        department: "",
+        team_lead_id: "",
+      }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+
     setError("");
   };
 
   const handleSubmit = async () => {
+    // Basic validation
     if (!formData.first_name.trim()) {
       setError("Please enter the first name");
       return;
@@ -107,14 +147,6 @@ const CreateEmployeePage = () => {
       setError("Please enter a valid email address");
       return;
     }
-    if (!formData.department) {
-      setError("Please select a department");
-      return;
-    }
-    if (!formData.position) {
-      setError("Please select a position");
-      return;
-    }
     if (!formData.country) {
       setError("Please select a Country");
       return;
@@ -124,37 +156,95 @@ const CreateEmployeePage = () => {
       return;
     }
 
+    // Conditional validation based on employee type
+    if (formData.employee_type === "internal_team") {
+      if (!formData.position) {
+        setError("Please select a position");
+        return;
+      }
+
+      // Check if department is required for selected position
+      if (shouldShowDepartment && !formData.department) {
+        setError("Please select a department");
+        return;
+      }
+
+      // Check if team lead is required for selected position
+      if (shouldShowTeamLead && !formData.team_lead_id) {
+        setError("Please select a team lead");
+        return;
+      }
+    }
+
     setLoading(true);
     setError("");
 
     try {
       const adminToken = localStorage.getItem("token");
-      console.log(formData);
 
-      const response = await axios.post(`${BACKEND_URL}/employees`, formData, {
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      // Prepare data based on employee type
+      const dataToSend = {
+        email: formData.email,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        phone: formData.phone,
+        country: formData.country,
+        timezone: formData.timezone,
+        employee_type: formData.employee_type,
+        hire_date: formData.hire_date,
+      };
+
+      // Add position, department, and team_lead_id only for internal_team
+      if (formData.employee_type === "internal_team") {
+        dataToSend.position = formData.position;
+
+        if (shouldShowDepartment) {
+          dataToSend.department = formData.department;
+        }
+
+        if (shouldShowTeamLead) {
+          dataToSend.team_lead_id = formData.team_lead_id;
+        }
+      }
+
+      const response = await axios.post(
+        `${BACKEND_URL}/employees`,
+        dataToSend,
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       console.log("Success:", response.data);
+      setFormData({
+        email: "",
+        first_name: "",
+        last_name: "",
+        phone: "",
+        country: "",
+        timezone: "",
+        company_id: "",
+        employee_type: "internal_team",
+        department: "",
+        position: "",
+        team_lead_id: "",
+        hire_date: new Date().toISOString().split("T")[0],
+      });
+      toast.success("Employee Created");
       setLoading(false);
     } catch (error) {
       console.error("Axios error:", error);
 
-      // Backend responded with error
       if (error.response) {
         console.error("Backend error data:", error.response.data);
         setError(error.response.data.error || "Failed to create employee");
-      }
-      // Request sent but no response
-      else if (error.request) {
+      } else if (error.request) {
         console.error("No response from server:", error.request);
         setError("Server not responding. Please try again.");
-      }
-      // Something else went wrong
-      else {
+      } else {
         setError("Something went wrong. Please try again.");
       }
 
@@ -185,14 +275,11 @@ const CreateEmployeePage = () => {
       try {
         const adminToken = localStorage.getItem("token");
 
-        const response = await axios.get(
-          `${BACKEND_URL}/helper/getTeamLead`,
-          {
-            headers: {
-              authorization: `Bearer ${adminToken}`,
-            },
-          }
-        );
+        const response = await axios.get(`${BACKEND_URL}/helper/getTeamLead`, {
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+          },
+        });
 
         console.log(response);
         setTeamLead(response.data.data);
@@ -357,70 +444,45 @@ const CreateEmployeePage = () => {
 
               <div>
                 <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Company ID
+                  Hire Date *
                 </label>
                 <div className="relative">
-                  <Building className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
                   <input
-                    type="text"
-                    name="company_id"
-                    value={formData.company_id}
+                    type="date"
+                    name="hire_date"
+                    value={formData.hire_date}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 placeholder-teal-400"
-                    placeholder="COMP-001"
+                    className="w-full pl-12 pr-4 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Employee Type *
-                </label>
-                <div className="relative">
-                  <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
-                  <select
-                    name="employee_type"
-                    value={formData.employee_type}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
-                  >
-                    {employeeTypes.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Department *
-                </label>
-                <div className="relative">
-                  <Building className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
-                </div>
+            <div>
+              <label className="block text-sm font-semibold text-teal-900 mb-2">
+                Employee Type *
+              </label>
+              <div className="relative">
+                <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
+                <select
+                  name="employee_type"
+                  value={formData.employee_type}
+                  onChange={handleChange}
+                  className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
+                >
+                  {employeeTypes.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Conditionally render Position field */}
+            {shouldShowPosition && (
               <div>
                 <label className="block text-sm font-semibold text-teal-900 mb-2">
                   Position *
@@ -443,46 +505,59 @@ const CreateEmployeePage = () => {
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
                 </div>
               </div>
+            )}
 
+            {/* Conditionally render Department field */}
+            {shouldShowDepartment && (
               <div>
                 <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Hire Date *
+                  Department *
                 </label>
                 <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
-                  <input
-                    type="date"
-                    name="hire_date"
-                    value={formData.hire_date}
+                  <Building className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
+                  <select
+                    name="department"
+                    value={formData.department}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900"
-                  />
+                    className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
                 </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-semibold text-teal-900 mb-2">
-                Team Lead *
-              </label>
-              <div className="relative">
-                <Building className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
-                <select
-                  name="team_lead_id"
-                  value={formData.team_lead_id}
-                  onChange={handleChange}
-                  className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
-                >
-                  <option value="">Select Team Lead</option>
-                  {teamLead?.map((d) => (
-                    <option key={d._id} value={d._id}>
-                      {d.user_id.first_name} {d.user_id.last_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
+            {/* Conditionally render Team Lead field */}
+            {shouldShowTeamLead && (
+              <div>
+                <label className="block text-sm font-semibold text-teal-900 mb-2">
+                  Team Lead *
+                </label>
+                <div className="relative">
+                  <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-400" />
+                  <select
+                    name="team_lead_id"
+                    value={formData.team_lead_id}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-10 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-teal-900 appearance-none cursor-pointer"
+                  >
+                    <option value="">Select Team Lead</option>
+                    {teamLead?.map((d) => (
+                      <option key={d._id} value={d._id}>
+                        {d.user_id.first_name} {d.user_id.last_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal-400 pointer-events-none" />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex gap-4 pt-4">
               <button
