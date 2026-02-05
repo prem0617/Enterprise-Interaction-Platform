@@ -7,7 +7,7 @@ const app = express();
 const server = createServer(app);
 
 const io = new Server(server, {
-  cors: {
+       cors: {
     origin: [
       "http://localhost:5173",
       "http://localhost:3000",
@@ -156,6 +156,40 @@ io.on("connection", async (socket) => {
     if (!toUserId || !socket.userId) return;
     forwardToUser("call-ended", toUserId, {
       fromUserId: socket.userId,
+    });
+  });
+
+  // ---------- Group call WebRTC signalling ----------
+  socket.on("group-call-webrtc-offer", (data) => {
+    const { toUserId, channelId, sdp } = data;
+    if (!toUserId || !socket.userId || !sdp) return;
+    console.log("[SIGNALLING] group-call-webrtc-offer", { from: socket.userId, toUserId, channelId });
+    forwardToUser("group-call-webrtc-offer", toUserId, {
+      fromUserId: socket.userId,
+      channelId,
+      sdp,
+    });
+  });
+
+  socket.on("group-call-webrtc-answer", (data) => {
+    const { toUserId, channelId, sdp } = data;
+    if (!toUserId || !socket.userId || !sdp) return;
+    console.log("[SIGNALLING] group-call-webrtc-answer", { from: socket.userId, toUserId, channelId });
+    forwardToUser("group-call-webrtc-answer", toUserId, {
+      fromUserId: socket.userId,
+      channelId,
+      sdp,
+    });
+  });
+
+  socket.on("group-call-webrtc-ice", (data) => {
+    const { toUserId, channelId, candidate } = data;
+    if (!toUserId || !socket.userId) return;
+    console.log("[SIGNALLING] group-call-webrtc-ice", { from: socket.userId, toUserId, channelId });
+    forwardToUser("group-call-webrtc-ice", toUserId, {
+      fromUserId: socket.userId,
+      channelId,
+      candidate,
     });
   });
 

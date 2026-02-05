@@ -119,11 +119,17 @@ export const getUserChannels = async (req, res) => {
           channel_id: channel._id,
         }).populate("user_id", "first_name last_name email user_type status");
 
+        const myMembership = members.find(
+          (m) => m.user_id && m.user_id._id && m.user_id._id.toString() === userId.toString()
+        );
+        const user_role = myMembership ? myMembership.role : null;
+
         return {
           ...channel.toObject(),
           last_message: lastMessage,
           member_count: members.length,
           members,
+          user_role,
         };
       })
     );

@@ -26,7 +26,11 @@ import ChannelSettingsModal from "./ChannelSettingsModal";
 import IncomingCallModal from "./IncomingCallModal";
 import OutgoingCallModal from "./OutgoingCallModal";
 import ActiveCallBar from "./ActiveCallBar";
+import GroupCallWaitingModal from "./GroupCallWaitingModal";
+import GroupCallActiveBar from "./GroupCallActiveBar";
+import GroupCallIncomingBanner from "./GroupCallIncomingBanner";
 import { useAudioCall } from "../hooks/useAudioCall";
+import { useGroupCall } from "../hooks/useGroupCall";
 
 import { BACKEND_URL } from "../../config";
 
@@ -60,10 +64,64 @@ const ChatInterface = () => {
   const [replyingTo, setReplyingTo] = useState(null);
   const [showSeenByModal, setShowSeenByModal] = useState(false);
   const [selectedMessageSeenBy, setSelectedMessageSeenBy] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [groupCallStatus, setGroupCallStatus] = useState(null); // { active, channelId, initiatorName, ... } for selected group
   const messagesEndRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
   const { socket, user } = useAuthContext();
+
+  // Track socket connection status for UI. Only mark as connected when socket actually connects.
+  useEffect(() => {
+    if (!socket) {
+      console.log("[CHAT] socket is null from AuthContext, marking disconnected");
+      setSocketConnected(false);
+      return;
+    }
+
+    console.log("[CHAT] socket available from AuthContext", {
+      hasId: !!socket.id,
+      id: socket.id,
+      connected: socket.connected,
+    });
+
+    const onConnect = () => {
+      console.log("[CHAT] socket 'connect' event", { id: socket.id });
+      setSocketConnected(true);
+    };
+    const onDisconnect = (reason) => {
+      console.log("[CHAT] socket 'disconnect' event", {
+        id: socket.id,
+        reason,
+      });
+      setSocketConnected(false);
+    };
+
+    // Only mark as connected if socket is actually connected
+    if (socket.connected) {
+      console.log("[CHAT] socket is already connected, marking as connected");
+      setSocketConnected(true);
+    } else {
+      console.log("[CHAT] socket exists but not connected yet, waiting for connect event");
+      setSocketConnected(false);
+    }
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    console.log("[CHAT] socketConnected state changed", {
+      socketConnected,
+      hasSocket: !!socket,
+      socketId: socket?.id,
+    });
+  }, [socketConnected, socket]);
   const currentUserName = user
     ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || "User"
     : "User";
@@ -75,7 +133,6 @@ const ChatInterface = () => {
     },
   };
 
-  /** Same mechanism as chat: HTTP request -> server emits "incoming-audio-call" to target socket (getReceiverSocketId + io.to().emit) */
   const requestCallApi = useCallback(
     async (toUserId) => {
       const { data } = await axios.post(
@@ -89,6 +146,60 @@ const ChatInterface = () => {
   );
 
   const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi);
+
+  const startGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/start`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+  const getGroupCallStatusApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/group/status/${channelId}`,
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+  const joinGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/join`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+  const leaveGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/leave`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+
+  const groupCall = useGroupCall(
+    socket,
+    user?.id,
+    currentUserName,
+    startGroupCallApi,
+    getGroupCallStatusApi,
+    joinGroupCallApi,
+    leaveGroupCallApi
+  );
 
   useEffect(() => {
     fetchDirectChats();
@@ -106,10 +217,50 @@ const ChatInterface = () => {
   }, [selectedChat?._id]);
 
   useEffect(() => {
+    if (selectedChat?.channel_type === "group" && selectedChat?._id && getGroupCallStatusApi) {
+      getGroupCallStatusApi(selectedChat._id)
+        .then((res) => {
+          if (res?.active) {
+            setGroupCallStatus({
+              active: true,
+              channelId: res.channelId,
+              channelName: res.channelName,
+              initiatorId: res.initiatorId,
+              initiatorName: res.initiatorName,
+            });
+          } else {
+            setGroupCallStatus(null);
+          }
+        })
+        .catch(() => setGroupCallStatus(null));
+    } else {
+      setGroupCallStatus(null);
+    }
+  }, [selectedChat?._id, selectedChat?.channel_type, getGroupCallStatusApi, groupCall?.groupCallState]);
+
+  // When admin (or last person) leaves, clear the upper "Join call" bar for users who hadn't joined
+  useEffect(() => {
+    if (!socket) return;
+    const onGroupCallEnded = ({ channelId }) => {
+      if (selectedChat?._id && String(channelId) === String(selectedChat._id)) {
+        setGroupCallStatus(null);
+      }
+    };
+    socket.on("group-call-ended", onGroupCallEnded);
+    return () => socket.off("group-call-ended", onGroupCallEnded);
+  }, [socket, selectedChat?._id]);
+
+  useEffect(() => {
     if (audioCall.errorMessage) {
       toast.error(audioCall.errorMessage);
     }
   }, [audioCall.errorMessage]);
+
+  useEffect(() => {
+    if (groupCall.errorMessage) {
+      toast.error(groupCall.errorMessage);
+    }
+  }, [groupCall.errorMessage]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -920,9 +1071,9 @@ const ChatInterface = () => {
                           `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
                       )
                     }
-                    disabled={audioCall.callState !== "idle"}
+                    disabled={audioCall.callState !== "idle" || !socket}
                     className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Voice call"
+                    title={!socket ? "Connecting…" : "Voice call"}
                   >
                     <Phone className="w-5 h-5" />
                   </button>
@@ -942,13 +1093,33 @@ const ChatInterface = () => {
                   <Video className="w-5 h-5" />
                 </button>
                 {selectedChat.channel_type === "group" && (
-                  <button
-                    onClick={openChannelSettings}
-                    className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
-                    title="Channel Settings"
-                  >
-                    <Settings className="w-5 h-5" />
-                  </button>
+                  <>
+                    {groupCall.groupCallState === "idle" &&
+                      !groupCallStatus?.active &&
+                      selectedChat.user_role === "admin" && (
+                        <button
+                          onClick={() =>
+                            groupCall.startGroupCall(selectedChat._id, selectedChat.name)
+                          }
+                          disabled={
+                            !socket ||
+                            groupCall.groupCallState !== "idle" ||
+                            audioCall.callState !== "idle"
+                          }
+                          className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50"
+                          title="Start group call (admin only)"
+                        >
+                          <Phone className="w-5 h-5" />
+                        </button>
+                      )}
+                    <button
+                      onClick={openChannelSettings}
+                      className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                      title="Channel Settings"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                  </>
                 )}
                 {selectedChat?.member_count > 2 && (
                   <button
@@ -961,6 +1132,48 @@ const ChatInterface = () => {
               </div>
             </div>
           </div>
+
+          {((groupCall.groupCallState === "incoming" &&
+            selectedChat?._id === groupCall.activeChannelId) ||
+            (groupCall.groupCallState === "idle" &&
+              groupCallStatus?.active &&
+              selectedChat?._id === groupCallStatus.channelId)) && (
+            <div className="px-4 pt-2">
+              <GroupCallIncomingBanner
+                channelName={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.activeChannelName
+                    : groupCallStatus?.channelName
+                }
+                initiatorName={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.initiatorName
+                    : groupCallStatus?.initiatorName
+                }
+                onJoin={() =>
+                  groupCall.joinGroupCall(
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.activeChannelId
+                      : groupCallStatus.channelId,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.activeChannelName
+                      : groupCallStatus.channelName,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.initiatorId
+                      : groupCallStatus.initiatorId,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.initiatorName
+                      : groupCallStatus.initiatorName
+                  )
+                }
+                onDismiss={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.dismissIncoming
+                    : () => {}
+                }
+              />
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-br from-teal-50/30 to-cyan-50/30">
             {loadingMessages ? (
@@ -1132,16 +1345,24 @@ const ChatInterface = () => {
           )}
 
           <div className="p-4 border-t-2 border-teal-200 bg-white">
+            {!socketConnected && (
+              <div className="mb-2 flex items-center gap-2 text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                Connecting to chat…
+              </div>
+            )}
             <form onSubmit={sendMessage} className="flex items-center gap-2">
               <button
                 type="button"
-                className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50"
+                disabled={!socketConnected}
               >
                 <Paperclip className="w-5 h-5" />
               </button>
               <button
                 type="button"
-                className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50"
+                disabled={!socketConnected}
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -1150,14 +1371,18 @@ const ChatInterface = () => {
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder={
-                  replyingTo ? "Type your reply..." : "Type a message..."
+                  !socketConnected
+                    ? "Connecting…"
+                    : replyingTo
+                    ? "Type your reply..."
+                    : "Type a message..."
                 }
-                disabled={sendingMessage}
+                disabled={sendingMessage || !socketConnected}
                 className="flex-1 px-4 py-2 bg-teal-50 border-2 border-teal-200 rounded-lg focus:outline-none focus:border-cyan-500 disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={!newMessage.trim() || sendingMessage}
+                disabled={!newMessage.trim() || sendingMessage || !socketConnected}
                 className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {sendingMessage ? (
@@ -1333,6 +1558,25 @@ const ChatInterface = () => {
           onHangUp={audioCall.endCall}
           isConnecting={audioCall.callState === "connecting"}
           errorMessage={audioCall.errorMessage}
+        />
+      )}
+
+      {groupCall.groupCallState === "waiting" && (
+        <GroupCallWaitingModal
+          channelName={groupCall.activeChannelName}
+          onCancel={groupCall.leaveGroupCall}
+        />
+      )}
+      {(groupCall.groupCallState === "active" ||
+        groupCall.groupCallState === "joined") && (
+        <GroupCallActiveBar
+          channelName={groupCall.activeChannelName}
+          participants={groupCall.participants}
+          remoteStreams={groupCall.remoteStreams}
+          isMuted={groupCall.isMuted}
+          onToggleMute={groupCall.toggleMute}
+          onHangUp={groupCall.leaveGroupCall}
+          currentUserId={user?.id}
         />
       )}
     </div>

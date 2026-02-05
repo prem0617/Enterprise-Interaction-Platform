@@ -622,23 +622,42 @@ export const sendMessage = async (req, res) => {
       seen_count: 0,
     };
 
-    // ✅ FIX: Emit to ALL members INCLUDING the sender with complete sender info
-    channelMembers.forEach((member) => {
-      const memberUserId = member.user_id.toString();
+    // Emit to ALL members. If a member's socket isn't registered yet (e.g. just logged in),
+    // retry delivery for a short period so they get the message when they connect.
+    const MESSAGE_DELIVERY_RETRY_MS = 500;
+    const MESSAGE_DELIVERY_RETRY_ATTEMPTS = 20; // 10 seconds
+
+    const emitToMember = (memberUserId, isOwn) => {
       const receiverSocketId = getReceiverSocketId(memberUserId);
-
       if (receiverSocketId) {
-        console.log(`📤 Emitting message to user ${memberUserId}:`, {
-          ...messageData,
-          is_own: memberUserId === currentUserId,
-        });
-
-        // Send to ALL members with proper is_own flag and sender info
         io.to(receiverSocketId).emit("new_message", {
           ...messageData,
-          is_own: memberUserId === currentUserId,
+          is_own: isOwn,
         });
+        return true;
       }
+      return false;
+    };
+
+    channelMembers.forEach((member) => {
+      const memberUserId = member.user_id.toString();
+      const isOwn = memberUserId === currentUserId;
+
+      if (emitToMember(memberUserId, isOwn)) {
+        console.log(`📤 Emitted message to user ${memberUserId}`);
+        return;
+      }
+
+      let attempts = 0;
+      const retryInterval = setInterval(() => {
+        attempts++;
+        if (emitToMember(memberUserId, isOwn)) {
+          console.log(`📤 Emitted message to user ${memberUserId} (delayed)`);
+          clearInterval(retryInterval);
+        } else if (attempts >= MESSAGE_DELIVERY_RETRY_ATTEMPTS) {
+          clearInterval(retryInterval);
+        }
+      }, MESSAGE_DELIVERY_RETRY_MS);
     });
 
     res.status(201).json({
