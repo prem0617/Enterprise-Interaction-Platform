@@ -61,48 +61,15 @@ const ChangePasswordPage = () => {
     setError("");
     setSuccess(false);
 
-    // Validation
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError("New passwords do not match");
-      setLoading(false);
-      return;
-    }
-
-    if (formData.newPassword.length < 8) {
-      setError("Password must be at least 8 characters");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[A-Z]/.test(formData.newPassword)) {
-      setError("Password must contain at least one uppercase letter");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[a-z]/.test(formData.newPassword)) {
-      setError("Password must contain at least one lowercase letter");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[0-9]/.test(formData.newPassword)) {
-      setError("Password must contain at least one number");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[@#$!%*?&]/.test(formData.newPassword)) {
-      setError(
-        "Password must contain at least one special character (@#$!%*?&)"
-      );
-      setLoading(false);
-      return;
-    }
+    if (formData.newPassword !== formData.confirmPassword) { setError("New passwords do not match"); setLoading(false); return; }
+    if (formData.newPassword.length < 8) { setError("Password must be at least 8 characters"); setLoading(false); return; }
+    if (!/[A-Z]/.test(formData.newPassword)) { setError("Password must contain at least one uppercase letter"); setLoading(false); return; }
+    if (!/[a-z]/.test(formData.newPassword)) { setError("Password must contain at least one lowercase letter"); setLoading(false); return; }
+    if (!/[0-9]/.test(formData.newPassword)) { setError("Password must contain at least one number"); setLoading(false); return; }
+    if (!/[@#$!%*?&]/.test(formData.newPassword)) { setError("Password must contain at least one special character (@#$!%*?&)"); setLoading(false); return; }
 
     try {
       const token = localStorage.getItem("token");
-
       const response = await axios.post(
         `${BACKEND_URL}/auth/change-password`,
         {
@@ -119,43 +86,30 @@ const ChangePasswordPage = () => {
       );
 
       const result = response.data;
-
       if (result.success) {
         setSuccess(true);
-        setFormData({
-          currentPassword: "",
-          newPassword: "",
-          confirmPassword: "",
-        });
+        setFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
         setPasswordStrength(0);
         navigate("/profile");
-
-        // Redirect after 2 seconds
-
         toast.success("Password Changed");
       } else {
         setError(result.error || "Failed to change password");
         toast.error(result.message || "Failed to change password");
       }
     } catch (err) {
-      console.log(err);
-      // Axios gives better error info
-      const message =
-        err.response?.data?.error || "Network error. Please try again.";
-
+      const message = err.response?.data?.error || "Network error. Please try again.";
       setError(message);
       toast.error(message);
-      console.error("Error:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const getStrengthColor = () => {
-    if (passwordStrength <= 2) return "bg-orange-500";
-    if (passwordStrength <= 3) return "bg-yellow-500";
-    if (passwordStrength <= 4) return "bg-teal-500";
-    return "bg-green-500";
+    if (passwordStrength <= 2) return "bg-red-400";
+    if (passwordStrength <= 3) return "bg-amber-400";
+    if (passwordStrength <= 4) return "bg-indigo-500";
+    return "bg-emerald-500";
   };
 
   const getStrengthText = () => {
@@ -165,208 +119,165 @@ const ChangePasswordPage = () => {
     return "Strong";
   };
 
+  const inputClasses = "w-full px-3 py-2 border border-slate-600 rounded-lg text-sm bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-500 transition";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 p-4 flex items-center justify-center">
-      <div className="w-full max-w-2xl">
+    <div className="min-h-screen bg-slate-950 p-4 flex items-center justify-center">
+      <div className="w-full max-w-md">
         <button
           onClick={() => (window.location.href = "/profile")}
-          className="flex items-center gap-2 text-teal-700 hover:text-teal-900 mb-6 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-6 transition-colors"
         >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Back to Profile</span>
+          <ArrowLeft className="w-4 h-4" />
+          Back to Profile
         </button>
 
-        <div className="bg-white rounded-3xl border-2 border-teal-200 shadow-xl overflow-hidden">
+        <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-8 text-center">
-            <div className="w-16 h-16 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-              <Key className="w-8 h-8 text-blue-400" />
+          <div className="px-6 py-5 border-b border-slate-700/30">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-slate-800 rounded-lg flex items-center justify-center">
+                <Key className="w-4 h-4 text-slate-400" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-white">Change Password</h1>
+                <p className="text-xs text-slate-500">Keep your account secure</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">
-              Change Password
-            </h1>
-            <p className="text-cyan-100">
-              Keep your account secure with a strong password
-            </p>
           </div>
 
-          <div className="p-8">
-            <div className="space-y-6">
-              {/* Current Password */}
-              <div>
-                <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Current Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-teal-400" />
-                  </div>
-                  <input
-                    type={showPasswords.current ? "text" : "password"}
-                    name="currentPassword"
-                    value={formData.currentPassword}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all text-teal-900 placeholder-teal-400"
-                    placeholder="Enter current password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => toggleShowPassword("current")}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-teal-400 hover:text-teal-600"
-                  >
-                    {showPasswords.current ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
+          <div className="p-6 space-y-4">
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2.5 rounded-lg text-sm">
+                {error}
               </div>
+            )}
 
-              {/* New Password */}
-              <div>
-                <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  New Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Shield className="h-5 w-5 text-teal-400" />
-                  </div>
-                  <input
-                    type={showPasswords.new ? "text" : "password"}
-                    name="newPassword"
-                    value={formData.newPassword}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all text-teal-900 placeholder-teal-400"
-                    placeholder="Enter new password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => toggleShowPassword("new")}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-teal-400 hover:text-teal-600"
-                  >
-                    {showPasswords.new ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Password Strength Indicator */}
-                {formData.newPassword && (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-teal-700">
-                        Password Strength
-                      </span>
-                      <span className="text-xs font-semibold text-teal-900">
-                        {getStrengthText()}
-                      </span>
-                    </div>
-                    <div className="w-full bg-teal-100 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-300 ${getStrengthColor()}`}
-                        style={{ width: `${(passwordStrength / 5) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
+            {/* Current Password */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                Current Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.current ? "text" : "password"}
+                  name="currentPassword"
+                  value={formData.currentPassword}
+                  onChange={handleChange}
+                  className={`${inputClasses} pr-10`}
+                  placeholder="Enter current password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowPassword("current")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
-
-              {/* Confirm Password */}
-              <div>
-                <label className="block text-sm font-semibold text-teal-900 mb-2">
-                  Confirm New Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Shield className="h-5 w-5 text-teal-400" />
-                  </div>
-                  <input
-                    type={showPasswords.confirm ? "text" : "password"}
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-teal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all text-teal-900 placeholder-teal-400"
-                    placeholder="Confirm new password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => toggleShowPassword("confirm")}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-teal-400 hover:text-teal-600"
-                  >
-                    {showPasswords.confirm ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
-                {formData.confirmPassword &&
-                  formData.newPassword !== formData.confirmPassword && (
-                    <p className="mt-2 text-xs text-orange-600">
-                      Passwords do not match
-                    </p>
-                  )}
-              </div>
-
-              {/* Requirements */}
-              <div className="bg-teal-50 border-2 border-teal-200 rounded-xl p-4">
-                <p className="text-sm font-semibold text-teal-900 mb-2">
-                  Password Requirements:
-                </p>
-                <ul className="space-y-1 text-xs text-teal-700">
-                  <RequirementItem
-                    text="At least 8 characters"
-                    met={formData.newPassword.length >= 8}
-                  />
-                  <RequirementItem
-                    text="One uppercase letter (A-Z)"
-                    met={/[A-Z]/.test(formData.newPassword)}
-                  />
-                  <RequirementItem
-                    text="One lowercase letter (a-z)"
-                    met={/[a-z]/.test(formData.newPassword)}
-                  />
-                  <RequirementItem
-                    text="One number (0-9)"
-                    met={/[0-9]/.test(formData.newPassword)}
-                  />
-                  <RequirementItem
-                    text="One special character (@#$!%*?&)"
-                    met={/[@#$!%*?&]/.test(formData.newPassword)}
-                  />
-                </ul>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                onClick={handleSubmit}
-                disabled={loading || success}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold py-3 px-6 rounded-xl hover:from-cyan-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Changing Password...</span>
-                  </>
-                ) : success ? (
-                  <>
-                    <CheckCircle className="w-5 h-5" />
-                    <span>Password Changed!</span>
-                  </>
-                ) : (
-                  <>
-                    <Key className="w-5 h-5" />
-                    <span>Change Password</span>
-                  </>
-                )}
-              </button>
             </div>
+
+            {/* New Password */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.new ? "text" : "password"}
+                  name="newPassword"
+                  value={formData.newPassword}
+                  onChange={handleChange}
+                  className={`${inputClasses} pr-10`}
+                  placeholder="Enter new password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowPassword("new")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {formData.newPassword && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-slate-500">Strength</span>
+                    <span className="text-xs font-medium text-slate-300">{getStrengthText()}</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all duration-300 ${getStrengthColor()}`}
+                      style={{ width: `${(passwordStrength / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.confirm ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className={`${inputClasses} pr-10`}
+                  placeholder="Confirm new password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowPassword("confirm")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {formData.confirmPassword && formData.newPassword !== formData.confirmPassword && (
+                <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
+              )}
+            </div>
+
+            {/* Requirements */}
+            <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-3">
+              <p className="text-xs font-medium text-slate-400 mb-2">Requirements</p>
+              <div className="space-y-1">
+                <RequirementItem text="At least 8 characters" met={formData.newPassword.length >= 8} />
+                <RequirementItem text="One uppercase letter (A-Z)" met={/[A-Z]/.test(formData.newPassword)} />
+                <RequirementItem text="One lowercase letter (a-z)" met={/[a-z]/.test(formData.newPassword)} />
+                <RequirementItem text="One number (0-9)" met={/[0-9]/.test(formData.newPassword)} />
+                <RequirementItem text="One special character (@#$!%*?&)" met={/[@#$!%*?&]/.test(formData.newPassword)} />
+              </div>
+            </div>
+
+            {/* Submit */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading || success}
+              className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Changing Password...
+                </>
+              ) : success ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Password Changed!
+                </>
+              ) : (
+                "Update Password"
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -375,16 +286,16 @@ const ChangePasswordPage = () => {
 };
 
 const RequirementItem = ({ text, met }) => (
-  <li className="flex items-center gap-2">
+  <div className="flex items-center gap-2">
     <div
-      className={`w-4 h-4 rounded-full flex items-center justify-center ${
-        met ? "bg-teal-500" : "bg-teal-200"
+      className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
+        met ? "bg-emerald-500" : "bg-slate-700"
       }`}
     >
-      {met && <CheckCircle className="w-3 h-3 text-white" />}
+      {met && <CheckCircle className="w-2.5 h-2.5 text-white" />}
     </div>
-    <span className={met ? "text-teal-900 font-medium" : ""}>{text}</span>
-  </li>
+    <span className={`text-xs ${met ? "text-slate-300" : "text-slate-500"}`}>{text}</span>
+  </div>
 );
 
 export default ChangePasswordPage;

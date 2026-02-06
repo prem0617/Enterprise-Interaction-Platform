@@ -1,36 +1,42 @@
 import React from "react";
-import { Phone, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff, AlertTriangle } from "lucide-react";
 
-const IncomingCallModal = ({ remoteUser, onAccept, onReject }) => {
+const IncomingCallModal = ({ remoteUser, onAccept, onReject, errorMessage }) => {
   if (!remoteUser) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-teal-200">
-        <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-8 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
-            <Phone className="w-10 h-10 text-white animate-pulse" />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-2xl shadow-black/40 w-full max-w-xs overflow-hidden">
+        <div className="bg-slate-800 p-6 text-center">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-indigo-500/20 flex items-center justify-center">
+            <Phone className="w-7 h-7 text-indigo-400 animate-pulse" />
           </div>
-          <p className="text-white/90 text-sm font-medium uppercase tracking-wider">
-            Incoming voice call
+          <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">
+            Incoming call
           </p>
-          <h2 className="text-xl font-bold text-white mt-2 truncate px-2">
+          <h2 className="text-lg font-semibold text-white truncate px-2">
             {remoteUser.name}
           </h2>
         </div>
-        <div className="p-6 flex gap-3">
+        {errorMessage && (
+          <div className="mx-4 mt-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-400 leading-relaxed">{errorMessage}</p>
+          </div>
+        )}
+        <div className="p-4 flex gap-2">
           <button
             onClick={onReject}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-md"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition"
           >
-            <PhoneOff className="w-5 h-5" />
+            <PhoneOff className="w-4 h-4" />
             Decline
           </button>
           <button
             onClick={onAccept}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold rounded-xl transition-all shadow-md"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition"
           >
-            <Phone className="w-5 h-5" />
+            <Phone className="w-4 h-4" />
             Accept
           </button>
         </div>

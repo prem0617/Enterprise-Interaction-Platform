@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { requestMediaPermissions, PermissionDeniedError } from "./useMediaPermissions";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -97,13 +98,15 @@ export function useGroupCall(
       setErrorMessage(null);
       isInitiatorRef.current = true;
 
+      // Request microphone permission upfront
+      let stream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await requestMediaPermissions({ audio: true });
         localStreamRef.current = stream;
         setLocalStream(stream);
       } catch (err) {
-        console.error("[GROUP_CALL] getUserMedia error:", err);
-        setErrorMessage("Microphone access denied");
+        console.error("[GROUP_CALL] microphone permission denied:", err);
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
         return;
       }
 
@@ -133,13 +136,15 @@ export function useGroupCall(
       if (!currentUserIdStr || !joinGroupCallApi) return;
       setErrorMessage(null);
 
+      // Request microphone permission upfront
+      let stream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await requestMediaPermissions({ audio: true });
         localStreamRef.current = stream;
         setLocalStream(stream);
       } catch (err) {
-        console.error("[GROUP_CALL] getUserMedia error:", err);
-        setErrorMessage("Microphone access denied");
+        console.error("[GROUP_CALL] microphone permission denied:", err);
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
         return;
       }
 

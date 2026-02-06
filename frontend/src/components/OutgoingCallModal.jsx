@@ -5,27 +5,27 @@ const OutgoingCallModal = ({ remoteUser, onHangUp }) => {
   if (!remoteUser) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-teal-200">
-        <div className="bg-gradient-to-r from-teal-500 to-cyan-500 p-8 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
-            <Loader2 className="w-10 h-10 text-white animate-spin" />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-2xl shadow-black/40 w-full max-w-xs overflow-hidden">
+        <div className="bg-slate-800 p-6 text-center">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-indigo-500/20 flex items-center justify-center">
+            <Loader2 className="w-7 h-7 text-indigo-400 animate-spin" />
           </div>
-          <p className="text-white/90 text-sm font-medium uppercase tracking-wider">
-            Calling...
+          <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">
+            Calling
           </p>
-          <h2 className="text-xl font-bold text-white mt-2 truncate px-2">
+          <h2 className="text-lg font-semibold text-white truncate px-2">
             {remoteUser.name}
           </h2>
-          <p className="text-white/80 text-sm mt-1">Waiting for response</p>
+          <p className="text-slate-500 text-xs mt-1">Waiting for response</p>
         </div>
-        <div className="p-6">
+        <div className="p-4">
           <button
             onClick={onHangUp}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-md"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition"
           >
-            <PhoneOff className="w-5 h-5" />
-            Cancel call
+            <PhoneOff className="w-4 h-4" />
+            Cancel
           </button>
         </div>
       </div>

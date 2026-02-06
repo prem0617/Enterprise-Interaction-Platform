@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Users,
   UserPlus,
@@ -8,11 +8,16 @@ import {
   LogOut,
   Menu,
   X,
+  ChevronRight,
+  User,
+  Key,
 } from "lucide-react";
 import CreateEmployeePage from "./CreateEmployeePage";
 import { useNavigate } from "react-router-dom";
 import AllEmployees from "./AllEmployees";
 import Dashboard from "./Dashboard";
+import AdminProfilePage from "./AdminProfilePage";
+import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "../../components/ChatInterface";
 import { useAuthContext } from "../../context/AuthContextProvider";
 
@@ -20,22 +25,20 @@ export default function AdminDashboard() {
   const { socket } = useAuthContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const navigate = useNavigate();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("adminData");
+    localStorage.removeItem("user");
     navigate("/adminLogin");
   };
 
   const handleNavigation = (page) => {
     setCurrentPage(page);
     setMobileMenuOpen(false);
-    console.log(`Navigation triggered to: /admin/${page}`);
-    console.log(
-      `In your app, replace setCurrentPage with: navigate('/admin/${page}')`
-    );
   };
 
   const menuItems = [
@@ -44,160 +47,172 @@ export default function AdminDashboard() {
     { id: "create-employee", icon: UserPlus, label: "Create Employee" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
+    { id: "profile", icon: User, label: "Profile" },
   ];
 
   const renderPageContent = () => {
     switch (currentPage) {
       case "dashboard":
         return <Dashboard />;
-
       case "employees":
         return <AllEmployees />;
-
       case "create-employee":
         return <CreateEmployeePage />;
-
       case "messages":
-        return (
-          <ChatInterface />
-          // <div>
-          /* <h1 className="text-3xl font-bold text-teal-900 mb-6">Messages</h1> */
-          /* <div className="bg-white rounded-2xl border-2 border-teal-200 p-8"> */
-          /* <p className="text-teal-700 text-lg"> */
-
-          /* </p> */
-          /* </div> */
-          // </div>
-        );
-
+        return <ChatInterface />;
       case "meetings":
         return (
-          <div>
-            <h1 className="text-3xl font-bold text-teal-900 mb-6">Meetings</h1>
-            <div className="bg-white rounded-2xl border-2 border-teal-200 p-8">
-              <p className="text-teal-700 text-lg">
-                Meeting scheduler goes here...
-              </p>
+          <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+            <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
+            <p className="text-sm text-slate-400 mb-6">Schedule and manage meetings</p>
+            <div className="bg-slate-900 rounded-xl border border-slate-700/50 p-12 text-center">
+              <Video className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+              <p className="text-sm text-slate-400">Meeting scheduler coming soon...</p>
             </div>
           </div>
         );
-
+      case "profile":
+        return <AdminProfilePage onNavigate={handleNavigation} />;
+      case "change-password":
+        return <AdminChangePasswordPage onNavigate={handleNavigation} />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50">
-      <nav className="sticky top-0 z-50 bg-white border-b-2 border-teal-200 shadow-lg">
-        <div className="mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="text-xl font-bold text-teal-900 w-full">
-              Admin Portal
-            </div>
-
-            <div className="hidden lg:flex items-center gap-1">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentPage === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigation(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${
-                      isActive
-                        ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md"
-                        : "text-teal-700 hover:bg-teal-50 hover:text-cyan-600"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="font-medium text-sm">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center gap-3 ml-32">
-              <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-teal-50 rounded-xl">
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                  AD
-                </div>
-                <span className="text-sm font-medium text-teal-900">Admin</span>
-              </div>
-
-              <button
-                onClick={handleLogout}
-                className="hidden md:flex items-center gap-2 px-4 py-2 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="text-sm font-medium">Logout</span>
-              </button>
-
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 text-teal-600 hover:bg-teal-50 rounded-xl"
-              >
-                {mobileMenuOpen ? (
-                  <X className="w-6 h-6" />
-                ) : (
-                  <Menu className="w-6 h-6" />
-                )}
-              </button>
-            </div>
+    <div className="min-h-screen bg-slate-950 flex">
+      {/* Sidebar - Desktop */}
+      <aside
+        className={`hidden lg:flex flex-col bg-slate-900 border-r border-slate-700/50 transition-all duration-200 ${
+          sidebarCollapsed ? "w-16" : "w-60"
+        }`}
+      >
+        {/* Logo */}
+        <div className="h-14 flex items-center px-4 border-b border-slate-700/50 gap-3">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-sm">EP</span>
           </div>
+          {!sidebarCollapsed && (
+            <span className="text-sm font-semibold text-white truncate">
+              Admin Portal
+            </span>
+          )}
         </div>
 
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t-2 border-teal-200 bg-white">
-            <div className="px-4 py-4 space-y-2">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentPage === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigation(item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      isActive
-                        ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md"
-                        : "text-teal-700 hover:bg-teal-50"
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
-                  </button>
-                );
-              })}
-              <div className="pt-4 border-t-2 border-teal-200">
-                <div className="flex items-center gap-3 px-4 py-3 bg-teal-50 rounded-xl mb-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
-                    AD
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-teal-900">
-                      Admin User
-                    </p>
-                    <p className="text-xs text-teal-600">admin@company.com</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors"
-                >
-                  <LogOut className="w-5 h-5" />
-                  <span className="font-medium">Logout</span>
-                </button>
-              </div>
+        {/* Navigation */}
+        <nav className="flex-1 p-2 space-y-0.5">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentPage === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavigation(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-slate-800 text-white"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                }`}
+                title={sidebarCollapsed ? item.label : undefined}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User section */}
+        <div className="p-2 border-t border-slate-700/50">
+          <button
+            onClick={() => handleNavigation("profile")}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-colors ${sidebarCollapsed ? "justify-center" : ""}`}
+            title="View Profile"
+          >
+            <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-indigo-400 font-semibold text-xs">AD</span>
             </div>
+            {!sidebarCollapsed && (
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-medium text-white truncate">Admin</p>
+                <p className="text-xs text-slate-500 truncate">View profile</p>
+              </div>
+            )}
+          </button>
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors ${
+              sidebarCollapsed ? "justify-center" : ""
+            }`}
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            {!sidebarCollapsed && <span>Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar - Mobile */}
+        <header className="lg:hidden h-14 bg-slate-900 border-b border-slate-700/50 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">EP</span>
+            </div>
+            <span className="text-sm font-semibold text-white">Admin</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleLogout}
+              className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-slate-400 hover:bg-slate-800 rounded-lg"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+        </header>
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden bg-slate-900 border-b border-slate-700/50 p-2">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentPage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavigation(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-slate-800 text-white"
+                      : "text-slate-400 hover:bg-slate-800/50"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         )}
-      </nav>
 
-      <main
-      // className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
-      >
-        {renderPageContent()}
-      </main>
+        {/* Page content */}
+        <main className="flex-1 overflow-auto">
+          {renderPageContent()}
+        </main>
+      </div>
     </div>
   );
 }
