@@ -31,6 +31,8 @@ import AllEmployees from "./AllEmployees";
 import Dashboard from "./Dashboard";
 import SettingsPage from "./SettingsPage";
 import Whiteboard from "./Whiteboard";
+import MeetingsPage from "./MeetingsPage";
+import MessagesPage from "./MessagesPage";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const navItems = [
@@ -66,13 +68,13 @@ export default function AdminDashboard() {
 
   const renderContent = () => {
     switch (currentPage) {
-      case "dashboard": return <Dashboard />;
+      case "dashboard": return <Dashboard onNavigate={setCurrentPage} />;
       case "employees": return <AllEmployees />;
-      case "messages": return <PlaceholderPage title="Messages" icon={MessageSquare} />;
-      case "meetings": return <PlaceholderPage title="Meetings" icon={Video} />;
+      case "messages": return <MessagesPage />;
+      case "meetings": return <MeetingsPage />;
       case "whiteboard": return <Whiteboard embedded={true} />;
       case "settings": return <SettingsPage />;
-      default: return <Dashboard />;
+      default: return <Dashboard onNavigate={setCurrentPage} />;
     }
   };
 

@@ -13,11 +13,20 @@ const meetingSchema = new Schema(
       required: true,
       trim: true,
     },
+    description: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     host_id: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+    participants: [{
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    }],
     meeting_type: {
       type: String,
       enum: ["internal", "customer_consultation", "support"],

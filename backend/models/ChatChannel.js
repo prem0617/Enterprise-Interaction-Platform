@@ -11,6 +11,10 @@ const chatChannelSchema = new Schema(
       type: String,
       trim: true,
     },
+    members: [{
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    }],
     country_restriction: {
       type: String,
       enum: ["germany", "india", "usa"],
@@ -29,9 +33,16 @@ const chatChannelSchema = new Schema(
       ref: "User",
       required: true,
     },
+    last_message: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+    },
+    last_message_at: {
+      type: Date,
+    },
   },
   {
-    timestamps: { createdAt: "created_at", updatedAt: false },
+    timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
   }
 );
 

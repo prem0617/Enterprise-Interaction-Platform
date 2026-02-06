@@ -10,7 +10,11 @@ import {
   ArrowRight,
   MoreHorizontal,
   Plus,
-  Building2
+  Building2,
+  Calendar,
+  Video,
+  MessageSquare,
+  PenTool
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +22,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-export default function Dashboard() {
+export default function Dashboard({ onNavigate }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,13 +108,22 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold mt-1">Dashboard</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Clock className="h-4 w-4" />
-            Last 7 days
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => onNavigate?.("meetings")}
+          >
+            <Calendar className="h-4 w-4" />
+            View Calendar
           </Button>
-          <Button size="sm" className="gap-2 bg-violet-600 hover:bg-violet-700">
-            <Plus className="h-4 w-4" />
-            Add Team
+          <Button 
+            size="sm" 
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => onNavigate?.("meetings")}
+          >
+            <Video className="h-4 w-4" />
+            Schedule Meeting
           </Button>
         </div>
       </div>
@@ -152,7 +165,12 @@ export default function Dashboard() {
               <CardTitle className="text-lg">Team Members</CardTitle>
               <p className="text-sm text-gray-500 mt-1">Recent additions to your team</p>
             </div>
-            <Button variant="ghost" size="sm" className="gap-1 text-violet-600">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="gap-1 text-violet-600"
+              onClick={() => onNavigate?.("employees")}
+            >
               View all <ArrowRight className="h-4 w-4" />
             </Button>
           </CardHeader>
@@ -255,13 +273,14 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Invite Member", icon: Users, bgColor: "bg-violet-500 hover:bg-violet-600" },
-          { label: "Schedule Meet", icon: Clock, bgColor: "bg-blue-500 hover:bg-blue-600" },
-          { label: "View Reports", icon: TrendingUp, bgColor: "bg-emerald-500 hover:bg-emerald-600" },
-          { label: "Announcements", icon: Sparkles, bgColor: "bg-amber-500 hover:bg-amber-600" },
+          { label: "Messages", icon: MessageSquare, bgColor: "bg-violet-500 hover:bg-violet-600", action: () => onNavigate?.("messages") },
+          { label: "Schedule Meet", icon: Video, bgColor: "bg-blue-500 hover:bg-blue-600", action: () => onNavigate?.("meetings") },
+          { label: "View Calendar", icon: Calendar, bgColor: "bg-emerald-500 hover:bg-emerald-600", action: () => onNavigate?.("meetings") },
+          { label: "Whiteboard", icon: PenTool, bgColor: "bg-amber-500 hover:bg-amber-600", action: () => onNavigate?.("whiteboard") },
         ].map((action) => (
           <button 
             key={action.label}
+            onClick={action.action}
             className={`p-4 rounded-xl ${action.bgColor} text-white text-left transition-all hover:scale-[1.02] active:scale-[0.98]`}
           >
             <action.icon className="h-6 w-6 mb-3" />

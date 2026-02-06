@@ -21,6 +21,7 @@
     "mongoose": "^9.1.4",
     "nodemailer": "^7.0.12",
     "nodemon": "^3.1.11",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0"
   }
 }

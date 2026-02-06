@@ -9,8 +9,11 @@ import authRoutes from "./routes/auth.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
 import whiteboardRoutes from "./routes/whiteboard.routes.js";
+import meetingRoutes from "./routes/meeting.routes.js";
+import messageRoutes from "./routes/message.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { setupWhiteboardSocket } from "./sockets/whiteboard.socket.js";
+import { setupMessageSocket } from "./sockets/message.socket.js";
 import cors from "cors";
 
 const app = express();
@@ -25,8 +28,9 @@ const io = new Server(httpServer, {
   }
 });
 
-// Setup whiteboard socket handlers
+// Setup socket handlers
 setupWhiteboardSocket(io);
+setupMessageSocket(io);
 
 // Middleware
 app.use(express.json());
@@ -67,6 +71,8 @@ app.get("/", (req, res) => {
       auth: "/api/auth",
       employees: "/api/employees",
       whiteboard: "/api/whiteboard",
+      meetings: "/api/meetings",
+      messages: "/api/messages",
     },
   });
 });
@@ -75,6 +81,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/helper", helperRoutes);
 app.use("/api/whiteboard", whiteboardRoutes);
+app.use("/api/meetings", meetingRoutes);
+app.use("/api/messages", messageRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
