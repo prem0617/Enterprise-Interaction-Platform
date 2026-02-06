@@ -6,10 +6,9 @@ import { BACKEND_URL } from "../../config";
 export const createSocketConnection = (userId) => {
   if (!userId) return null;
 
-const backendBase = BACKEND_URL.replace("/api", "");
+  const backendBase = BACKEND_URL.replace("/api", "");
 
-console.log({backendBase});
-
+  console.log({ backendBase });
 
   const socket = io(backendBase, {
     withCredentials: true,
