@@ -2,6 +2,7 @@ import express from "express";
 import {
   requestCall,
   checkUserOnline,
+  checkUserCallStatus,
   startGroupCall,
   getGroupCallStatus,
   joinGroupCall,
@@ -12,6 +13,7 @@ import { verifyToken } from "../middlewares/auth.middleware.js";
 const router = express.Router();
 
 router.get("/online/:userId", verifyToken, checkUserOnline);
+router.get("/status/:userId", verifyToken, checkUserCallStatus);
 router.post("/request", verifyToken, requestCall);
 
 router.post("/group/start", verifyToken, startGroupCall);

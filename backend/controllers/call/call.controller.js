@@ -1,4 +1,4 @@
-import { getReceiverSocketId, getOnlineUsers, io } from "../../socket/socketServer.js";
+import { getReceiverSocketId, getOnlineUsers, getUserCallStatus, setUserCallStatus, clearUserCallStatus, io } from "../../socket/socketServer.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
 import User from "../../models/User.js";
@@ -32,6 +32,15 @@ export const requestCall = async (req, res) => {
       return res.status(400).json({ error: "Cannot call yourself" });
     }
 
+    // Check if the target user is already in a call
+    const targetUserCallStatus = getUserCallStatus(normalizedTo);
+    if (targetUserCallStatus?.inCall) {
+      return res.status(409).json({
+        error: "User is on a call",
+        message: "The user is currently on a call.",
+      });
+    }
+
     const receiverSocketId = getReceiverSocketId(normalizedTo);
 
     if (!receiverSocketId) {
@@ -45,6 +54,8 @@ export const requestCall = async (req, res) => {
       callerUser?.first_name && callerUser?.last_name
         ? `${callerUser.first_name} ${callerUser.last_name}`
         : "Someone";
+
+    // Note: Call status will be set when call is accepted (in socket handler)
 
     io.to(receiverSocketId).emit("incoming-audio-call", {
       fromUserId: callerUserId,
@@ -73,6 +84,31 @@ export const checkUserOnline = async (req, res) => {
     return res.json({ online: isOnline, userId });
   } catch (error) {
     console.error("[CALL] checkUserOnline error:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * GET /api/call/status/:userId - Check if a user is currently in a call.
+ */
+export const checkUserCallStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userIdStr = String(userId);
+    const callStatus = getUserCallStatus(userIdStr);
+    
+    if (callStatus?.inCall) {
+      return res.json({
+        inCall: true,
+        callType: callStatus.callType,
+        otherUserId: callStatus.otherUserId,
+        channelId: callStatus.channelId,
+      });
+    }
+    
+    return res.json({ inCall: false });
+  } catch (error) {
+    console.error("[CALL] checkUserCallStatus error:", error);
     return res.status(500).json({ error: error.message });
   }
 };
@@ -113,6 +149,13 @@ export const startGroupCall = async (req, res) => {
       initiatorName,
       participantIds: [userIdStr],
     };
+
+    // Mark initiator as in a group call
+    setUserCallStatus(userIdStr, {
+      inCall: true,
+      callType: "group",
+      channelId: channelId,
+    });
 
     const channel = await ChatChannel.findById(channelId);
     const channelName = channel?.name || "Group";
@@ -230,6 +273,13 @@ export const joinGroupCall = async (req, res) => {
       call.channelName = ch?.name || "Group";
     }
 
+    // Mark user as in a group call
+    setUserCallStatus(userIdStr, {
+      inCall: true,
+      callType: "group",
+      channelId: channelId,
+    });
+
     const participantsWithNames = await Promise.all(
       call.participantIds.map(async (id) => {
         const u = await User.findById(id).select("first_name last_name email");
@@ -290,7 +340,9 @@ export const leaveGroupCall = async (req, res) => {
       delete activeGroupCalls[channelId];
       const members = await ChannelMember.find({ channel_id: channelId }).select("user_id");
       for (const m of members) {
-        const socketId = getReceiverSocketId(String(m.user_id));
+        const memberIdStr = String(m.user_id);
+        clearUserCallStatus(memberIdStr);
+        const socketId = getReceiverSocketId(memberIdStr);
         if (socketId) {
           io.to(socketId).emit("group-call-ended", { channelId });
         }
@@ -299,6 +351,10 @@ export const leaveGroupCall = async (req, res) => {
     }
 
     call.participantIds = call.participantIds.filter((id) => id !== userIdStr);
+    // Clear call status for the user who left
+    clearUserCallStatus(userIdStr);
+    // Clear call status for the user who left
+    clearUserCallStatus(userIdStr);
 
     const payload = {
       channelId,
@@ -323,7 +379,9 @@ export const leaveGroupCall = async (req, res) => {
       delete activeGroupCalls[channelId];
       const members = await ChannelMember.find({ channel_id: channelId }).select("user_id");
       for (const m of members) {
-        const socketId = getReceiverSocketId(String(m.user_id));
+        const memberIdStr = String(m.user_id);
+        clearUserCallStatus(memberIdStr);
+        const socketId = getReceiverSocketId(memberIdStr);
         if (socketId) {
           io.to(socketId).emit("group-call-ended", { channelId });
         }

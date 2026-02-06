@@ -66,6 +66,7 @@ const ChatInterface = () => {
   const [selectedMessageSeenBy, setSelectedMessageSeenBy] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [groupCallStatus, setGroupCallStatus] = useState(null); // { active, channelId, initiatorName, ... } for selected group
+  const [activeGroupCalls, setActiveGroupCalls] = useState({}); // { [channelId]: true } - tracks which groups have active calls
   const messagesEndRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
@@ -135,9 +136,33 @@ const ChatInterface = () => {
 
   const requestCallApi = useCallback(
     async (toUserId) => {
-      const { data } = await axios.post(
-        `${BACKEND_URL}/call/request`,
-        { toUserId: String(toUserId) },
+      try {
+        const { data } = await axios.post(
+          `${BACKEND_URL}/call/request`,
+          { toUserId: String(toUserId) },
+          axiosConfig
+        );
+        return data;
+      } catch (error) {
+        if (error.response?.status === 409) {
+          // User is on a call
+          const errorMessage = error.response?.data?.message || "This person is on a call";
+          toast.error(errorMessage, {
+            duration: 1500,
+          });
+          throw new Error(errorMessage);
+        }
+        throw error;
+      }
+    },
+    [token]
+  );
+
+  /** Throttling: only send call request after we know the other user's socket is present. */
+  const checkOnlineApi = useCallback(
+    async (userId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/online/${userId}`,
         axiosConfig
       );
       return data;
@@ -145,7 +170,18 @@ const ChatInterface = () => {
     [token]
   );
 
-  const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi);
+  const checkUserCallStatusApi = useCallback(
+    async (userId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/status/${userId}`,
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
+
+  const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi, checkOnlineApi);
 
   const startGroupCallApi = useCallback(
     async (channelId) => {
@@ -238,17 +274,54 @@ const ChatInterface = () => {
     }
   }, [selectedChat?._id, selectedChat?.channel_type, getGroupCallStatusApi, groupCall?.groupCallState]);
 
-  // When admin (or last person) leaves, clear the upper "Join call" bar for users who hadn't joined
+  // Track active group calls for all groups (for sidebar indicators)
   useEffect(() => {
-    if (!socket) return;
-    const onGroupCallEnded = ({ channelId }) => {
-      if (selectedChat?._id && String(channelId) === String(selectedChat._id)) {
+    if (!socket || !getGroupCallStatusApi) return;
+
+    const checkAllGroupCalls = async () => {
+      const groupChats = userChannel.filter((chat) => chat.channel_type === "group");
+      const callStatuses = await Promise.allSettled(
+        groupChats.map((chat) => getGroupCallStatusApi(chat._id))
+      );
+
+      const activeCalls = {};
+      callStatuses.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value?.active) {
+          activeCalls[groupChats[index]._id] = true;
+        }
+      });
+      setActiveGroupCalls(activeCalls);
+    };
+
+    checkAllGroupCalls();
+    const interval = setInterval(checkAllGroupCalls, 5000); // Check every 5 seconds
+
+    // Listen to socket events for real-time updates
+    const handleGroupCallStarted = ({ channelId }) => {
+      setActiveGroupCalls((prev) => ({ ...prev, [channelId]: true }));
+    };
+
+    const handleGroupCallEnded = ({ channelId }) => {
+      setActiveGroupCalls((prev) => {
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+      // Also clear groupCallStatus if it's the selected chat
+      if (selectedChat?._id && String(selectedChat._id) === String(channelId)) {
         setGroupCallStatus(null);
       }
     };
-    socket.on("group-call-ended", onGroupCallEnded);
-    return () => socket.off("group-call-ended", onGroupCallEnded);
-  }, [socket, selectedChat?._id]);
+
+    socket.on("group-call-started", handleGroupCallStarted);
+    socket.on("group-call-ended", handleGroupCallEnded);
+
+    return () => {
+      clearInterval(interval);
+      socket.off("group-call-started", handleGroupCallStarted);
+      socket.off("group-call-ended", handleGroupCallEnded);
+    };
+  }, [socket, userChannel, getGroupCallStatusApi, selectedChat?._id]);
 
   useEffect(() => {
     if (audioCall.errorMessage) {
@@ -961,19 +1034,45 @@ const ChatInterface = () => {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <h3
-                          className={`font-semibold text-teal-900 truncate ${
-                            chat.unread_count > 0 ? "font-bold" : ""
-                          }`}
-                        >
-                          {displayInfo.name}
-                        </h3>
-                        {displayInfo.isGroup && (
-                          <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full font-medium flex-shrink-0">
-                            Group
-                          </span>
-                        )}
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3
+                            className={`font-semibold text-teal-900 truncate ${
+                              chat.unread_count > 0 ? "font-bold" : ""
+                            }`}
+                          >
+                            {displayInfo.name}
+                          </h3>
+                          {displayInfo.isGroup && (
+                            <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full font-medium flex-shrink-0">
+                              Group
+                            </span>
+                          )}
+                        </div>
+                        {/* Ongoing call indicator for direct chats */}
+                        {!displayInfo.isGroup &&
+                          chat.other_user &&
+                          audioCall.callState !== "idle" &&
+                          audioCall.remoteUser &&
+                          String(chat.other_user._id) === String(audioCall.remoteUser.id) && (
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                              <span className="text-[11px] font-medium text-green-700">
+                                Ongoing call
+                              </span>
+                            </div>
+                          )}
+                        {/* Ongoing call indicator for group chats */}
+                        {displayInfo.isGroup &&
+                          chat._id &&
+                          activeGroupCalls[chat._id] && (
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                              <span className="text-[11px] font-medium text-green-700">
+                                Ongoing call
+                              </span>
+                            </div>
+                          )}
                       </div>
                     </div>
                     {!displayInfo.isGroup && (
@@ -1063,51 +1162,176 @@ const ChatInterface = () => {
 
               <div className="flex items-center gap-2">
                 {selectedChat.channel_type === "direct" && selectedChat.other_user && (
+                  <>
+                    <button
+                      onClick={async () => {
+                        // Check if user is offline
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        // Check if user is in a group call
+                        if (groupCall.groupCallState !== "idle") {
+                          toast.error("You are currently in a group call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        try {
+                          // Check if the user is already in a call
+                          const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
+                          if (callStatus.inCall) {
+                            toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          // Proceed with the call
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
+                          );
+                        } catch (error) {
+                          console.error("Error checking call status:", error);
+                          // If check fails, still try to call (fallback)
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
+                          );
+                        }
+                      }}
+                      disabled={
+                        audioCall.callState !== "idle" ||
+                        !socket ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
+                      }
+                      className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        !socket
+                          ? "Connecting…"
+                          : !isUserOnline(selectedChat.other_user._id)
+                          ? "User is offline"
+                          : groupCall.groupCallState !== "idle"
+                          ? "You are in a group call"
+                          : "Voice call"
+                      }
+                    >
+                      <Phone className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        if (groupCall.groupCallState !== "idle") {
+                          toast.error("You are currently in a group call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        toast("Video call coming soon...", {
+                          duration: 1500,
+                          position: "top-right",
+                          style: {
+                            background: "#fff",
+                            color: "#0f766e",
+                            border: "2px solid #14b8a6",
+                            padding: "16px",
+                            borderRadius: "12px",
+                            fontWeight: "500",
+                          },
+                        });
+                      }}
+                      disabled={
+                        (audioCall.callState !== "idle" &&
+                          !(
+                            selectedChat.channel_type === "direct" &&
+                            selectedChat.other_user &&
+                            String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id)
+                          )) ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
+                      }
+                      className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        !isUserOnline(selectedChat.other_user._id)
+                          ? "User is offline"
+                          : groupCall.groupCallState !== "idle"
+                          ? "You are in a group call"
+                          : "Video call"
+                      }
+                    >
+                      <Video className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
+                {selectedChat.channel_type === "group" && (
                   <button
-                    onClick={() =>
-                      audioCall.startCall(
-                        String(selectedChat.other_user._id),
-                        selectedChat.other_user.full_name ||
-                          `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
-                      )
-                    }
-                    disabled={audioCall.callState !== "idle" || !socket}
+                    onClick={() => {
+                      if (groupCall.groupCallState !== "idle") {
+                        toast.error("You are currently in a group call", {
+                          duration: 1500,
+                        });
+                        return;
+                      }
+                      toast("Video call coming soon...", {
+                        duration: 1500,
+                        position: "top-right",
+                        style: {
+                          background: "#fff",
+                          color: "#0f766e",
+                          border: "2px solid #14b8a6",
+                          padding: "16px",
+                          borderRadius: "12px",
+                          fontWeight: "500",
+                        },
+                      });
+                    }}
+                    disabled={groupCall.groupCallState !== "idle"}
                     className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!socket ? "Connecting…" : "Voice call"}
+                    title={
+                      groupCall.groupCallState !== "idle"
+                        ? "You are in a group call"
+                        : "Video call"
+                    }
                   >
-                    <Phone className="w-5 h-5" />
+                    <Video className="w-5 h-5" />
                   </button>
                 )}
-                <button
-                  disabled={
-                    audioCall.callState !== "idle" &&
-                    !(
-                      selectedChat.channel_type === "direct" &&
-                      selectedChat.other_user &&
-                      String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id)
-                    )
-                  }
-                  className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Video call"
-                >
-                  <Video className="w-5 h-5" />
-                </button>
                 {selectedChat.channel_type === "group" && (
                   <>
                     {groupCall.groupCallState === "idle" &&
                       !groupCallStatus?.active &&
                       selectedChat.user_role === "admin" && (
                         <button
-                          onClick={() =>
-                            groupCall.startGroupCall(selectedChat._id, selectedChat.name)
-                          }
+                          onClick={() => {
+                            if (groupCall.groupCallState !== "idle") {
+                              toast.error("You are currently in a group call", {
+                                duration: 1500,
+                              });
+                              return;
+                            }
+                            groupCall.startGroupCall(selectedChat._id, selectedChat.name);
+                          }}
                           disabled={
                             !socket ||
                             groupCall.groupCallState !== "idle" ||
                             audioCall.callState !== "idle"
                           }
                           className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors disabled:opacity-50"
-                          title="Start group call (admin only)"
+                          title={
+                            groupCall.groupCallState !== "idle"
+                              ? "You are in a group call"
+                              : "Start group call (admin only)"
+                          }
                         >
                           <Phone className="w-5 h-5" />
                         </button>
@@ -1134,10 +1358,15 @@ const ChatInterface = () => {
           </div>
 
           {((groupCall.groupCallState === "incoming" &&
-            selectedChat?._id === groupCall.activeChannelId) ||
-            (groupCall.groupCallState === "idle" &&
-              groupCallStatus?.active &&
-              selectedChat?._id === groupCallStatus.channelId)) && (
+            selectedChat?._id &&
+            String(selectedChat._id) === String(groupCall.activeChannelId)) ||
+          (groupCall.groupCallState === "idle" &&
+            groupCallStatus?.active &&
+            selectedChat?._id &&
+            String(selectedChat._id) === String(groupCallStatus.channelId))) &&
+          groupCall.groupCallState !== "waiting" &&
+          groupCall.groupCallState !== "active" &&
+          groupCall.groupCallState !== "joined" ? (
             <div className="px-4 pt-2">
               <GroupCallIncomingBanner
                 channelName={
@@ -1150,7 +1379,13 @@ const ChatInterface = () => {
                     ? groupCall.initiatorName
                     : groupCallStatus?.initiatorName
                 }
-                onJoin={() =>
+                onJoin={() => {
+                  if (groupCall.groupCallState !== "idle" && groupCall.groupCallState !== "incoming") {
+                    toast.error("You are currently in a group call", {
+                      duration: 1500,
+                    });
+                    return;
+                  }
                   groupCall.joinGroupCall(
                     groupCall.groupCallState === "incoming"
                       ? groupCall.activeChannelId
@@ -1164,8 +1399,8 @@ const ChatInterface = () => {
                     groupCall.groupCallState === "incoming"
                       ? groupCall.initiatorName
                       : groupCallStatus.initiatorName
-                  )
-                }
+                  );
+                }}
                 onDismiss={
                   groupCall.groupCallState === "incoming"
                     ? groupCall.dismissIncoming
@@ -1173,7 +1408,7 @@ const ChatInterface = () => {
                 }
               />
             </div>
-          )}
+          ) : null}
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-br from-teal-50/30 to-cyan-50/30">
             {loadingMessages ? (

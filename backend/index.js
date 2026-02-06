@@ -32,7 +32,9 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  FRONTEND_URL
+  FRONTEND_URL,
+  "https://unsigned-vocals-induction-closing.trycloudflare.com",
+  "https://lift-python-lines-separately.trycloudflare.com",
 ];
 
 app.use(cors({

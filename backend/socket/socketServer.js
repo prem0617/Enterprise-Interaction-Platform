@@ -11,7 +11,9 @@ const io = new Server(server, {
     origin: [
       "http://localhost:5173",
       "http://localhost:3000",
-      FRONTEND_URL    
+      FRONTEND_URL    ,
+      "https://unsigned-vocals-induction-closing.trycloudflare.com",
+      "https://lift-python-lines-separately.trycloudflare.com",
     ],
     credentials: true,
   },
@@ -19,6 +21,8 @@ const io = new Server(server, {
 
 const users = {};
 const onlineUsers = new Set(); // Track online users
+// Track users in calls: userId -> { inCall: boolean, callType: 'direct' | 'group', otherUserId?: string, channelId?: string }
+const userCallStatus = {};
 
 function forwardToUser(eventName, toUserId, payload) {
   const normalizedTo = toUserId?.toString?.() ?? toUserId;
@@ -88,6 +92,21 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
+    
+    // Mark both users as in a direct call
+    const fromIdStr = String(socket.userId);
+    const toIdStr = String(toUserId);
+    userCallStatus[fromIdStr] = {
+      inCall: true,
+      callType: "direct",
+      otherUserId: toIdStr,
+    };
+    userCallStatus[toIdStr] = {
+      inCall: true,
+      callType: "direct",
+      otherUserId: fromIdStr,
+    };
+    
     forwardToUser("call-accepted", toUserId, {
       fromUserId: socket.userId,
     });
@@ -100,6 +119,11 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
+    
+    // Clear call status for caller (call was rejected, so no call is active)
+    const fromIdStr = String(socket.userId);
+    delete userCallStatus[fromIdStr];
+    
     forwardToUser("call-rejected", toUserId, {
       fromUserId: socket.userId,
     });
@@ -154,6 +178,13 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
+    
+    // Clear call status for both users
+    const fromIdStr = String(socket.userId);
+    const toIdStr = String(toUserId);
+    delete userCallStatus[fromIdStr];
+    delete userCallStatus[toIdStr];
+    
     forwardToUser("call-ended", toUserId, {
       fromUserId: socket.userId,
     });
@@ -204,6 +235,9 @@ io.on("connection", async (socket) => {
       onlineUsers.delete(normalizedUserId);
       console.log(`[ONLINE STATUS] User went offline: ${normalizedUserId}`);
 
+      // Clear call status when user disconnects
+      delete userCallStatus[normalizedUserId];
+
       // Broadcast updated online users list
       broadcastOnlineUsers();
     }
@@ -217,6 +251,21 @@ export const getReceiverSocketId = (receiverId) => {
 
 export const getOnlineUsers = () => {
   return Array.from(onlineUsers);
+};
+
+export const getUserCallStatus = (userId) => {
+  const userIdStr = String(userId);
+  return userCallStatus[userIdStr] || { inCall: false };
+};
+
+export const setUserCallStatus = (userId, status) => {
+  const userIdStr = String(userId);
+  userCallStatus[userIdStr] = status;
+};
+
+export const clearUserCallStatus = (userId) => {
+  const userIdStr = String(userId);
+  delete userCallStatus[userIdStr];
 };
 
 export { app, server, io };
