@@ -85,7 +85,7 @@ export const createChannel = async (req, res) => {
     // ✅ Emit socket event to all members
 
     if (io) {
-      console.log("INSEDE IO")
+      console.log("INSEDE IO");
       console.log(allMemberIds);
       const channelData = {
         _id: populatedChannel._id,
@@ -107,7 +107,7 @@ export const createChannel = async (req, res) => {
 
       allMemberIds.forEach((user_id) => {
         const receiverSocketId = getReceiverSocketId(user_id.toString());
-        console.log({receiverSocketId,user_id})
+        console.log({ receiverSocketId, user_id });
         if (receiverSocketId) {
           io.to(receiverSocketId).emit("group_created", channelData);
         }
@@ -155,7 +155,10 @@ export const getUserChannels = async (req, res) => {
         }).populate("user_id", "first_name last_name email user_type status");
 
         const myMembership = members.find(
-          (m) => m.user_id && m.user_id._id && m.user_id._id.toString() === userId.toString()
+          (m) =>
+            m.user_id &&
+            m.user_id._id &&
+            m.user_id._id.toString() === userId.toString()
         );
         const user_role = myMembership ? myMembership.role : null;
 
@@ -391,8 +394,19 @@ export const updateMemberRole = async (req, res) => {
       return res.status(404).json({ error: "Member not found" });
     }
 
-    const userSocketid = getReceiverSocketId(userId);
-    io.to(userSocketid).emit("changesRole", updatedMember);
+    // Get all members of the channel
+    const channelMembers = await ChannelMember.find({ channel_id: id });
+
+    // Emit role change to all channel members
+    channelMembers.forEach((member) => {
+      const memberSocketId = getReceiverSocketId(member.user_id.toString());
+      if (memberSocketId) {
+        io.to(memberSocketId).emit("changesRole", {
+          channelId: id,
+          member: updatedMember,
+        });
+      }
+    });
 
     res.json({
       message: "Member role updated successfully",

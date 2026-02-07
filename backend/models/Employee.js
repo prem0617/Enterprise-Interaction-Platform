@@ -71,11 +71,11 @@ employeeSchema.index({ employee_type: 1 });
 employeeSchema.index({ team_lead_id: 1 });
 
 // Pre-save middleware to set default department for customer_support
-employeeSchema.pre("save", function (next) {
+// Pre-save middleware to set default department for customer_support
+employeeSchema.pre("save", async function () {
   if (this.employee_type === "customer_support" && !this.department) {
     this.department = "customer_support";
   }
-  next();
 });
 
 export default mongoose.model("Employee", employeeSchema);

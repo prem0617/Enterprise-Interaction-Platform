@@ -8,7 +8,7 @@ const AllEmployees = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-
+  console.log({ employees });
   async function getAllEmployee() {
     const adminToken = localStorage.getItem("token");
 
@@ -66,9 +66,7 @@ const AllEmployees = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-white mb-1">
-            Employees
-          </h1>
+          <h1 className="text-xl font-semibold text-white mb-1">Employees</h1>
           <p className="text-sm text-slate-400">
             Manage and view all employees in your organization
           </p>
@@ -105,7 +103,7 @@ const AllEmployees = () => {
             ))}
           </select>
 
-          <select
+          {/* <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300 bg-slate-800"
@@ -113,7 +111,7 @@ const AllEmployees = () => {
             <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
-          </select>
+          </select> */}
         </div>
       </div>
 
@@ -150,9 +148,9 @@ const AllEmployees = () => {
                   <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                     Hire Date
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  {/* <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                     Status
-                  </th>
+                  </th> */}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/30">
@@ -199,7 +197,7 @@ const AllEmployees = () => {
                       <td className="px-5 py-3 text-sm text-slate-400">
                         {new Date(employee?.hire_date).toLocaleDateString()}
                       </td>
-                      <td className="px-5 py-3">
+                      {/* <td className="px-5 py-3">
                         {employee?.is_active ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400">
                             Active
@@ -209,7 +207,7 @@ const AllEmployees = () => {
                             Inactive
                           </span>
                         )}
-                      </td>
+                      </td> */}
                     </tr>
                   );
                 })}
@@ -247,7 +245,7 @@ const AllEmployees = () => {
                         </p>
                       </div>
                     </div>
-                    {employee?.is_active ? (
+                    {/* {employee?.is_active ? (
                       <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                         Active
                       </span>
@@ -255,20 +253,26 @@ const AllEmployees = () => {
                       <span className="text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
                         Inactive
                       </span>
-                    )}
+                    )} */}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-slate-500">Department</span>
-                      <p className="font-medium text-slate-300">{employee?.department}</p>
+                      <p className="font-medium text-slate-300">
+                        {employee?.department}
+                      </p>
                     </div>
                     <div>
                       <span className="text-slate-500">Position</span>
-                      <p className="font-medium text-slate-300">{employee?.position}</p>
+                      <p className="font-medium text-slate-300">
+                        {employee?.position}
+                      </p>
                     </div>
                     <div>
                       <span className="text-slate-500">Team Lead</span>
-                      <p className="font-medium text-slate-300">{teamLeadName}</p>
+                      <p className="font-medium text-slate-300">
+                        {teamLeadName}
+                      </p>
                     </div>
                     <div>
                       <span className="text-slate-500">Hire Date</span>

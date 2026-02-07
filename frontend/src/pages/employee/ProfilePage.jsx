@@ -26,7 +26,7 @@ const EmployeeProfilePage = () => {
     timezone: "",
     countryCode: "",
   });
-
+  console.log(userData);
   const user = JSON.parse(localStorage.getItem("user"));
 
   useEffect(() => {
@@ -103,7 +103,7 @@ const EmployeeProfilePage = () => {
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center">
                   <span className="text-indigo-400 font-semibold text-lg">
-                    {userData?.full_name
+                    {userData?.user_id?.first_name
                       ?.split(" ")
                       .map((n) => n[0])
                       .join("") || "U"}
@@ -111,7 +111,8 @@ const EmployeeProfilePage = () => {
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-white">
-                    {userData?.full_name}
+                    {userData?.user_id?.first_name +
+                      userData?.user_id?.last_name}
                   </h1>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {userData?.roles?.map((role, index) => (
@@ -125,7 +126,7 @@ const EmployeeProfilePage = () => {
                   </div>
                 </div>
               </div>
-              <button
+              {/* <button
                 onClick={() => (editing ? handleSave() : setEditing(true))}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
               >
@@ -140,19 +141,60 @@ const EmployeeProfilePage = () => {
                     Edit
                   </>
                 )}
-              </button>
+              </button> */}
             </div>
           </div>
 
           {/* Profile Details */}
           <div className="p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              <InfoCard icon={Mail} label="Email" value={formData.email} name="email" editing={editing} onChange={handleChange} type="email" />
-              <InfoCard icon={Building} label="Department" value={formData.department} name="department" editing={editing} onChange={handleChange} />
-              <InfoCard icon={Globe} label="Country" value={formData.countryCode} name="countryCode" editing={editing} onChange={handleChange} />
-              <InfoCard icon={Clock} label="Timezone" value={formData.timezone} name="timezone" editing={editing} onChange={handleChange} />
-              <InfoCard icon={Calendar} label="Member Since" value={new Date(userData?.created_at || Date.now()).toLocaleDateString()} editing={false} />
-              <InfoCard icon={Shield} label="Status" value={userData?.is_active ? "Active" : "Inactive"} editing={false} />
+              <InfoCard
+                icon={Mail}
+                label="Email"
+                value={formData.email}
+                name="email"
+                editing={editing}
+                onChange={handleChange}
+                type="email"
+              />
+              <InfoCard
+                icon={Building}
+                label="Department"
+                value={formData.department}
+                name="department"
+                editing={editing}
+                onChange={handleChange}
+              />
+              <InfoCard
+                icon={Globe}
+                label="Country"
+                value={formData.countryCode}
+                name="countryCode"
+                editing={editing}
+                onChange={handleChange}
+              />
+              <InfoCard
+                icon={Clock}
+                label="Timezone"
+                value={formData.timezone}
+                name="timezone"
+                editing={editing}
+                onChange={handleChange}
+              />
+              <InfoCard
+                icon={Calendar}
+                label="Member Since"
+                value={new Date(
+                  userData?.created_at || Date.now()
+                ).toLocaleDateString()}
+                editing={false}
+              />
+              <InfoCard
+                icon={Shield}
+                label="Status"
+                value={userData?.is_active ? "Active" : "Inactive"}
+                editing={false}
+              />
             </div>
 
             {/* Security */}
@@ -195,7 +237,15 @@ const EmployeeProfilePage = () => {
   );
 };
 
-const InfoCard = ({ icon: Icon, label, value, name, editing, onChange, type = "text" }) => (
+const InfoCard = ({
+  icon: Icon,
+  label,
+  value,
+  name,
+  editing,
+  onChange,
+  type = "text",
+}) => (
   <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/30">
     <div className="flex items-center gap-1.5 mb-1">
       <Icon className="w-3.5 h-3.5 text-slate-500" />

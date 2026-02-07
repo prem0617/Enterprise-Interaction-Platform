@@ -74,14 +74,93 @@ const ChatInterface = () => {
   const { socket, user } = useAuthContext();
 
   useEffect(() => {
-    if (!socket) { setSocketConnected(false); return; }
+    if (!socket) {
+      setSocketConnected(false);
+      return;
+    }
+
+    const handleRoleChange = (data) => {
+      console.log("Role change received:", data);
+      const eventChannelId = data.channelId || data.channel_id;
+
+      // Update userChannel with the new role
+      setUserChannel((prevChannels) =>
+        prevChannels.map((channel) => {
+          if (channel._id === eventChannelId && channel.members) {
+            return {
+              ...channel,
+              members: channel.members.map((member) => {
+                const memberUserId = member.user_id?._id || member.user_id;
+                const eventUserId =
+                  data.member?.user_id?._id ||
+                  data.member?.user_id ||
+                  data.user_id;
+
+                if (memberUserId === eventUserId) {
+                  const newRole = data.member?.role || data.role;
+                  return {
+                    ...member,
+                    role: newRole,
+                    updatedAt: new Date().toISOString(),
+                  };
+                }
+                return member;
+              }),
+            };
+          }
+          return channel;
+        })
+      );
+
+      // Also update selectedChat if it's the current channel
+      setSelectedChat((prevChat) => {
+        if (prevChat?._id === eventChannelId && prevChat.members) {
+          return {
+            ...prevChat,
+            members: prevChat.members.map((member) => {
+              const memberUserId = member.user_id?._id || member.user_id;
+              const eventUserId =
+                data.member?.user_id?._id ||
+                data.member?.user_id ||
+                data.user_id;
+
+              if (memberUserId === eventUserId) {
+                const newRole = data.member?.role || data.role;
+                return {
+                  ...member,
+                  role: newRole,
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+              return member;
+            }),
+          };
+        }
+        return prevChat;
+      });
+    };
+
     const onConnect = () => setSocketConnected(true);
     const onDisconnect = () => setSocketConnected(false);
     if (socket.connected) setSocketConnected(true);
     else setSocketConnected(false);
+
+    socket.on("changesRole", handleRoleChange);
+    socket.on("roleChanged", handleRoleChange);
+    socket.on("role-changed", handleRoleChange);
+    socket.on("updateRole", handleRoleChange);
+    socket.on("memberRoleUpdated", handleRoleChange);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-    return () => { socket.off("connect", onConnect); socket.off("disconnect", onDisconnect); };
+    return () => {
+      socket.off("changesRole", handleRoleChange);
+      socket.off("roleChanged", handleRoleChange);
+      socket.off("role-changed", handleRoleChange);
+      socket.off("updateRole", handleRoleChange);
+      socket.off("memberRoleUpdated", handleRoleChange);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
   }, [socket]);
 
   const currentUserName = user
@@ -91,118 +170,330 @@ const ChatInterface = () => {
   const token = localStorage.getItem("token");
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
 
-  const requestCallApi = useCallback(async (toUserId) => {
-    try {
-      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId) }, axiosConfig);
-      return data;
-    } catch (error) {
-      if (error.response?.status === 409) {
-        const errorMessage = error.response?.data?.message || "This person is on a call";
-        toast.error(errorMessage, { duration: 1500 });
-        throw new Error(errorMessage);
+  const requestCallApi = useCallback(
+    async (toUserId) => {
+      try {
+        const { data } = await axios.post(
+          `${BACKEND_URL}/call/request`,
+          { toUserId: String(toUserId) },
+          axiosConfig
+        );
+        return data;
+      } catch (error) {
+        if (error.response?.status === 409) {
+          const errorMessage =
+            error.response?.data?.message || "This person is on a call";
+          toast.error(errorMessage, { duration: 1500 });
+          throw new Error(errorMessage);
+        }
+        throw error;
       }
-      throw error;
-    }
-  }, [token]);
+    },
+    [token]
+  );
 
-  const checkOnlineApi = useCallback(async (userId) => {
-    const { data } = await axios.get(`${BACKEND_URL}/call/online/${userId}`, axiosConfig);
-    return data;
-  }, [token]);
+  const checkOnlineApi = useCallback(
+    async (userId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/online/${userId}`,
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const checkUserCallStatusApi = useCallback(async (userId) => {
-    const { data } = await axios.get(`${BACKEND_URL}/call/status/${userId}`, axiosConfig);
-    return data;
-  }, [token]);
+  const checkUserCallStatusApi = useCallback(
+    async (userId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/status/${userId}`,
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi, checkOnlineApi);
+  const audioCall = useAudioCall(
+    socket,
+    user?.id,
+    currentUserName,
+    requestCallApi,
+    checkOnlineApi
+  );
 
-  const startGroupCallApi = useCallback(async (channelId) => {
-    const { data } = await axios.post(`${BACKEND_URL}/call/group/start`, { channelId }, axiosConfig);
-    return data;
-  }, [token]);
+  const startGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/start`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const getGroupCallStatusApi = useCallback(async (channelId) => {
-    const { data } = await axios.get(`${BACKEND_URL}/call/group/status/${channelId}`, axiosConfig);
-    return data;
-  }, [token]);
+  const getGroupCallStatusApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/call/group/status/${channelId}`,
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const joinGroupCallApi = useCallback(async (channelId) => {
-    const { data } = await axios.post(`${BACKEND_URL}/call/group/join`, { channelId }, axiosConfig);
-    return data;
-  }, [token]);
+  const joinGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/join`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const leaveGroupCallApi = useCallback(async (channelId) => {
-    const { data } = await axios.post(`${BACKEND_URL}/call/group/leave`, { channelId }, axiosConfig);
-    return data;
-  }, [token]);
+  const leaveGroupCallApi = useCallback(
+    async (channelId) => {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/call/group/leave`,
+        { channelId },
+        axiosConfig
+      );
+      return data;
+    },
+    [token]
+  );
 
-  const groupCall = useGroupCall(socket, user?.id, currentUserName, startGroupCallApi, getGroupCallStatusApi, joinGroupCallApi, leaveGroupCallApi);
+  const groupCall = useGroupCall(
+    socket,
+    user?.id,
+    currentUserName,
+    startGroupCallApi,
+    getGroupCallStatusApi,
+    joinGroupCallApi,
+    leaveGroupCallApi
+  );
 
   // Keep ref in sync so socket handlers always see the latest selectedChat
-  useEffect(() => { selectedChatRef.current = selectedChat; }, [selectedChat]);
-
-  useEffect(() => { fetchDirectChats(); getUserChannel(); }, []);
-  useEffect(() => { scrollToBottom(); }, [messages]);
-  useEffect(() => { if (selectedChat?._id) fetchMessages(selectedChat._id); }, [selectedChat?._id]);
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
 
   useEffect(() => {
-    if (selectedChat?.channel_type === "group" && selectedChat?._id && getGroupCallStatusApi) {
+    fetchDirectChats();
+    getUserChannel();
+  }, []);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+  useEffect(() => {
+    if (selectedChat?._id) fetchMessages(selectedChat._id);
+  }, [selectedChat?._id]);
+
+  useEffect(() => {
+    if (
+      selectedChat?.channel_type === "group" &&
+      selectedChat?._id &&
+      getGroupCallStatusApi
+    ) {
       getGroupCallStatusApi(selectedChat._id)
-        .then((res) => { if (res?.active) setGroupCallStatus({ active: true, channelId: res.channelId, channelName: res.channelName, initiatorId: res.initiatorId, initiatorName: res.initiatorName }); else setGroupCallStatus(null); })
+        .then((res) => {
+          if (res?.active)
+            setGroupCallStatus({
+              active: true,
+              channelId: res.channelId,
+              channelName: res.channelName,
+              initiatorId: res.initiatorId,
+              initiatorName: res.initiatorName,
+            });
+          else setGroupCallStatus(null);
+        })
         .catch(() => setGroupCallStatus(null));
-    } else { setGroupCallStatus(null); }
-  }, [selectedChat?._id, selectedChat?.channel_type, getGroupCallStatusApi, groupCall?.groupCallState]);
+    } else {
+      setGroupCallStatus(null);
+    }
+  }, [
+    selectedChat?._id,
+    selectedChat?.channel_type,
+    getGroupCallStatusApi,
+    groupCall?.groupCallState,
+  ]);
 
   useEffect(() => {
     if (!socket || !getGroupCallStatusApi) return;
     const checkAllGroupCalls = async () => {
-      const groupChats = userChannel.filter((chat) => chat.channel_type === "group");
-      const callStatuses = await Promise.allSettled(groupChats.map((chat) => getGroupCallStatusApi(chat._id)));
+      const groupChats = userChannel.filter(
+        (chat) => chat.channel_type === "group"
+      );
+      const callStatuses = await Promise.allSettled(
+        groupChats.map((chat) => getGroupCallStatusApi(chat._id))
+      );
       const activeCalls = {};
-      callStatuses.forEach((result, index) => { if (result.status === "fulfilled" && result.value?.active) activeCalls[groupChats[index]._id] = true; });
+      callStatuses.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value?.active)
+          activeCalls[groupChats[index]._id] = true;
+      });
       setActiveGroupCalls(activeCalls);
     };
     checkAllGroupCalls();
     const interval = setInterval(checkAllGroupCalls, 5000);
-    const handleGroupCallStarted = ({ channelId }) => setActiveGroupCalls((prev) => ({ ...prev, [channelId]: true }));
+    const handleGroupCallStarted = ({ channelId }) =>
+      setActiveGroupCalls((prev) => ({ ...prev, [channelId]: true }));
     const handleGroupCallEnded = ({ channelId }) => {
-      setActiveGroupCalls((prev) => { const next = { ...prev }; delete next[channelId]; return next; });
-      if (selectedChat?._id && String(selectedChat._id) === String(channelId)) setGroupCallStatus(null);
+      setActiveGroupCalls((prev) => {
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+      if (selectedChat?._id && String(selectedChat._id) === String(channelId))
+        setGroupCallStatus(null);
     };
     socket.on("group-call-started", handleGroupCallStarted);
     socket.on("group-call-ended", handleGroupCallEnded);
-    return () => { clearInterval(interval); socket.off("group-call-started", handleGroupCallStarted); socket.off("group-call-ended", handleGroupCallEnded); };
+    return () => {
+      clearInterval(interval);
+      socket.off("group-call-started", handleGroupCallStarted);
+      socket.off("group-call-ended", handleGroupCallEnded);
+    };
   }, [socket, userChannel, getGroupCallStatusApi, selectedChat?._id]);
 
-  useEffect(() => { if (audioCall.errorMessage) toast.error(audioCall.errorMessage); }, [audioCall.errorMessage]);
-  useEffect(() => { if (groupCall.errorMessage) toast.error(groupCall.errorMessage); }, [groupCall.errorMessage]);
+  useEffect(() => {
+    if (audioCall.errorMessage) toast.error(audioCall.errorMessage);
+  }, [audioCall.errorMessage]);
+  useEffect(() => {
+    if (groupCall.errorMessage) toast.error(groupCall.errorMessage);
+  }, [groupCall.errorMessage]);
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = () =>
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
   const fetchDirectChats = async () => {
-    try { const response = await axios.get(`${BACKEND_URL}/direct_chat/list`, axiosConfig); setDirectChats(response.data.chats || []); }
-    catch (error) { console.error("Error fetching direct chats:", error); }
-    finally { setDirectMessageLoading(false); }
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/direct_chat/list`,
+        axiosConfig
+      );
+      setDirectChats(response.data.chats || []);
+    } catch (error) {
+      console.error("Error fetching direct chats:", error);
+    } finally {
+      setDirectMessageLoading(false);
+    }
   };
 
+  // const markMessagesAsSeenInChannel = async (channelId) => {
+  //   try {
+  //     await axios.post(
+  //       `${BACKEND_URL}/direct_chat/channels/${channelId}/messages/seen`,
+  //       {},
+  //       axiosConfig
+  //     );
+  //     await fetchDirectChats();
+  //     await getUserChannel();
+  //   } catch (error) {
+  //     console.error("Error marking messages as seen:", error);
+  //   }
+  // };
+
   const markMessagesAsSeenInChannel = async (channelId) => {
-    try { await axios.post(`${BACKEND_URL}/direct_chat/channels/${channelId}/messages/seen`, {}, axiosConfig); await fetchDirectChats(); await getUserChannel(); }
-    catch (error) { console.error("Error marking messages as seen:", error); }
+    // Get unseen messages before making the API call
+    const unseenMessages = messages.filter(
+      (msg) =>
+        msg.sender_id !== user?.id &&
+        !msg.seen_by?.some((s) => s.user_id._id === user?.id)
+    );
+
+    if (unseenMessages.length === 0) {
+      return; // No messages to mark as seen
+    }
+
+    // Optimistically update UI immediately
+    const currentUserSeenEntry = {
+      user_id: {
+        _id: user?.id,
+        first_name: user?.first_name || "You",
+        last_name: user?.last_name || "",
+        full_name: `${user?.first_name || "You"} ${
+          user?.last_name || ""
+        }`.trim(),
+        email: user?.email || "",
+      },
+      seen_at: new Date(),
+    };
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        // Check if this message should be marked as seen
+        const shouldMarkSeen =
+          msg.sender_id !== user?.id &&
+          !msg.seen_by?.some((s) => s.user_id._id === user?.id);
+
+        if (shouldMarkSeen) {
+          return {
+            ...msg,
+            seen_by: [...(msg.seen_by || []), currentUserSeenEntry],
+            seen_count: (msg.seen_count || 0) + 1,
+            is_seen: true,
+          };
+        }
+        return msg;
+      })
+    );
+
+    // Now make the API call
+    try {
+      await axios.post(
+        `${BACKEND_URL}/direct_chat/channels/${channelId}/messages/seen`,
+        {},
+        axiosConfig
+      );
+      await fetchDirectChats();
+      await getUserChannel();
+    } catch (error) {
+      console.error("Error marking messages as seen:", error);
+      // Optionally: Rollback the optimistic update on error
+      // For seen messages, we typically don't rollback as it's not critical
+    }
   };
 
   const fetchMessages = async (channelId) => {
-    try { setLoadingMessages(true); const response = await axios.get(`${BACKEND_URL}/direct_chat/channels/${channelId}/messages`, axiosConfig); setMessages(response.data.messages || []); }
-    catch (error) { console.error("Error fetching messages:", error); setMessages([]); }
-    finally { setLoadingMessages(false); }
+    try {
+      setLoadingMessages(true);
+      const response = await axios.get(
+        `${BACKEND_URL}/direct_chat/channels/${channelId}/messages`,
+        axiosConfig
+      );
+      setMessages(response.data.messages || []);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
   };
 
   const handleSearch = async (query) => {
-    if (!query.trim()) { setSearchResults([]); return; }
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
     setIsSearching(true);
-    try { const response = await axios.get(`${BACKEND_URL}/direct_chat/search?query=${query}`, axiosConfig); setSearchResults(response.data.users || []); }
-    catch (error) { console.error("Error searching users:", error); }
-    finally { setIsSearching(false); }
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/direct_chat/search?query=${query}`,
+        axiosConfig
+      );
+      setSearchResults(response.data.users || []);
+    } catch (error) {
+      console.error("Error searching users:", error);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleSearchInput = (e) => {
@@ -215,17 +506,35 @@ const ChatInterface = () => {
   const startChat = async (user) => {
     try {
       setLoading(true);
-      const response = await axios.post(`${BACKEND_URL}/direct_chat/start`, { user_id: user._id }, axiosConfig);
+      const response = await axios.post(
+        `${BACKEND_URL}/direct_chat/start`,
+        { user_id: user._id },
+        axiosConfig
+      );
       if (response.data.channel) {
         if (response.data.is_new) await fetchDirectChats();
-        const chatData = { _id: response.data.channel._id, channel_type: "direct", other_user: { _id: user._id, first_name: user.first_name, last_name: user.last_name, full_name: user.full_name, email: user.email }, unread_count: 0 };
+        const chatData = {
+          _id: response.data.channel._id,
+          channel_type: "direct",
+          other_user: {
+            _id: user._id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            full_name: user.full_name,
+            email: user.email,
+          },
+          unread_count: 0,
+        };
         setSelectedChat(chatData);
         setShowSearchModal(false);
         setSearchQuery("");
         setSearchResults([]);
       }
-    } catch (error) { console.error("Error starting chat:", error); }
-    finally { setLoading(false); }
+    } catch (error) {
+      console.error("Error starting chat:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const selectChat = async (chat) => {
@@ -235,8 +544,16 @@ const ChatInterface = () => {
   };
 
   const leaveGroup = async (id) => {
-    try { await axios.post(`${BACKEND_URL}/chat/channels/${id}/leave`, {}, axiosConfig); }
-    catch (error) { toast.error(error.response?.data?.error || "Failed to leave Group"); }
+    try {
+      await axios.post(
+        `${BACKEND_URL}/chat/channels/${id}/leave`,
+        {},
+        axiosConfig
+      );
+      setSelectedChat(null);
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to leave Group");
+    }
   };
 
   const handleReply = (message) => setReplyingTo(message);
@@ -253,7 +570,11 @@ const ChatInterface = () => {
     try {
       const payload = { content: messageContent };
       if (parentMessageId) payload.parent_message_id = parentMessageId;
-      const response = await axios.post(`${BACKEND_URL}/direct_chat/channels/${selectedChat._id}/messages`, payload, axiosConfig);
+      const response = await axios.post(
+        `${BACKEND_URL}/direct_chat/channels/${selectedChat._id}/messages`,
+        payload,
+        axiosConfig
+      );
       if (response.data.data) {
         // Use functional updater with dedup to avoid overwriting
         // messages that arrived via socket while the request was in-flight
@@ -269,52 +590,117 @@ const ChatInterface = () => {
     } catch (error) {
       console.error("Error sending message:", error);
       setNewMessage(messageContent);
-      if (parentMessageId) setReplyingTo(messages.find((m) => m._id === parentMessageId));
+      if (parentMessageId)
+        setReplyingTo(messages.find((m) => m._id === parentMessageId));
       toast.error("Failed to send message. Please try again.");
     }
   };
 
-  const formatTime = (date) => new Date(date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const formatTime = (date) =>
+    new Date(date).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
 
   const createGroup = async () => {
-    const payload = { channel_type: "group", name: groupName, country_restriction: countryRestriction || null, ticket_id: ticketId || null, department, member_ids: selectedUsers.map((u) => u._id) };
+    const payload = {
+      channel_type: "group",
+      name: groupName,
+      country_restriction: countryRestriction || null,
+      ticket_id: ticketId || null,
+      department,
+      member_ids: selectedUsers.map((u) => u._id),
+    };
     try {
       setCreateGroupLoading(true);
       await axios.post(`${BACKEND_URL}/chat/`, payload, axiosConfig);
       toast.success("Group created successfully!");
       await getUserChannel();
-      setShowGroupModal(false); setGroupName(""); setSelectedUsers([]); setDepartment("");
-    } catch (error) { toast.error("Failed to create group. Please try again."); }
-    finally { setCreateGroupLoading(false); }
+      setShowGroupModal(false);
+      setGroupName("");
+      setSelectedUsers([]);
+      setDepartment("");
+    } catch (error) {
+      toast.error("Failed to create group. Please try again.");
+    } finally {
+      setCreateGroupLoading(false);
+    }
   };
 
   const getUserChannel = async () => {
-    try { const response = await axios.get(`${BACKEND_URL}/chat/channels`, axiosConfig); setUserChannel(response.data.channels); }
-    catch (error) { console.log({ error }); }
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/chat/channels`,
+        axiosConfig
+      );
+      setUserChannel(response.data.channels);
+    } catch (error) {
+      console.log({ error });
+    }
   };
 
   const addMembersToChannel = async (channelId, memberIds) => {
     try {
-      const response = await axios.post(`${BACKEND_URL}/chat/channels/${channelId}/members`, { member_ids: memberIds }, axiosConfig);
-      if (response.data.added_members?.length > 0) toast.success(`Successfully added ${response.data.added_members.length} member(s)`);
-      if (response.data.errors?.length > 0) toast.error(`${response.data.errors.length} member(s) could not be added`);
+      const response = await axios.post(
+        `${BACKEND_URL}/chat/channels/${channelId}/members`,
+        { member_ids: memberIds },
+        axiosConfig
+      );
+      if (response.data.added_members?.length > 0)
+        toast.success(
+          `Successfully added ${response.data.added_members.length} member(s)`
+        );
+      if (response.data.errors?.length > 0)
+        toast.error(
+          `${response.data.errors.length} member(s) could not be added`
+        );
       await getUserChannel();
       return response.data;
-    } catch (error) { toast.error(error.response?.data?.error || "Failed to add members"); throw error; }
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to add members");
+      throw error;
+    }
   };
 
   const updateMemberRole = async (channelId, memberId, newRole) => {
-    try { const response = await axios.put(`${BACKEND_URL}/chat/channels/${channelId}/members/${memberId}`, { role: newRole }, axiosConfig); toast.success(`Successfully updated member role to ${newRole}`); await getUserChannel(); return response.data; }
-    catch (error) { toast.error(error.response?.data?.error || "Failed to update member role"); throw error; }
+    try {
+      const response = await axios.put(
+        `${BACKEND_URL}/chat/channels/${channelId}/members/${memberId}`,
+        { role: newRole },
+        axiosConfig
+      );
+      toast.success(`Successfully updated member role to ${newRole}`);
+      await getUserChannel();
+      return response.data;
+    } catch (error) {
+      toast.error(
+        error.response?.data?.error || "Failed to update member role"
+      );
+      throw error;
+    }
   };
 
   const removeMemberFromChannel = async (channelId, memberId) => {
-    try { const response = await axios.delete(`${BACKEND_URL}/chat/channels/${channelId}/members/${memberId}`, axiosConfig); toast.success("Member removed successfully"); await getUserChannel(); return response.data; }
-    catch (error) { toast.error(error.response?.data?.error || "Failed to remove member"); throw error; }
+    try {
+      const response = await axios.delete(
+        `${BACKEND_URL}/chat/channels/${channelId}/members/${memberId}`,
+        axiosConfig
+      );
+      toast.success("Member removed successfully");
+      await getUserChannel();
+      return response.data;
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to remove member");
+      throw error;
+    }
   };
 
   const isUserOnline = (userId) => onlineUsers.includes(userId?.toString());
-  const showSeenByList = (message) => { setSelectedMessageSeenBy(message); setShowSeenByModal(true); };
+  const showSeenByList = (message) => {
+    setSelectedMessageSeenBy(message);
+    setShowSeenByModal(true);
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -326,10 +712,41 @@ const ChatInterface = () => {
       });
     };
 
+    // const handleMessagesSeen = (data) => {
+    //   const { channel_id, seen_by_user_id, message_ids } = data;
+    //   const currentChat = selectedChatRef.current;
+    //   if (currentChat && currentChat._id === channel_id) {
+    //     setMessages((prev) =>
+    //       prev.map((msg) => {
+    //         if (message_ids.includes(msg._id)) {
+    //           const existingSeen = msg.seen_by || [];
+    //           const alreadySeen = existingSeen.some(
+    //             (s) => s.user_id._id === seen_by_user_id
+    //           );
+    //           if (!alreadySeen)
+    //             return {
+    //               ...msg,
+    //               seen_by: [
+    //                 ...existingSeen,
+    //                 { user_id: { _id: seen_by_user_id }, seen_at: new Date() },
+    //               ],
+    //               seen_count: (msg.seen_count || 0) + 1,
+    //             };
+    //         }
+    //         return msg;
+    //       })
+    //     );
+    //   }
+    //   fetchDirectChats();
+    //   getUserChannel();
+    // };
+
     const handleMessagesSeen = (data) => {
-      const { channel_id, seen_by_user_id, message_ids } = data;
+      const { channel_id, seen_by_user_id, seen_by_user, message_ids } = data;
       const currentChat = selectedChatRef.current;
+
       if (currentChat && currentChat._id === channel_id) {
+        // Optimistically update messages immediately
         setMessages((prev) =>
           prev.map((msg) => {
             if (message_ids.includes(msg._id)) {
@@ -337,20 +754,37 @@ const ChatInterface = () => {
               const alreadySeen = existingSeen.some(
                 (s) => s.user_id._id === seen_by_user_id
               );
-              if (!alreadySeen)
+
+              if (!alreadySeen) {
+                // Create the new seen_by entry with complete user info
+                const newSeenBy = {
+                  user_id: {
+                    _id: seen_by_user_id,
+                    first_name: seen_by_user?.first_name || "Unknown",
+                    last_name: seen_by_user?.last_name || "User",
+                    full_name:
+                      seen_by_user?.full_name ||
+                      `${seen_by_user?.first_name || "Unknown"} ${
+                        seen_by_user?.last_name || "User"
+                      }`,
+                    email: seen_by_user?.email || "",
+                  },
+                  seen_at: new Date(),
+                };
+
                 return {
                   ...msg,
-                  seen_by: [
-                    ...existingSeen,
-                    { user_id: { _id: seen_by_user_id }, seen_at: new Date() },
-                  ],
+                  seen_by: [...existingSeen, newSeenBy],
                   seen_count: (msg.seen_count || 0) + 1,
                 };
+              }
             }
             return msg;
           })
         );
       }
+
+      // Update chat lists
       fetchDirectChats();
       getUserChannel();
     };
@@ -450,22 +884,40 @@ const ChatInterface = () => {
     };
   }, [socket]);
 
-  const sortChatsByLastMessage = (chats) => [...chats].sort((a, b) => {
-    const aTime = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : new Date(a.created_at).getTime();
-    const bTime = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : new Date(b.created_at).getTime();
-    return bTime - aTime;
-  });
+  const sortChatsByLastMessage = (chats) =>
+    [...chats].sort((a, b) => {
+      const aTime = a.last_message?.created_at
+        ? new Date(a.last_message.created_at).getTime()
+        : new Date(a.created_at).getTime();
+      const bTime = b.last_message?.created_at
+        ? new Date(b.last_message.created_at).getTime()
+        : new Date(b.created_at).getTime();
+      return bTime - aTime;
+    });
 
   const getAllChats = () => {
     const allChats = [...directChats, ...userChannel].filter(Boolean);
-    const uniqueChats = allChats.filter((chat, index, self) => chat?._id && index === self.findIndex((c) => c?._id === chat._id));
+    const uniqueChats = allChats.filter(
+      (chat, index, self) =>
+        chat?._id && index === self.findIndex((c) => c?._id === chat._id)
+    );
     let filteredByTab = uniqueChats;
-    if (activeTab === "direct") filteredByTab = uniqueChats.filter((chat) => chat.channel_type === "direct");
-    else if (activeTab === "groups") filteredByTab = uniqueChats.filter((chat) => chat.channel_type === "group");
+    if (activeTab === "direct")
+      filteredByTab = uniqueChats.filter(
+        (chat) => chat.channel_type === "direct"
+      );
+    else if (activeTab === "groups")
+      filteredByTab = uniqueChats.filter(
+        (chat) => chat.channel_type === "group"
+      );
     if (chatSearchQuery.trim()) {
       const query = chatSearchQuery.toLowerCase();
       filteredByTab = filteredByTab.filter((chat) => {
-        if (chat.channel_type === "direct") { const userName = chat.other_user?.full_name?.toLowerCase() || ""; const userEmail = chat.other_user?.email?.toLowerCase() || ""; return userName.includes(query) || userEmail.includes(query); }
+        if (chat.channel_type === "direct") {
+          const userName = chat.other_user?.full_name?.toLowerCase() || "";
+          const userEmail = chat.other_user?.email?.toLowerCase() || "";
+          return userName.includes(query) || userEmail.includes(query);
+        }
         return (chat.name?.toLowerCase() || "").includes(query);
       });
     }
@@ -475,12 +927,30 @@ const ChatInterface = () => {
   const displayedChats = getAllChats().filter((chat) => chat && chat._id);
 
   const getChatDisplayInfo = (chat = {}) => {
-    if (chat.channel_type === "direct") return { name: chat.other_user?.full_name || "Unknown User", subtitle: chat.other_user?.email || "", initials: `${chat.other_user?.first_name?.[0] || ""}${chat.other_user?.last_name?.[0] || ""}`, isGroup: false };
-    return { name: chat.name || "Group Chat", subtitle: `${chat.member_count || 0} members${chat.department ? ` \u00B7 ${chat.department}` : ""}`, initials: chat.name?.[0] || "G", isGroup: true };
+    if (chat.channel_type === "direct")
+      return {
+        name: chat.other_user?.full_name || "Unknown User",
+        subtitle: chat.other_user?.email || "",
+        initials: `${chat.other_user?.first_name?.[0] || ""}${
+          chat.other_user?.last_name?.[0] || ""
+        }`,
+        isGroup: false,
+      };
+    return {
+      name: chat.name || "Group Chat",
+      subtitle: `${chat.member_count || 0} members${
+        chat.department ? ` \u00B7 ${chat.department}` : ""
+      }`,
+      initials: chat.name?.[0] || "G",
+      isGroup: true,
+    };
   };
 
-  const openChannelSettings = () => { if (selectedChat?.channel_type === "group") setShowSettingsModal(true); };
-  const getParentMessage = (parentMessageId) => messages.find((m) => m._id === parentMessageId);
+  const openChannelSettings = () => {
+    if (selectedChat?.channel_type === "group") setShowSettingsModal(true);
+  };
+  const getParentMessage = (parentMessageId) =>
+    messages.find((m) => m._id === parentMessageId);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] bg-slate-950">
@@ -490,10 +960,16 @@ const ChatInterface = () => {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-white">Messages</h2>
             <div className="flex gap-1.5">
-              <button onClick={() => setShowSearchModal(true)} className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-500 transition">
+              <button
+                onClick={() => setShowSearchModal(true)}
+                className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-500 transition"
+              >
                 New Chat
               </button>
-              <button onClick={() => setShowGroupModal(true)} className="px-2.5 py-1 border border-slate-600 text-slate-300 rounded-md text-xs font-medium hover:bg-slate-800 transition">
+              <button
+                onClick={() => setShowGroupModal(true)}
+                className="px-2.5 py-1 border border-slate-600 text-slate-300 rounded-md text-xs font-medium hover:bg-slate-800 transition"
+              >
                 Group
               </button>
             </div>
@@ -502,7 +978,15 @@ const ChatInterface = () => {
           {/* Tabs */}
           <div className="flex gap-0.5 mb-2.5 p-0.5 bg-slate-800 rounded-lg">
             {["all", "direct", "groups"].map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${activeTab === tab ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-slate-300"}`}>
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
+                  activeTab === tab
+                    ? "bg-slate-700 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+              >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
@@ -511,7 +995,13 @@ const ChatInterface = () => {
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input type="text" value={chatSearchQuery} onChange={(e) => setChatSearchQuery(e.target.value)} placeholder="Search conversations..." className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700/50 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500" />
+            <input
+              type="text"
+              value={chatSearchQuery}
+              onChange={(e) => setChatSearchQuery(e.target.value)}
+              placeholder="Search conversations..."
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700/50 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500"
+            />
           </div>
         </div>
 
@@ -525,20 +1015,44 @@ const ChatInterface = () => {
           ) : displayedChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
               <MessageCircle className="w-8 h-8 text-slate-700 mb-2" />
-              <p className="text-sm text-slate-400 font-medium">{chatSearchQuery ? "No results" : "No conversations"}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{chatSearchQuery ? "Try different keywords" : "Start a new chat"}</p>
+              <p className="text-sm text-slate-400 font-medium">
+                {chatSearchQuery ? "No results" : "No conversations"}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {chatSearchQuery
+                  ? "Try different keywords"
+                  : "Start a new chat"}
+              </p>
             </div>
           ) : (
             displayedChats.map((chat) => {
               const displayInfo = getChatDisplayInfo(chat);
-              const userOnline = chat.channel_type === "direct" && isUserOnline(chat.other_user?._id);
+              const userOnline =
+                chat.channel_type === "direct" &&
+                isUserOnline(chat.other_user?._id);
               return (
-                <div key={chat._id ?? `${chat.channel_type}-${chat.name ?? "chat"}`} onClick={() => selectChat(chat)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-slate-800/50 ${selectedChat?._id === chat._id ? "bg-indigo-500/10 border-l-2 border-l-indigo-500" : "hover:bg-slate-800/50"}`}
+                <div
+                  key={
+                    chat._id ?? `${chat.channel_type}-${chat.name ?? "chat"}`
+                  }
+                  onClick={() => selectChat(chat)}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-slate-800/50 ${
+                    selectedChat?._id === chat._id
+                      ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
+                      : "hover:bg-slate-800/50"
+                  }`}
                 >
                   <div className="relative">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 ${displayInfo.isGroup ? "bg-slate-700" : "bg-indigo-500"}`}>
-                      {displayInfo.isGroup ? <Users className="w-4 h-4" /> : displayInfo.initials}
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 ${
+                        displayInfo.isGroup ? "bg-slate-700" : "bg-indigo-500"
+                      }`}
+                    >
+                      {displayInfo.isGroup ? (
+                        <Users className="w-4 h-4" />
+                      ) : (
+                        displayInfo.initials
+                      )}
                     </div>
                     {!displayInfo.isGroup && userOnline && (
                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
@@ -546,27 +1060,54 @@ const ChatInterface = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h3 className={`text-sm truncate ${chat.unread_count > 0 ? "font-semibold text-white" : "font-medium text-slate-300"}`}>
+                      <h3
+                        className={`text-sm truncate ${
+                          chat.unread_count > 0
+                            ? "font-semibold text-white"
+                            : "font-medium text-slate-300"
+                        }`}
+                      >
                         {displayInfo.name}
                       </h3>
-                      {displayInfo.isGroup && <span className="text-[10px] text-slate-500 bg-slate-800 px-1 py-0.5 rounded">Group</span>}
+                      {displayInfo.isGroup && (
+                        <span className="text-[10px] text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
+                          Group
+                        </span>
+                      )}
                     </div>
                     {/* Call indicators */}
-                    {!displayInfo.isGroup && chat.other_user && audioCall.callState !== "idle" && audioCall.remoteUser && String(chat.other_user._id) === String(audioCall.remoteUser.id) && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        <span className="text-[10px] font-medium text-emerald-400">On call</span>
-                      </div>
-                    )}
-                    {displayInfo.isGroup && chat._id && activeGroupCalls[chat._id] && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        <span className="text-[10px] font-medium text-emerald-400">Active call</span>
-                      </div>
-                    )}
+                    {!displayInfo.isGroup &&
+                      chat.other_user &&
+                      audioCall.callState !== "idle" &&
+                      audioCall.remoteUser &&
+                      String(chat.other_user._id) ===
+                        String(audioCall.remoteUser.id) && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-medium text-emerald-400">
+                            On call
+                          </span>
+                        </div>
+                      )}
+                    {displayInfo.isGroup &&
+                      chat._id &&
+                      activeGroupCalls[chat._id] && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-medium text-emerald-400">
+                            Active call
+                          </span>
+                        </div>
+                      )}
                     {chat.last_message && (
                       <div className="flex items-center gap-1 mt-0.5">
-                        <p className={`text-xs truncate flex-1 ${chat.unread_count > 0 ? "text-slate-300 font-medium" : "text-slate-500"}`}>
+                        <p
+                          className={`text-xs truncate flex-1 ${
+                            chat.unread_count > 0
+                              ? "text-slate-300 font-medium"
+                              : "text-slate-500"
+                          }`}
+                        >
                           {chat.last_message.content}
                         </p>
                         {chat.unread_count > 0 && (
@@ -591,87 +1132,235 @@ const ChatInterface = () => {
           <div className="h-14 px-4 border-b border-slate-700/50 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs ${selectedChat.channel_type === "group" ? "bg-slate-700" : "bg-indigo-500"}`}>
-                  {selectedChat.channel_type === "group" ? <Users className="w-4 h-4" /> : <>{selectedChat.other_user?.first_name?.[0]}{selectedChat.other_user?.last_name?.[0]}</>}
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs ${
+                    selectedChat.channel_type === "group"
+                      ? "bg-slate-700"
+                      : "bg-indigo-500"
+                  }`}
+                >
+                  {selectedChat.channel_type === "group" ? (
+                    <Users className="w-4 h-4" />
+                  ) : (
+                    <>
+                      {selectedChat.other_user?.first_name?.[0]}
+                      {selectedChat.other_user?.last_name?.[0]}
+                    </>
+                  )}
                 </div>
-                {selectedChat.channel_type === "direct" && isUserOnline(selectedChat.other_user?._id) && (
-                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
-                )}
+                {selectedChat.channel_type === "direct" &&
+                  isUserOnline(selectedChat.other_user?._id) && (
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
+                  )}
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">
-                  {selectedChat.channel_type === "group" ? selectedChat.name : selectedChat.other_user?.full_name}
+                  {selectedChat.channel_type === "group"
+                    ? selectedChat.name
+                    : selectedChat.other_user?.full_name}
                 </h3>
                 <p className="text-xs text-slate-500">
                   {selectedChat.channel_type === "group"
-                    ? `${selectedChat.member_count || 0} members${selectedChat.department ? ` \u00B7 ${selectedChat.department}` : ""}`
-                    : isUserOnline(selectedChat.other_user?._id) ? "Online" : "Offline"}
+                    ? `${selectedChat.member_count || 0} members${
+                        selectedChat.department
+                          ? ` \u00B7 ${selectedChat.department}`
+                          : ""
+                      }`
+                    : isUserOnline(selectedChat.other_user?._id)
+                    ? "Online"
+                    : "Offline"}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
-              {selectedChat.channel_type === "direct" && selectedChat.other_user && (
+              {selectedChat.channel_type === "direct" &&
+                selectedChat.other_user && (
+                  <>
+                    <button
+                      onClick={async () => {
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", { duration: 1500 });
+                          return;
+                        }
+                        if (groupCall.groupCallState !== "idle") {
+                          toast.error("You are currently in a group call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        try {
+                          const callStatus = await checkUserCallStatusApi(
+                            selectedChat.other_user._id
+                          );
+                          if (callStatus.inCall) {
+                            toast.error(
+                              `${
+                                selectedChat.other_user.first_name ||
+                                "This person"
+                              } is on a call`,
+                              { duration: 1500 }
+                            );
+                            return;
+                          }
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        } catch (error) {
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        }
+                      }}
+                      disabled={
+                        audioCall.callState !== "idle" ||
+                        !socket ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
+                      }
+                      className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", { duration: 1500 });
+                          return;
+                        }
+                        toast("Video call coming soon...", { duration: 1500 });
+                      }}
+                      disabled={
+                        (audioCall.callState !== "idle" &&
+                          !(
+                            selectedChat.channel_type === "direct" &&
+                            selectedChat.other_user &&
+                            String(selectedChat.other_user._id) ===
+                              String(audioCall.remoteUser?.id)
+                          )) ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
+                      }
+                      className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    >
+                      <Video className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              {selectedChat.channel_type === "group" && (
                 <>
                   <button
-                    onClick={async () => {
-                      if (!isUserOnline(selectedChat.other_user._id)) { toast.error("User is offline", { duration: 1500 }); return; }
-                      if (groupCall.groupCallState !== "idle") { toast.error("You are currently in a group call", { duration: 1500 }); return; }
-                      try {
-                        const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
-                        if (callStatus.inCall) { toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, { duration: 1500 }); return; }
-                        audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim());
-                      } catch (error) { audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()); }
-                    }}
-                    disabled={audioCall.callState !== "idle" || !socket || groupCall.groupCallState !== "idle" || !isUserOnline(selectedChat.other_user._id)}
-                    className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
-                  >
-                    <Phone className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => { if (!isUserOnline(selectedChat.other_user._id)) { toast.error("User is offline", { duration: 1500 }); return; } toast("Video call coming soon...", { duration: 1500 }); }}
-                    disabled={(audioCall.callState !== "idle" && !(selectedChat.channel_type === "direct" && selectedChat.other_user && String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id))) || groupCall.groupCallState !== "idle" || !isUserOnline(selectedChat.other_user._id)}
+                    onClick={() =>
+                      toast("Video call coming soon...", { duration: 1500 })
+                    }
+                    disabled={groupCall.groupCallState !== "idle"}
                     className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
                   >
                     <Video className="w-4 h-4" />
                   </button>
-                </>
-              )}
-              {selectedChat.channel_type === "group" && (
-                <>
-                  <button onClick={() => toast("Video call coming soon...", { duration: 1500 })} disabled={groupCall.groupCallState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"><Video className="w-4 h-4" /></button>
-                  {groupCall.groupCallState === "idle" && !groupCallStatus?.active && selectedChat.user_role === "admin" && (
-                    <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={!socket || groupCall.groupCallState !== "idle" || audioCall.callState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"><Phone className="w-4 h-4" /></button>
-                  )}
-                  <button onClick={openChannelSettings} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"><Settings className="w-4 h-4" /></button>
+                  {groupCall.groupCallState === "idle" &&
+                    !groupCallStatus?.active &&
+                    selectedChat.user_role === "admin" && (
+                      <button
+                        onClick={() =>
+                          groupCall.startGroupCall(
+                            selectedChat._id,
+                            selectedChat.name
+                          )
+                        }
+                        disabled={
+                          !socket ||
+                          groupCall.groupCallState !== "idle" ||
+                          audioCall.callState !== "idle"
+                        }
+                        className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </button>
+                    )}
+                  <button
+                    onClick={openChannelSettings}
+                    className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
                 </>
               )}
               {selectedChat?.member_count > 2 && (
-                <button onClick={() => leaveGroup(selectedChat._id)} className="p-1.5 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"><Trash className="w-4 h-4" /></button>
+                <button
+                  onClick={() => leaveGroup(selectedChat._id)}
+                  className="p-1.5 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
+                >
+                  <Trash className="w-4 h-4" />
+                </button>
               )}
             </div>
           </div>
 
           {/* Group Call Banner */}
-          {((groupCall.groupCallState === "incoming" && selectedChat?._id && String(selectedChat._id) === String(groupCall.activeChannelId)) ||
-            (groupCall.groupCallState === "idle" && groupCallStatus?.active && selectedChat?._id && String(selectedChat._id) === String(groupCallStatus.channelId))) &&
-            groupCall.groupCallState !== "waiting" && groupCall.groupCallState !== "active" && groupCall.groupCallState !== "joined" ? (
-              <div className="px-4 pt-2">
-                <GroupCallIncomingBanner
-                  channelName={groupCall.groupCallState === "incoming" ? groupCall.activeChannelName : groupCallStatus?.channelName}
-                  initiatorName={groupCall.groupCallState === "incoming" ? groupCall.initiatorName : groupCallStatus?.initiatorName}
-                  onJoin={() => {
-                    if (groupCall.groupCallState !== "idle" && groupCall.groupCallState !== "incoming") { toast.error("You are currently in a group call", { duration: 1500 }); return; }
-                    groupCall.joinGroupCall(
-                      groupCall.groupCallState === "incoming" ? groupCall.activeChannelId : groupCallStatus.channelId,
-                      groupCall.groupCallState === "incoming" ? groupCall.activeChannelName : groupCallStatus.channelName,
-                      groupCall.groupCallState === "incoming" ? groupCall.initiatorId : groupCallStatus.initiatorId,
-                      groupCall.groupCallState === "incoming" ? groupCall.initiatorName : groupCallStatus.initiatorName
-                    );
-                  }}
-                  onDismiss={groupCall.groupCallState === "incoming" ? groupCall.dismissIncoming : () => {}}
-                />
-              </div>
+          {((groupCall.groupCallState === "incoming" &&
+            selectedChat?._id &&
+            String(selectedChat._id) === String(groupCall.activeChannelId)) ||
+            (groupCall.groupCallState === "idle" &&
+              groupCallStatus?.active &&
+              selectedChat?._id &&
+              String(selectedChat._id) ===
+                String(groupCallStatus.channelId))) &&
+          groupCall.groupCallState !== "waiting" &&
+          groupCall.groupCallState !== "active" &&
+          groupCall.groupCallState !== "joined" ? (
+            <div className="px-4 pt-2">
+              <GroupCallIncomingBanner
+                channelName={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.activeChannelName
+                    : groupCallStatus?.channelName
+                }
+                initiatorName={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.initiatorName
+                    : groupCallStatus?.initiatorName
+                }
+                onJoin={() => {
+                  if (
+                    groupCall.groupCallState !== "idle" &&
+                    groupCall.groupCallState !== "incoming"
+                  ) {
+                    toast.error("You are currently in a group call", {
+                      duration: 1500,
+                    });
+                    return;
+                  }
+                  groupCall.joinGroupCall(
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.activeChannelId
+                      : groupCallStatus.channelId,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.activeChannelName
+                      : groupCallStatus.channelName,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.initiatorId
+                      : groupCallStatus.initiatorId,
+                    groupCall.groupCallState === "incoming"
+                      ? groupCall.initiatorName
+                      : groupCallStatus.initiatorName
+                  );
+                }}
+                onDismiss={
+                  groupCall.groupCallState === "incoming"
+                    ? groupCall.dismissIncoming
+                    : () => {}
+                }
+              />
+            </div>
           ) : null}
 
           {/* Messages Area */}
@@ -683,45 +1372,115 @@ const ChatInterface = () => {
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <Send className="w-8 h-8 text-slate-700 mb-3" />
-                <p className="text-sm text-slate-400 font-medium">Start the conversation</p>
+                <p className="text-sm text-slate-400 font-medium">
+                  Start the conversation
+                </p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {selectedChat.channel_type === "group" ? `Send a message to ${selectedChat.name}` : `Send a message to ${selectedChat.other_user?.first_name}`}
+                  {selectedChat.channel_type === "group"
+                    ? `Send a message to ${selectedChat.name}`
+                    : `Send a message to ${selectedChat.other_user?.first_name}`}
                 </p>
               </div>
             ) : (
               <>
                 {messages.map((message) => {
-                  const parentMessage = message.parent_message_id ? getParentMessage(message.parent_message_id) : null;
-                  const senderName = message.sender ? `${message.sender.first_name || ""} ${message.sender.last_name || ""}`.trim() || "User" : "User";
+                  const parentMessage = message.parent_message_id
+                    ? getParentMessage(message.parent_message_id)
+                    : null;
+                  const senderName = message.sender
+                    ? `${message.sender.first_name || ""} ${
+                        message.sender.last_name || ""
+                      }`.trim() || "User"
+                    : "User";
                   return (
-                    <div key={message._id} className={`flex ${message.is_own ? "justify-end" : "justify-start"}`}>
+                    <div
+                      key={message._id}
+                      className={`flex ${
+                        message.is_own ? "justify-end" : "justify-start"
+                      }`}
+                    >
                       <div className="group relative max-w-md">
-                        <div className={`px-3.5 py-2 rounded-xl text-sm ${message.is_own ? "bg-indigo-600 text-white" : "bg-slate-800 border border-slate-700/50 text-slate-100"}`}>
+                        <div
+                          className={`px-3.5 py-2 rounded-xl text-sm ${
+                            message.is_own
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-800 border border-slate-700/50 text-slate-100"
+                          }`}
+                        >
                           {parentMessage && (
-                            <div className={`mb-1.5 pl-2.5 border-l-2 ${message.is_own ? "border-white/40" : "border-indigo-400"} py-0.5`}>
-                              <p className={`text-[11px] font-medium ${message.is_own ? "text-white/70" : "text-indigo-400"}`}>
-                                {parentMessage.is_own ? "You" : parentMessage.sender?.first_name || "User"}
+                            <div
+                              className={`mb-1.5 pl-2.5 border-l-2 ${
+                                message.is_own
+                                  ? "border-white/40"
+                                  : "border-indigo-400"
+                              } py-0.5`}
+                            >
+                              <p
+                                className={`text-[11px] font-medium ${
+                                  message.is_own
+                                    ? "text-white/70"
+                                    : "text-indigo-400"
+                                }`}
+                              >
+                                {parentMessage.is_own
+                                  ? "You"
+                                  : parentMessage.sender?.first_name || "User"}
                               </p>
-                              <p className={`text-[11px] truncate ${message.is_own ? "text-white/60" : "text-slate-500"}`}>{parentMessage.content}</p>
+                              <p
+                                className={`text-[11px] truncate ${
+                                  message.is_own
+                                    ? "text-white/60"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {parentMessage.content}
+                              </p>
                             </div>
                           )}
-                          {!message.is_own && selectedChat.channel_type === "group" && (
-                            <p className="text-[11px] font-semibold text-indigo-400 mb-0.5">{senderName}</p>
-                          )}
-                          <p className="leading-relaxed">{message.content}</p>
-                          <div className={`flex items-center gap-1 justify-end mt-1 ${message.is_own ? "text-white/60" : "text-slate-500"}`}>
-                            <span className="text-[10px]">{formatTime(message.created_at)}</span>
-                            {message.is_own && (
-                              message.seen_count > 0 ? (
-                                <button onClick={() => showSeenByList(message)} className="flex items-center gap-0.5 hover:opacity-80">
-                                  <CheckCheck className="w-3 h-3 text-blue-400" />
-                                  {selectedChat?.channel_type === "group" && message.seen_count > 0 && <span className="text-[10px]">{message.seen_count}</span>}
-                                </button>
-                              ) : <Check className="w-3 h-3 text-white/40" />
+                          {!message.is_own &&
+                            selectedChat.channel_type === "group" && (
+                              <p className="text-[11px] font-semibold text-indigo-400 mb-0.5">
+                                {senderName}
+                              </p>
                             )}
+                          <p className="leading-relaxed">{message.content}</p>
+                          <div
+                            className={`flex items-center gap-1 justify-end mt-1 ${
+                              message.is_own
+                                ? "text-white/60"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            <span className="text-[10px]">
+                              {formatTime(message.created_at)}
+                            </span>
+                            {message.is_own &&
+                              (message.seen_count > 0 ? (
+                                <button
+                                  onClick={() => showSeenByList(message)}
+                                  className="flex items-center gap-0.5 hover:opacity-80"
+                                >
+                                  <CheckCheck className="w-3 h-3 text-blue-400" />
+                                  {selectedChat?.channel_type === "group" &&
+                                    message.seen_count > 0 && (
+                                      <span className="text-[10px]">
+                                        {message.seen_count}
+                                      </span>
+                                    )}
+                                </button>
+                              ) : (
+                                <Check className="w-3 h-3 text-white/40" />
+                              ))}
                           </div>
                         </div>
-                        <button onClick={() => handleReply(message)} className={`absolute top-0 ${message.is_own ? "left-0 -translate-x-8" : "right-0 translate-x-8"} p-1 bg-slate-800 border border-slate-700/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-700 shadow-sm`}>
+                        <button
+                          onClick={() => handleReply(message)}
+                          className={`absolute top-0 ${
+                            message.is_own
+                              ? "left-0 -translate-x-8"
+                              : "right-0 translate-x-8"
+                          } p-1 bg-slate-800 border border-slate-700/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-700 shadow-sm`}
+                        >
                           <Reply className="w-3 h-3 text-slate-400" />
                         </button>
                       </div>
@@ -739,11 +1498,23 @@ const ChatInterface = () => {
               <div className="flex-1 flex items-start gap-2">
                 <Reply className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-300">Replying to {replyingTo.is_own ? "yourself" : replyingTo.sender?.first_name || "User"}</p>
-                  <p className="text-xs text-slate-500 truncate">{replyingTo.content}</p>
+                  <p className="text-xs font-medium text-slate-300">
+                    Replying to{" "}
+                    {replyingTo.is_own
+                      ? "yourself"
+                      : replyingTo.sender?.first_name || "User"}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {replyingTo.content}
+                  </p>
                 </div>
               </div>
-              <button onClick={cancelReply} className="p-1 hover:bg-slate-700 rounded transition"><X className="w-3.5 h-3.5 text-slate-500" /></button>
+              <button
+                onClick={cancelReply}
+                className="p-1 hover:bg-slate-700 rounded transition"
+              >
+                <X className="w-3.5 h-3.5 text-slate-500" />
+              </button>
             </div>
           )}
 
@@ -756,10 +1527,39 @@ const ChatInterface = () => {
               </div>
             )}
             <form onSubmit={sendMessage} className="flex items-center gap-2">
-              <button type="button" className="p-1.5 text-slate-500 hover:bg-slate-800 rounded-lg disabled:opacity-40" disabled={!socketConnected}><Paperclip className="w-4 h-4" /></button>
-              <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={!socketConnected ? "Connecting..." : replyingTo ? "Type your reply..." : "Type a message..."} disabled={sendingMessage || !socketConnected} className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500 disabled:opacity-50" />
-              <button type="submit" disabled={!newMessage.trim() || sendingMessage || !socketConnected} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                {sendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <button
+                type="button"
+                className="p-1.5 text-slate-500 hover:bg-slate-800 rounded-lg disabled:opacity-40"
+                disabled={!socketConnected}
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder={
+                  !socketConnected
+                    ? "Connecting..."
+                    : replyingTo
+                    ? "Type your reply..."
+                    : "Type a message..."
+                }
+                disabled={sendingMessage || !socketConnected}
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500 disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={
+                  !newMessage.trim() || sendingMessage || !socketConnected
+                }
+                className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {sendingMessage ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </button>
             </form>
           </div>
@@ -767,9 +1567,16 @@ const ChatInterface = () => {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center bg-slate-950">
           <MessageCircle className="w-12 h-12 text-slate-700 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-1">Select a conversation</h3>
-          <p className="text-sm text-slate-400 mb-4">Choose a chat or start a new one</p>
-          <button onClick={() => setShowSearchModal(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-500 transition">
+          <h3 className="text-lg font-semibold text-white mb-1">
+            Select a conversation
+          </h3>
+          <p className="text-sm text-slate-400 mb-4">
+            Choose a chat or start a new one
+          </p>
+          <button
+            onClick={() => setShowSearchModal(true)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-500 transition"
+          >
             Start New Chat
           </button>
         </div>
@@ -784,19 +1591,41 @@ const ChatInterface = () => {
                 <Eye className="w-4 h-4 text-slate-400" />
                 <h3 className="text-sm font-semibold text-white">Seen by</h3>
               </div>
-              <button onClick={() => setShowSeenByModal(false)} className="p-1 hover:bg-slate-800 rounded-lg"><X className="w-4 h-4 text-slate-400" /></button>
+              <button
+                onClick={() => setShowSeenByModal(false)}
+                className="p-1 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               {selectedMessageSeenBy.seen_by?.length > 0 ? (
                 <div className="space-y-1">
                   {selectedMessageSeenBy.seen_by.map((seen, index) => (
-                    <div key={index} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-800/50">
+                    <div
+                      key={index}
+                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-800/50"
+                    >
                       <div className="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
-                        <span className="text-indigo-400 font-medium text-[10px]">{seen.user_id?.first_name?.[0] || "U"}{seen.user_id?.last_name?.[0] || ""}</span>
+                        <span className="text-indigo-400 font-medium text-[10px]">
+                          {seen.user_id?.first_name?.[0] || "U"}
+                          {seen.user_id?.last_name?.[0] || ""}
+                        </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{seen.user_id?.first_name || "Unknown"} {seen.user_id?.last_name || ""}</p>
-                        <p className="text-[10px] text-slate-500">{new Date(seen.seen_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}</p>
+                        <p className="text-sm font-medium text-white truncate">
+                          {seen.user_id?.first_name || "Unknown"}{" "}
+                          {seen.user_id?.last_name || ""}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {new Date(seen.seen_at).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -804,7 +1633,9 @@ const ChatInterface = () => {
               ) : (
                 <div className="text-center py-8">
                   <Eye className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">No one has seen this yet</p>
+                  <p className="text-sm text-slate-400">
+                    No one has seen this yet
+                  </p>
                 </div>
               )}
             </div>
@@ -812,15 +1643,98 @@ const ChatInterface = () => {
         </div>
       )}
 
-      <StartChatModal show={showSearchModal} onClose={() => { setShowSearchModal(false); setSearchQuery(""); setSearchResults([]); }} searchQuery={searchQuery} handleSearchInput={handleSearchInput} searchResults={searchResults} isSearching={isSearching} startChat={startChat} loading={loading} />
-      <CreateGroupModal show={showGroupModal} onClose={() => { setShowGroupModal(false); setSearchQuery(""); setSearchResults([]); setSelectedUsers([]); setGroupName(""); }} groupName={groupName} setGroupName={setGroupName} searchQuery={searchQuery} setDepartment={setDepartment} handleSearchInput={handleSearchInput} searchResults={searchResults} selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers} isSearching={isSearching} createGroupLoading={createGroupLoading} createGroup={createGroup} />
-      <ChannelSettingsModal show={showSettingsModal} onClose={() => setShowSettingsModal(false)} channel={selectedChat} onAddMembers={addMembersToChannel} onUpdateRole={updateMemberRole} onRemoveMember={removeMemberFromChannel} handleSearch={handleSearch} searchResults={searchResults} isSearching={isSearching} roleUpdateTrigger={roleUpdateTrigger} />
+      <StartChatModal
+        show={showSearchModal}
+        onClose={() => {
+          setShowSearchModal(false);
+          setSearchQuery("");
+          setSearchResults([]);
+        }}
+        searchQuery={searchQuery}
+        handleSearchInput={handleSearchInput}
+        searchResults={searchResults}
+        isSearching={isSearching}
+        startChat={startChat}
+        loading={loading}
+      />
+      <CreateGroupModal
+        show={showGroupModal}
+        onClose={() => {
+          setShowGroupModal(false);
+          setSearchQuery("");
+          setSearchResults([]);
+          setSelectedUsers([]);
+          setGroupName("");
+        }}
+        groupName={groupName}
+        setGroupName={setGroupName}
+        searchQuery={searchQuery}
+        setDepartment={setDepartment}
+        handleSearchInput={handleSearchInput}
+        searchResults={searchResults}
+        selectedUsers={selectedUsers}
+        setSelectedUsers={setSelectedUsers}
+        isSearching={isSearching}
+        createGroupLoading={createGroupLoading}
+        createGroup={createGroup}
+      />
+      <ChannelSettingsModal
+        show={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        channel={selectedChat}
+        onAddMembers={addMembersToChannel}
+        onUpdateRole={updateMemberRole}
+        onRemoveMember={removeMemberFromChannel}
+        handleSearch={handleSearch}
+        searchResults={searchResults}
+        isSearching={isSearching}
+        roleUpdateTrigger={roleUpdateTrigger}
+      />
 
-      {audioCall.callState === "incoming" && <IncomingCallModal remoteUser={audioCall.remoteUser} onAccept={audioCall.acceptCall} onReject={audioCall.rejectCall} errorMessage={audioCall.errorMessage} />}
-      {audioCall.callState === "calling" && <OutgoingCallModal remoteUser={audioCall.remoteUser} onHangUp={audioCall.endCall} />}
-      {(audioCall.callState === "connecting" || audioCall.callState === "active") && <ActiveCallBar remoteUser={audioCall.remoteUser} remoteStream={audioCall.remoteStream} isMuted={audioCall.isMuted} onToggleMute={audioCall.toggleMute} onHangUp={audioCall.endCall} isConnecting={audioCall.callState === "connecting"} errorMessage={audioCall.errorMessage} />}
-      {groupCall.groupCallState === "waiting" && <GroupCallWaitingModal channelName={groupCall.activeChannelName} onCancel={groupCall.leaveGroupCall} />}
-      {(groupCall.groupCallState === "active" || groupCall.groupCallState === "joined") && <GroupCallActiveBar channelName={groupCall.activeChannelName} participants={groupCall.participants} remoteStreams={groupCall.remoteStreams} isMuted={groupCall.isMuted} onToggleMute={groupCall.toggleMute} onHangUp={groupCall.leaveGroupCall} currentUserId={user?.id} />}
+      {audioCall.callState === "incoming" && (
+        <IncomingCallModal
+          remoteUser={audioCall.remoteUser}
+          onAccept={audioCall.acceptCall}
+          onReject={audioCall.rejectCall}
+          errorMessage={audioCall.errorMessage}
+        />
+      )}
+      {audioCall.callState === "calling" && (
+        <OutgoingCallModal
+          remoteUser={audioCall.remoteUser}
+          onHangUp={audioCall.endCall}
+        />
+      )}
+      {(audioCall.callState === "connecting" ||
+        audioCall.callState === "active") && (
+        <ActiveCallBar
+          remoteUser={audioCall.remoteUser}
+          remoteStream={audioCall.remoteStream}
+          isMuted={audioCall.isMuted}
+          onToggleMute={audioCall.toggleMute}
+          onHangUp={audioCall.endCall}
+          isConnecting={audioCall.callState === "connecting"}
+          errorMessage={audioCall.errorMessage}
+        />
+      )}
+      {groupCall.groupCallState === "waiting" && (
+        <GroupCallWaitingModal
+          channelName={groupCall.activeChannelName}
+          onCancel={groupCall.leaveGroupCall}
+        />
+      )}
+      {(groupCall.groupCallState === "active" ||
+        groupCall.groupCallState === "joined") && (
+        <GroupCallActiveBar
+          channelName={groupCall.activeChannelName}
+          participants={groupCall.participants}
+          remoteStreams={groupCall.remoteStreams}
+          isMuted={groupCall.isMuted}
+          onToggleMute={groupCall.toggleMute}
+          onHangUp={groupCall.leaveGroupCall}
+          currentUserId={user?.id}
+        />
+      )}
     </div>
   );
 };
