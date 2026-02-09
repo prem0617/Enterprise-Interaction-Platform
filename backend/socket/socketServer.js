@@ -1,7 +1,7 @@
 import { Server } from "socket.io";
 import express from "express";
 import { createServer } from "http";
-import { FRONTEND_URL } from "../../frontend/config.js";
+
 
 const app = express();
 const server = createServer(app);
@@ -11,7 +11,7 @@ const io = new Server(server, {
     origin: [
       "http://localhost:5173",
       "http://localhost:3000",
-      FRONTEND_URL    ,
+    
       "https://unsigned-vocals-induction-closing.trycloudflare.com",
       "https://lift-python-lines-separately.trycloudflare.com",
     ],

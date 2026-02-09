@@ -11,7 +11,7 @@ import directChatRouter from "./routes/directChat.routes.js";
 import callRoutes from "./routes/call.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
-import { FRONTEND_URL } from "../frontend/config.js";
+
 // Load environment variables
 dotenv.config();
 
@@ -32,7 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  FRONTEND_URL,
+ 
   "https://unsigned-vocals-induction-closing.trycloudflare.com",
   "https://lift-python-lines-separately.trycloudflare.com",
 ];
