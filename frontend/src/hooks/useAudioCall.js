@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { requestMediaPermissions, PermissionDeniedError } from "./useMediaPermissions";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -82,6 +83,19 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
         setErrorMessage("Call not configured");
         return;
       }
+
+      // Request microphone permission BEFORE initiating the call
+      try {
+        const stream = await requestMediaPermissions({ audio: true });
+        // Stop the stream immediately — we only needed it to secure permission.
+        // The actual stream will be created when the callee accepts.
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (err) {
+        console.error("[AUDIO_CALL] startCall: microphone permission denied", err);
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
+        return;
+      }
+
       if (callingTimeoutRef.current) {
         clearTimeout(callingTimeoutRef.current);
         callingTimeoutRef.current = null;
@@ -131,12 +145,24 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
       console.log("[AUDIO_CALL] acceptCall: abort - missing remoteId/socket/currentUserId");
       return;
     }
+
+    // Request microphone permission FIRST, before changing state
+    let stream;
+    try {
+      console.log("[AUDIO_CALL] acceptCall: requesting microphone permission");
+      stream = await requestMediaPermissions({ audio: true });
+    } catch (err) {
+      console.error("[AUDIO_CALL] acceptCall: microphone permission denied", err);
+      setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
+      // Stay on "incoming" so user can retry or decline
+      setCallState("incoming");
+      return;
+    }
+
     setCallState("connecting");
     setErrorMessage(null);
 
     try {
-      console.log("[AUDIO_CALL] acceptCall: requesting getUserMedia (audio)");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       setLocalStream(stream);
 
@@ -178,7 +204,7 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
       socket.emit("audio-call-accept", { toUserId: remoteId });
     } catch (err) {
       console.error("[AUDIO_CALL] acceptCall error:", err);
-      setErrorMessage("Microphone access denied");
+      setErrorMessage("Failed to set up audio connection");
       setCallState("incoming");
     }
   }, [remoteUser?.id, socket, currentUserId, endCall, cleanup]);
@@ -213,8 +239,8 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
       setCallState("connecting");
 
       try {
-        console.log("[AUDIO_CALL] caller: getting user media");
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("[AUDIO_CALL] caller: requesting microphone permission");
+        const stream = await requestMediaPermissions({ audio: true });
         localStreamRef.current = stream;
         setLocalStream(stream);
 
@@ -261,7 +287,7 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
         });
       } catch (err) {
         console.error("[AUDIO_CALL] caller handleCallAccepted error:", err);
-        setErrorMessage("Failed to start audio");
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Failed to start audio");
         endCall();
       }
     };

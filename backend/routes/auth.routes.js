@@ -6,6 +6,8 @@ import {
   changePassword,
   requestPasswordReset,
   resetPassword,
+  getProfile,
+  updateProfile,
 } from "../controllers/auth/auth.controller.js";
 import { verifyToken, isAdmin, isHR } from "../middlewares/auth.middleware.js";
 
@@ -19,6 +21,8 @@ router.post("/admin/login", adminLogin);
 router.post("/employee/login", employeeLogin);
 
 // Protected routes
+router.get("/profile", verifyToken, getProfile);
+router.put("/profile", verifyToken, updateProfile);
 router.post("/change-password", verifyToken, changePassword);
 router.post("/request-reset", requestPasswordReset);
 router.post("/reset-password/:token", resetPassword);

@@ -10,10 +10,7 @@ const io = new Server(server, {
        cors: {
     origin: [
       "http://localhost:5173",
-      "http://localhost:3000",
-    
-      "https://unsigned-vocals-induction-closing.trycloudflare.com",
-      "https://lift-python-lines-separately.trycloudflare.com",
+      "http://localhost:3000"
     ],
     credentials: true,
   },
@@ -69,6 +66,12 @@ io.on("connection", async (socket) => {
     // Broadcast updated online users list
     broadcastOnlineUsers();
   }
+
+  // Send current online users to this socket on request
+  socket.on("request-online-users", () => {
+    const onlineUsersList = Array.from(onlineUsers);
+    socket.emit("online-users-updated", { onlineUsers: onlineUsersList });
+  });
 
   // ---------- WebRTC Audio Call Signalling ----------
   socket.on("audio-call-request", (data) => {
@@ -229,17 +232,26 @@ io.on("connection", async (socket) => {
       `Socket disconnected: ${socket.id} (userId=${normalizedUserId})`
     );
     if (normalizedUserId) {
-      delete users[normalizedUserId];
+      // Only remove from users map if THIS socket is still the registered one.
+      // This prevents a reconnecting user's new socket from being deleted
+      // when the old socket's disconnect event fires after the new one registered.
+      if (users[normalizedUserId] === socket.id) {
+        delete users[normalizedUserId];
 
-      // Remove user from online set
-      onlineUsers.delete(normalizedUserId);
-      console.log(`[ONLINE STATUS] User went offline: ${normalizedUserId}`);
+        // Remove user from online set only if no active socket remains
+        onlineUsers.delete(normalizedUserId);
+        console.log(`[ONLINE STATUS] User went offline: ${normalizedUserId}`);
 
-      // Clear call status when user disconnects
-      delete userCallStatus[normalizedUserId];
+        // Clear call status when user disconnects
+        delete userCallStatus[normalizedUserId];
 
-      // Broadcast updated online users list
-      broadcastOnlineUsers();
+        // Broadcast updated online users list
+        broadcastOnlineUsers();
+      } else {
+        console.log(
+          `[ONLINE STATUS] Stale socket disconnect ignored for ${normalizedUserId} (old=${socket.id}, current=${users[normalizedUserId]})`
+        );
+      }
     }
   });
 });

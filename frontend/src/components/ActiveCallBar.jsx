@@ -21,52 +21,48 @@ const ActiveCallBar = ({
   if (!remoteUser) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] w-full max-w-md px-4">
-      <div className="bg-white rounded-2xl shadow-xl border-2 border-teal-200 overflow-hidden">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] w-full max-w-sm px-4">
+      <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-xl shadow-black/30 overflow-hidden">
         <audio ref={remoteAudioRef} autoPlay playsInline />
-        <div className="bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-4 flex items-center justify-between">
+        <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-indigo-500/20 flex items-center justify-center">
               {isConnecting ? (
-                <Loader2 className="w-6 h-6 text-white animate-spin" />
+                <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
               ) : (
-                <span className="text-white font-bold text-lg">
+                <span className="text-indigo-400 font-semibold text-sm">
                   {remoteUser.name?.charAt(0) || "?"}
                 </span>
               )}
             </div>
             <div>
-              <h3 className="font-semibold text-white truncate max-w-[180px]">
+              <h3 className="font-medium text-white text-sm truncate max-w-[160px]">
                 {remoteUser.name}
               </h3>
-              <p className="text-white/80 text-sm">
-                {isConnecting ? "Connecting..." : "Live"}
+              <p className="text-slate-400 text-xs">
+                {isConnecting ? "Connecting..." : "In call"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={onToggleMute}
-              className="p-3 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors"
+              className={`p-2 rounded-lg transition-colors ${isMuted ? "bg-red-500/20 text-red-400" : "bg-white/10 text-white hover:bg-white/20"}`}
               title={isMuted ? "Unmute" : "Mute"}
             >
-              {isMuted ? (
-                <MicOff className="w-5 h-5" />
-              ) : (
-                <Mic className="w-5 h-5" />
-              )}
+              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
             <button
               onClick={onHangUp}
-              className="p-3 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors"
+              className="p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
               title="End call"
             >
-              <PhoneOff className="w-5 h-5" />
+              <PhoneOff className="w-4 h-4" />
             </button>
           </div>
         </div>
         {errorMessage && (
-          <div className="px-4 py-2 bg-orange-50 border-t border-orange-200 text-orange-800 text-sm">
+          <div className="px-4 py-2 bg-amber-500/10 border-t border-amber-500/20 text-amber-400 text-xs">
             {errorMessage}
           </div>
         )}

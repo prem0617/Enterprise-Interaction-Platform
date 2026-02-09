@@ -365,3 +365,87 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Get current user profile
+export const getProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).select("-password_hash -resetPasswordToken -resetPasswordExpire");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // If user is admin or employee, also fetch the employee record
+    const employee = await Employee.findOne({ user_id: userId });
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        phone: user.phone || "",
+        country: user.country,
+        timezone: user.timezone,
+        user_type: user.user_type,
+        status: user.status,
+        last_login: user.last_login,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+      },
+      employee: employee
+        ? {
+            id: employee._id,
+            department: employee.department,
+            position: employee.position,
+            employee_type: employee.employee_type,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error("Get profile error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update current user profile
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { first_name, last_name, phone, timezone } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Update allowed fields
+    if (first_name !== undefined) user.first_name = first_name.trim();
+    if (last_name !== undefined) user.last_name = last_name.trim();
+    if (phone !== undefined) user.phone = phone.trim() || undefined;
+    if (timezone !== undefined) user.timezone = timezone;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        phone: user.phone || "",
+        country: user.country,
+        timezone: user.timezone,
+        user_type: user.user_type,
+        status: user.status,
+      },
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};

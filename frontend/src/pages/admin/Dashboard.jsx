@@ -7,6 +7,8 @@ import {
   Activity,
   UserCheck,
   Clock,
+  TrendingUp,
+  ArrowUpRight,
 } from "lucide-react";
 import axios from "axios";
 import { BACKEND_URL } from "../../../config";
@@ -15,9 +17,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
   const adminToken = localStorage.getItem("token");
-  // console.log(adminToken);
 
-  // console.log(employees);
   const activeEmployeesList = employees
     .filter((employee) => employee.is_active)
     .map((employee) => ({
@@ -34,7 +34,7 @@ const Dashboard = () => {
   useEffect(() => {
     loadEmployees();
   }, []);
-  // console.log(employees);
+
   const loadEmployees = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/employees`, {
@@ -42,7 +42,6 @@ const Dashboard = () => {
           Authorization: `Bearer ${adminToken}`,
         },
       });
-      console.log(response);
       const employeeData = response.data.employees;
       setEmployees(employeeData);
     } catch (error) {
@@ -57,126 +56,88 @@ const Dashboard = () => {
       label: "Total Employees",
       value: employees?.length,
       icon: Users,
-      color: "from-cyan-500 to-blue-500",
+      trend: "+2 this month",
     },
     {
       label: "Active Users",
       value: activeEmployeesList.length,
       icon: UserCheck,
-      color: "from-teal-500 to-cyan-500",
+      trend: "All active",
     },
     {
       label: "Messages Today",
-      // value: "2,847",
+      value: "--",
       icon: MessageSquare,
-      color: "from-blue-500 to-purple-500",
+      trend: "Real-time",
     },
     {
       label: "Active Meetings",
-      // value: "12",
+      value: "--",
       icon: Video,
-      color: "from-purple-500 to-pink-500",
+      trend: "Live",
     },
   ];
 
-  const recentEmployees =
-    employees.length > 0
-      ? employees.slice(0, 4)
-      : [
-          {
-            name: "John Doe",
-            email: "john.doe@company.com",
-            status: "Active",
-            joined: "2 hours ago",
-          },
-          {
-            name: "Jane Smith",
-            email: "jane.smith@company.com",
-            status: "Active",
-            joined: "5 hours ago",
-          },
-          {
-            name: "Bob Johnson",
-            email: "bob.j@company.com",
-            status: "Pending",
-            joined: "1 day ago",
-          },
-          {
-            name: "Alice Williams",
-            email: "alice.w@company.com",
-            status: "Active",
-            joined: "2 days ago",
-          },
-        ];
-
-  const activities = [
-    {
-      user: "Sarah Connor",
-      action: "created a new channel",
-      time: "5 min ago",
-    },
-    { user: "Mike Ross", action: "uploaded a document", time: "12 min ago" },
-    {
-      user: "Rachel Green",
-      action: "joined video meeting",
-      time: "23 min ago",
-    },
-    {
-      user: "John Watson",
-      action: "sent a message in #general",
-      time: "45 min ago",
-    },
-  ];
-
-  if (loading) return <div>LOADING</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3 text-slate-400">
+          <div className="w-5 h-5 border-2 border-slate-600 border-t-indigo-500 rounded-full animate-spin" />
+          <span className="text-sm">Loading dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-teal-900 mb-2">
-          Dashboard Overview
+        <h1 className="text-xl font-semibold text-white mb-1">
+          Dashboard
         </h1>
-        <p className="text-teal-700">
-          Welcome back! Here's what's happening today.
+        <p className="text-sm text-slate-400">
+          Welcome back. Here's what's happening today.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {statsData.map((stat, idx) => {
           const Icon = stat.icon;
           return (
             <div
               key={idx}
-              className="bg-white rounded-2xl p-6 border-2 border-teal-200 shadow-sm hover:shadow-lg transition-shadow"
+              className="bg-slate-900 rounded-xl border border-slate-700/50 p-5 hover:border-slate-600 transition-colors"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center`}
-                >
-                  <Icon className="w-6 h-6 text-white" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-9 h-9 bg-slate-800 rounded-lg flex items-center justify-center">
+                  <Icon className="w-4 h-4 text-slate-400" />
                 </div>
-                <span className="text-sm font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded-lg">
-                  {stat.change}
-                </span>
               </div>
-              <p className="text-sm text-teal-600 mb-1">{stat.label}</p>
-              <p className="text-3xl font-bold text-teal-900">{stat.value}</p>
+              <p className="text-2xl font-semibold text-white mb-0.5">
+                {stat.value ?? 0}
+              </p>
+              <p className="text-xs text-slate-400">{stat.label}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-          <div className="p-6 border-b-2 border-teal-200">
-            <h2 className="text-xl font-bold text-teal-900">
+      {/* Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Recent Employees */}
+        <div className="lg:col-span-3 bg-slate-900 rounded-xl border border-slate-700/50">
+          <div className="px-5 py-4 border-b border-slate-700/30 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white">
               Recent Employees
             </h2>
+            <span className="text-xs text-slate-500">{activeEmployeesList.length} active</span>
           </div>
-          <div className="p-6 space-y-4">
+          <div className="divide-y divide-slate-700/30">
             {employees
               .filter((employee) => employee.is_active)
-              .slice(0, 5) // 👈 ONLY FIRST 5
+              .slice(0, 5)
               .map((employee) => {
                 const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                 const initials = fullName
@@ -187,63 +148,70 @@ const Dashboard = () => {
                 return (
                   <div
                     key={employee._id}
-                    className="flex items-center justify-between p-4 bg-teal-50 rounded-xl hover:bg-teal-100 transition-colors"
+                    className="flex items-center justify-between px-5 py-3 hover:bg-slate-800/50 transition-colors"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                        {initials}
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center">
+                        <span className="text-indigo-400 font-medium text-xs">
+                          {initials}
+                        </span>
                       </div>
-
                       <div>
-                        <p className="font-semibold text-teal-900">
+                        <p className="text-sm font-medium text-white">
                           {fullName}
                         </p>
-                        <p className="text-sm text-teal-600">
+                        <p className="text-xs text-slate-500">
                           {employee.user_id?.email}
                         </p>
                       </div>
                     </div>
-
                     <div className="text-right">
-                      <span className="inline-block px-3 py-1 rounded-lg text-xs font-semibold bg-teal-100 text-teal-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400">
                         Active
                       </span>
-                      <p className="text-xs text-teal-600 mt-1">
-                        Joined{" "}
-                        {new Date(employee.hire_date).toLocaleDateString()}
-                      </p>
                     </div>
                   </div>
                 );
               })}
+            {employees.filter((e) => e.is_active).length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">
+                No active employees found
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border-2 border-teal-200 shadow-sm">
-          <div className="p-6 border-b-2 border-teal-200">
-            <h2 className="text-xl font-bold text-teal-900">Recent Activity</h2>
+        {/* Activity Feed */}
+        <div className="lg:col-span-2 bg-slate-900 rounded-xl border border-slate-700/50">
+          <div className="px-5 py-4 border-b border-slate-700/30">
+            <h2 className="text-sm font-semibold text-white">
+              Activity
+            </h2>
           </div>
-
-          <div className="p-6 space-y-4">
+          <div className="divide-y divide-slate-700/30">
             {activeEmployeesList.slice(0, 5).map((emp) => (
-              <div key={emp.id} className="flex gap-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-4 h-4 text-white" />
-                </div>
-
-                <div className="flex-1">
-                  <p className="text-sm text-teal-900">
-                    <span className="font-semibold">{emp.name}</span> joined the{" "}
-                    <span className="font-medium">{emp.department}</span> team
-                    as <span className="font-medium">{emp.position}</span>
-                  </p>
-
-                  <p className="text-xs text-teal-600 flex items-center gap-1 mt-1">
-                    <Clock className="w-3 h-3" /> Active employee
-                  </p>
+              <div key={emp.id} className="px-5 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Activity className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-300">
+                      <span className="font-medium text-white">{emp.name}</span>{" "}
+                      joined {emp.department}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {emp.position}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
+            {activeEmployeesList.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">
+                No recent activity
+              </div>
+            )}
           </div>
         </div>
       </div>

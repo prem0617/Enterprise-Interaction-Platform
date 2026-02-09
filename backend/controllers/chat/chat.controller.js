@@ -41,7 +41,6 @@ export const createChannel = async (req, res) => {
       department: department || null,
       created_by: userId,
     });
-
     await channel.save();
 
     // Add creator as admin member
@@ -51,13 +50,15 @@ export const createChannel = async (req, res) => {
       role: "admin",
     });
     await creatorMember.save();
-    console.log(member_ids);
+
+    // Collect all member IDs (including creator)
+    const allMemberIds = [userId];
+
     // Add other members if provided
     if (member_ids?.length) {
       await Promise.all(
         member_ids.map(async (member) => {
-          const user = (await User.findById(member)) || console.log({ member });
-          console.log({ user });
+          const user = await User.findById(member);
           if (!user) return;
           if (user._id.toString() === userId) return;
 
@@ -66,6 +67,8 @@ export const createChannel = async (req, res) => {
             user_id: user._id,
             role: "member",
           });
+
+          allMemberIds.push(user._id.toString());
         })
       );
     }
@@ -78,6 +81,38 @@ export const createChannel = async (req, res) => {
     const populatedChannel = await ChatChannel.findById(channel._id)
       .populate("created_by", "first_name last_name email")
       .populate("ticket_id");
+
+    // ✅ Emit socket event to all members
+
+    if (io) {
+      console.log("INSEDE IO");
+      console.log(allMemberIds);
+      const channelData = {
+        _id: populatedChannel._id,
+        channel_type: populatedChannel.channel_type,
+        name: populatedChannel.name,
+        department: populatedChannel.department,
+        country_restriction: populatedChannel.country_restriction,
+        member_count: members.length,
+        created_by: populatedChannel.created_by,
+        created_at: populatedChannel.created_at,
+        members: members.map((m) => ({
+          user_id: m.user_id._id,
+          role: m.role,
+          full_name: `${m.user_id.first_name} ${m.user_id.last_name}`,
+        })),
+      };
+
+      // Emit to all members
+
+      allMemberIds.forEach((user_id) => {
+        const receiverSocketId = getReceiverSocketId(user_id.toString());
+        console.log({ receiverSocketId, user_id });
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("group_created", channelData);
+        }
+      });
+    }
 
     res.status(201).json({
       message: "Channel created successfully",
@@ -120,7 +155,10 @@ export const getUserChannels = async (req, res) => {
         }).populate("user_id", "first_name last_name email user_type status");
 
         const myMembership = members.find(
-          (m) => m.user_id && m.user_id._id && m.user_id._id.toString() === userId.toString()
+          (m) =>
+            m.user_id &&
+            m.user_id._id &&
+            m.user_id._id.toString() === userId.toString()
         );
         const user_role = myMembership ? myMembership.role : null;
 
@@ -356,8 +394,19 @@ export const updateMemberRole = async (req, res) => {
       return res.status(404).json({ error: "Member not found" });
     }
 
-    const userSocketid = getReceiverSocketId(userId);
-    io.to(userSocketid).emit("changesRole", updatedMember);
+    // Get all members of the channel
+    const channelMembers = await ChannelMember.find({ channel_id: id });
+
+    // Emit role change to all channel members
+    channelMembers.forEach((member) => {
+      const memberSocketId = getReceiverSocketId(member.user_id.toString());
+      if (memberSocketId) {
+        io.to(memberSocketId).emit("changesRole", {
+          channelId: id,
+          member: updatedMember,
+        });
+      }
+    });
 
     res.json({
       message: "Member role updated successfully",

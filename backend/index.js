@@ -33,8 +33,6 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
  
-  "https://unsigned-vocals-induction-closing.trycloudflare.com",
-  "https://lift-python-lines-separately.trycloudflare.com",
 ];
 
 app.use(cors({
