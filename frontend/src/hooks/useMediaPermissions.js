@@ -46,24 +46,28 @@ export async function requestMediaPermissions(constraints = { audio: true }) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     return stream;
   } catch (err) {
+    const needsVideo = constraints.video;
+    const needsAudio = constraints.audio;
+    const deviceType = needsVideo && needsAudio ? "camera and microphone" : needsVideo ? "camera" : "microphone";
+    
     if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
       throw new PermissionDeniedError(
-        "Microphone access was denied. Please allow microphone permission in your browser and try again."
+        `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} access was denied. Please allow ${deviceType} permission in your browser and try again.`
       );
     }
     if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
       throw new PermissionDeniedError(
-        "No microphone found. Please connect a microphone and try again."
+        `No ${deviceType} found. Please connect a ${deviceType} and try again.`
       );
     }
     if (err.name === "NotReadableError" || err.name === "TrackStartError") {
       throw new PermissionDeniedError(
-        "Microphone is already in use by another application. Please close it and try again."
+        `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} is already in use by another application. Please close it and try again.`
       );
     }
     if (err.name === "OverconstrainedError") {
       throw new PermissionDeniedError(
-        "Could not find a suitable microphone with the requested settings."
+        `Could not find a suitable ${deviceType} with the requested settings.`
       );
     }
     // SecurityError usually means non-HTTPS
@@ -73,7 +77,7 @@ export async function requestMediaPermissions(constraints = { audio: true }) {
       );
     }
     throw new PermissionDeniedError(
-      `Could not access microphone: ${err.message || "Unknown error"}`
+      `Could not access ${deviceType}: ${err.message || "Unknown error"}`
     );
   }
 }

@@ -28,9 +28,14 @@ import OutgoingCallModal from "./OutgoingCallModal";
 import ActiveCallBar from "./ActiveCallBar";
 import GroupCallWaitingModal from "./GroupCallWaitingModal";
 import GroupCallActiveBar from "./GroupCallActiveBar";
+import GroupVideoCallBar from "./GroupVideoCallBar";
 import GroupCallIncomingBanner from "./GroupCallIncomingBanner";
 import { useAudioCall } from "../hooks/useAudioCall";
+import { useVideoCall } from "../hooks/useVideoCall";
 import { useGroupCall } from "../hooks/useGroupCall";
+import ActiveVideoCallBar from "./ActiveVideoCallBar";
+import IncomingVideoCallModal from "./IncomingVideoCallModal";
+import OutgoingVideoCallModal from "./OutgoingVideoCallModal";
 
 import { BACKEND_URL } from "../../config";
 
@@ -93,7 +98,21 @@ const ChatInterface = () => {
 
   const requestCallApi = useCallback(async (toUserId) => {
     try {
-      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId) }, axiosConfig);
+      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId), callType: "audio" }, axiosConfig);
+      return data;
+    } catch (error) {
+      if (error.response?.status === 409) {
+        const errorMessage = error.response?.data?.message || "This person is on a call";
+        toast.error(errorMessage, { duration: 1500 });
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
+  }, [token]);
+
+  const requestVideoCallApi = useCallback(async (toUserId) => {
+    try {
+      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId), callType: "video" }, axiosConfig);
       return data;
     } catch (error) {
       if (error.response?.status === 409) {
@@ -116,6 +135,7 @@ const ChatInterface = () => {
   }, [token]);
 
   const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi, checkOnlineApi);
+  const videoCall = useVideoCall(socket, user?.id, currentUserName, requestVideoCallApi);
 
   const startGroupCallApi = useCallback(async (channelId) => {
     const { data } = await axios.post(`${BACKEND_URL}/call/group/start`, { channelId }, axiosConfig);
@@ -176,6 +196,7 @@ const ChatInterface = () => {
   }, [socket, userChannel, getGroupCallStatusApi, selectedChat?._id]);
 
   useEffect(() => { if (audioCall.errorMessage) toast.error(audioCall.errorMessage); }, [audioCall.errorMessage]);
+  useEffect(() => { if (videoCall.errorMessage) toast.error(videoCall.errorMessage); }, [videoCall.errorMessage]);
   useEffect(() => { if (groupCall.errorMessage) toast.error(groupCall.errorMessage); }, [groupCall.errorMessage]);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -617,21 +638,89 @@ const ChatInterface = () => {
                     onClick={async () => {
                       if (!isUserOnline(selectedChat.other_user._id)) { toast.error("User is offline", { duration: 1500 }); return; }
                       if (groupCall.groupCallState !== "idle") { toast.error("You are currently in a group call", { duration: 1500 }); return; }
+                      if (videoCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id))) {
+                        toast.error("You are already in a call", { duration: 1500 });
+                        return;
+                      }
                       try {
                         const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
                         if (callStatus.inCall) { toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, { duration: 1500 }); return; }
                         audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim());
                       } catch (error) { audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()); }
                     }}
-                    disabled={audioCall.callState !== "idle" || !socket || groupCall.groupCallState !== "idle" || !isUserOnline(selectedChat.other_user._id)}
+                    disabled={
+                      audioCall.callState !== "idle" ||
+                      videoCall.callState !== "idle" ||
+                      !socket ||
+                      groupCall.groupCallState !== "idle" ||
+                      !isUserOnline(selectedChat.other_user._id)
+                    }
                     className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
                   >
                     <Phone className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => { if (!isUserOnline(selectedChat.other_user._id)) { toast.error("User is offline", { duration: 1500 }); return; } toast("Video call coming soon...", { duration: 1500 }); }}
-                    disabled={(audioCall.callState !== "idle" && !(selectedChat.channel_type === "direct" && selectedChat.other_user && String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id))) || groupCall.groupCallState !== "idle" || !isUserOnline(selectedChat.other_user._id)}
+                    onClick={async () => {
+                      if (!isUserOnline(selectedChat.other_user._id)) {
+                        toast.error("User is offline", { duration: 1500 });
+                        return;
+                      }
+                      if (groupCall.groupCallState !== "idle") {
+                        toast.error("You are currently in a group call", { duration: 1500 });
+                        return;
+                      }
+                      if (audioCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id))) {
+                        toast.error("You are already in a call", { duration: 1500 });
+                        return;
+                      }
+                      if (videoCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id))) {
+                        toast.error("You are already in a call", { duration: 1500 });
+                        return;
+                      }
+                      try {
+                        const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
+                        if (callStatus.inCall) {
+                          toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, { duration: 1500 });
+                          return;
+                        }
+                        videoCall.startCall(
+                          String(selectedChat.other_user._id),
+                          selectedChat.other_user.full_name ||
+                            `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
+                        );
+                      } catch (error) {
+                        console.error("Error checking call status:", error);
+                        videoCall.startCall(
+                          String(selectedChat.other_user._id),
+                          selectedChat.other_user.full_name ||
+                            `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
+                        );
+                      }
+                    }}
+                    disabled={
+                      (audioCall.callState !== "idle" &&
+                        !(
+                          selectedChat.channel_type === "direct" &&
+                          selectedChat.other_user &&
+                          String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id)
+                        )) ||
+                      (videoCall.callState !== "idle" &&
+                        !(
+                          selectedChat.channel_type === "direct" &&
+                          selectedChat.other_user &&
+                          String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id)
+                        )) ||
+                      groupCall.groupCallState !== "idle" ||
+                      !isUserOnline(selectedChat.other_user._id)
+                    }
                     className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    title={
+                      !isUserOnline(selectedChat.other_user._id)
+                        ? "User is offline"
+                        : groupCall.groupCallState !== "idle"
+                        ? "You are in a group call"
+                        : "Video call"
+                    }
                   >
                     <Video className="w-4 h-4" />
                   </button>
@@ -639,7 +728,7 @@ const ChatInterface = () => {
               )}
               {selectedChat.channel_type === "group" && (
                 <>
-                  <button onClick={() => toast("Video call coming soon...", { duration: 1500 })} disabled={groupCall.groupCallState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"><Video className="w-4 h-4" /></button>
+                  <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={groupCall.groupCallState !== "idle" || audioCall.callState !== "idle" || videoCall.callState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40" title="Start video call"><Video className="w-4 h-4" /></button>
                   {groupCall.groupCallState === "idle" && !groupCallStatus?.active && selectedChat.user_role === "admin" && (
                     <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={!socket || groupCall.groupCallState !== "idle" || audioCall.callState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"><Phone className="w-4 h-4" /></button>
                   )}
@@ -819,8 +908,27 @@ const ChatInterface = () => {
       {audioCall.callState === "incoming" && <IncomingCallModal remoteUser={audioCall.remoteUser} onAccept={audioCall.acceptCall} onReject={audioCall.rejectCall} errorMessage={audioCall.errorMessage} />}
       {audioCall.callState === "calling" && <OutgoingCallModal remoteUser={audioCall.remoteUser} onHangUp={audioCall.endCall} />}
       {(audioCall.callState === "connecting" || audioCall.callState === "active") && <ActiveCallBar remoteUser={audioCall.remoteUser} remoteStream={audioCall.remoteStream} isMuted={audioCall.isMuted} onToggleMute={audioCall.toggleMute} onHangUp={audioCall.endCall} isConnecting={audioCall.callState === "connecting"} errorMessage={audioCall.errorMessage} />}
+      
+      {videoCall.callState === "incoming" && <IncomingVideoCallModal remoteUser={videoCall.remoteUser} onAccept={videoCall.acceptCall} onReject={videoCall.rejectCall} errorMessage={videoCall.errorMessage} />}
+      {videoCall.callState === "calling" && <OutgoingVideoCallModal remoteUser={videoCall.remoteUser} onHangUp={videoCall.endCall} />}
+      {(videoCall.callState === "connecting" || videoCall.callState === "active") && <ActiveVideoCallBar remoteUser={videoCall.remoteUser} localStream={videoCall.localStream} remoteStream={videoCall.remoteStream} isMuted={videoCall.isMuted} isVideoOff={videoCall.isVideoOff} onToggleMute={videoCall.toggleMute} onToggleVideo={videoCall.toggleVideo} onHangUp={videoCall.endCall} isConnecting={videoCall.callState === "connecting"} errorMessage={videoCall.errorMessage} />}
+      
       {groupCall.groupCallState === "waiting" && <GroupCallWaitingModal channelName={groupCall.activeChannelName} onCancel={groupCall.leaveGroupCall} />}
-      {(groupCall.groupCallState === "active" || groupCall.groupCallState === "joined") && <GroupCallActiveBar channelName={groupCall.activeChannelName} participants={groupCall.participants} remoteStreams={groupCall.remoteStreams} isMuted={groupCall.isMuted} onToggleMute={groupCall.toggleMute} onHangUp={groupCall.leaveGroupCall} currentUserId={user?.id} />}
+      {(groupCall.groupCallState === "active" || groupCall.groupCallState === "joined") && (
+        <GroupVideoCallBar
+          channelName={groupCall.activeChannelName}
+          participants={groupCall.participants}
+          localStream={groupCall.localStream}
+          remoteStreams={groupCall.remoteStreams}
+          isMuted={groupCall.isMuted}
+          isVideoOff={groupCall.isVideoOff}
+          onToggleMute={groupCall.toggleMute}
+          onToggleVideo={groupCall.toggleVideo}
+          onHangUp={groupCall.leaveGroupCall}
+          currentUserId={user?.id}
+          isConnecting={groupCall.groupCallState === "waiting"}
+        />
+      )}
     </div>
   );
 };

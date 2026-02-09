@@ -19,7 +19,7 @@ function getCallerName(u) {
  */
 export const requestCall = async (req, res) => {
   try {
-    const { toUserId } = req.body;
+    const { toUserId, callType = "audio" } = req.body; // callType: "audio" or "video"
     const callerUserId = req.userId;
     const callerUser = req.user;
 
@@ -57,7 +57,9 @@ export const requestCall = async (req, res) => {
 
     // Note: Call status will be set when call is accepted (in socket handler)
 
-    io.to(receiverSocketId).emit("incoming-audio-call", {
+    // Emit appropriate event based on call type
+    const eventName = callType === "video" ? "incoming-video-call" : "incoming-audio-call";
+    io.to(receiverSocketId).emit(eventName, {
       fromUserId: callerUserId,
       fromUserName,
     });
