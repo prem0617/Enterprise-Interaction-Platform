@@ -37,6 +37,7 @@ export function useGroupCall(
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({}); // { [userId]: MediaStream }
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
   const localStreamRef = useRef(null);
@@ -64,6 +65,8 @@ export function useGroupCall(
     setInitiatorId(null);
     setInitiatorName(null);
     setParticipants([]);
+    setIsMuted(false);
+    setIsVideoOff(false);
     setErrorMessage(null);
     isInitiatorRef.current = false;
   }, []);
@@ -92,21 +95,31 @@ export function useGroupCall(
     }
   }, [isMuted]);
 
+  const toggleVideo = useCallback(() => {
+    if (!localStreamRef.current) return;
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = isVideoOff;
+      setIsVideoOff(!isVideoOff);
+    }
+  }, [isVideoOff]);
+
   const startGroupCall = useCallback(
     async (channelId, channelName) => {
       if (!currentUserIdStr || !startGroupCallApi) return;
       setErrorMessage(null);
       isInitiatorRef.current = true;
 
-      // Request microphone permission upfront
+      // Request microphone and video permissions upfront
       let stream;
       try {
-        stream = await requestMediaPermissions({ audio: true });
+        stream = await requestMediaPermissions({ audio: true, video: true });
         localStreamRef.current = stream;
         setLocalStream(stream);
+        setIsVideoOff(false);
       } catch (err) {
-        console.error("[GROUP_CALL] microphone permission denied:", err);
-        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
+        console.error("[GROUP_CALL] media permission denied:", err);
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Camera/microphone access denied");
         return;
       }
 
@@ -136,15 +149,16 @@ export function useGroupCall(
       if (!currentUserIdStr || !joinGroupCallApi) return;
       setErrorMessage(null);
 
-      // Request microphone permission upfront
+      // Request microphone and video permissions upfront
       let stream;
       try {
-        stream = await requestMediaPermissions({ audio: true });
+        stream = await requestMediaPermissions({ audio: true, video: true });
         localStreamRef.current = stream;
         setLocalStream(stream);
+        setIsVideoOff(false);
       } catch (err) {
-        console.error("[GROUP_CALL] microphone permission denied:", err);
-        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Microphone access denied");
+        console.error("[GROUP_CALL] media permission denied:", err);
+        setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Camera/microphone access denied");
         return;
       }
 
@@ -439,11 +453,13 @@ export function useGroupCall(
     localStream,
     remoteStreams,
     isMuted,
+    isVideoOff,
     errorMessage,
     startGroupCall,
     joinGroupCall,
     leaveGroupCall,
     dismissIncoming,
     toggleMute,
+    toggleVideo,
   };
 }

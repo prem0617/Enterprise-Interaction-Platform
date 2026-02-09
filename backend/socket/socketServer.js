@@ -193,6 +193,112 @@ io.on("connection", async (socket) => {
     });
   });
 
+  // ---------- WebRTC Video Call Signalling ----------
+  socket.on("video-call-accept", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received video-call-accept", {
+      from: socket.userId,
+      toUserId,
+    });
+    if (!toUserId || !socket.userId) return;
+    
+    // Mark both users as in a direct call
+    const fromIdStr = String(socket.userId);
+    const toIdStr = String(toUserId);
+    userCallStatus[fromIdStr] = {
+      inCall: true,
+      callType: "direct",
+      otherUserId: toIdStr,
+    };
+    userCallStatus[toIdStr] = {
+      inCall: true,
+      callType: "direct",
+      otherUserId: fromIdStr,
+    };
+    
+    forwardToUser("video-call-accepted", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
+
+  socket.on("video-call-reject", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received video-call-reject", {
+      from: socket.userId,
+      toUserId,
+    });
+    if (!toUserId || !socket.userId) return;
+    
+    // Clear call status for caller (call was rejected, so no call is active)
+    const fromIdStr = String(socket.userId);
+    delete userCallStatus[fromIdStr];
+    
+    forwardToUser("video-call-rejected", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
+
+  socket.on("video-webrtc-offer", (data) => {
+    const { toUserId, sdp } = data;
+    console.log("[SIGNALLING] received video-webrtc-offer", {
+      from: socket.userId,
+      toUserId,
+      hasSdp: !!sdp,
+    });
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("video-webrtc-offer", toUserId, {
+      fromUserId: socket.userId,
+      sdp,
+    });
+  });
+
+  socket.on("video-webrtc-answer", (data) => {
+    const { toUserId, sdp } = data;
+    console.log("[SIGNALLING] received video-webrtc-answer", {
+      from: socket.userId,
+      toUserId,
+      hasSdp: !!sdp,
+    });
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("video-webrtc-answer", toUserId, {
+      fromUserId: socket.userId,
+      sdp,
+    });
+  });
+
+  socket.on("video-webrtc-ice", (data) => {
+    const { toUserId, candidate } = data;
+    console.log("[SIGNALLING] received video-webrtc-ice", {
+      from: socket.userId,
+      toUserId,
+      hasCandidate: !!candidate,
+    });
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("video-webrtc-ice", toUserId, {
+      fromUserId: socket.userId,
+      candidate,
+    });
+  });
+
+  socket.on("video-call-end", (data) => {
+    const { toUserId } = data;
+    console.log("[SIGNALLING] received video-call-end", {
+      from: socket.userId,
+      toUserId,
+    });
+    if (!toUserId || !socket.userId) return;
+    
+    // Clear call status for both users
+    const fromIdStr = String(socket.userId);
+    const toIdStr = String(toUserId);
+    delete userCallStatus[fromIdStr];
+    delete userCallStatus[toIdStr];
+    
+    forwardToUser("video-call-ended", toUserId, {
+      fromUserId: socket.userId,
+    });
+  });
+
   // ---------- Group call WebRTC signalling ----------
   socket.on("group-call-webrtc-offer", (data) => {
     const { toUserId, channelId, sdp } = data;
