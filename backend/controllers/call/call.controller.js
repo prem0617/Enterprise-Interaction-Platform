@@ -28,8 +28,18 @@ export const requestCall = async (req, res) => {
     }
 
     const normalizedTo = String(toUserId);
-    if (normalizedTo === String(callerUserId)) {
+    const callerIdStr = String(callerUserId);
+    if (normalizedTo === callerIdStr) {
       return res.status(400).json({ error: "Cannot call yourself" });
+    }
+
+    // Caller cannot start a new call if they are already in a call (audio or video)
+    const callerCallStatus = getUserCallStatus(callerIdStr);
+    if (callerCallStatus?.inCall) {
+      return res.status(409).json({
+        error: "You are on a call",
+        message: "You cannot call others while in an ongoing call.",
+      });
     }
 
     // Check if the target user is already in a call
