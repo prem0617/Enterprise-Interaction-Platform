@@ -656,6 +656,17 @@ const ChatInterface = () => {
                       !isUserOnline(selectedChat.other_user._id)
                     }
                     className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    title={
+                      !isUserOnline(selectedChat.other_user._id)
+                        ? "User is offline"
+                        : groupCall.groupCallState !== "idle"
+                        ? "You are in a group call"
+                        : videoCall.callState !== "idle"
+                        ? "You are in a video call"
+                        : audioCall.callState !== "idle"
+                        ? "You are in a call"
+                        : "Audio call"
+                    }
                   >
                     <Phone className="w-4 h-4" />
                   </button>
@@ -719,6 +730,12 @@ const ChatInterface = () => {
                         ? "User is offline"
                         : groupCall.groupCallState !== "idle"
                         ? "You are in a group call"
+                        : videoCall.callState !== "idle" &&
+                          String(selectedChat.other_user._id) !== String(videoCall.remoteUser?.id)
+                        ? "You are in a video call"
+                        : audioCall.callState !== "idle" &&
+                          String(selectedChat.other_user._id) !== String(audioCall.remoteUser?.id)
+                        ? "You are in a call"
                         : "Video call"
                     }
                   >
