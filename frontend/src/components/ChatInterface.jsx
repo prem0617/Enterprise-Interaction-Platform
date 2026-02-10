@@ -203,19 +203,6 @@ const ChatInterface = () => {
     }
   }, [token]);
 
-  const requestVideoCallApi = useCallback(async (toUserId) => {
-    try {
-      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId), callType: "video" }, axiosConfig);
-      return data;
-    } catch (error) {
-      if (error.response?.status === 409) {
-        const errorMessage = error.response?.data?.message || "This person is on a call";
-        toast.error(errorMessage, { duration: 1500 });
-        throw new Error(errorMessage);
-      }
-      throw error;
-    }
-  }, [token]);
 
 
   const checkOnlineApi = useCallback(
