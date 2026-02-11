@@ -13,11 +13,21 @@ const meetingSchema = new Schema(
       required: true,
       trim: true,
     },
+    description: {
+      type: String,
+      trim: true,
+    },
     host_id: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+    participants: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     meeting_type: {
       type: String,
       enum: ["internal", "customer_consultation", "support"],
@@ -25,6 +35,11 @@ const meetingSchema = new Schema(
     },
     scheduled_at: {
       type: Date,
+    },
+    duration_minutes: {
+      type: Number,
+      default: 30,
+      min: 1,
     },
     started_at: {
       type: Date,
@@ -46,6 +61,22 @@ const meetingSchema = new Schema(
       enum: ["germany", "india", "usa"],
       default: null,
     },
+    location: {
+      type: String,
+      trim: true,
+    },
+    join_link: {
+      type: String,
+      trim: true,
+    },
+    reminders: [
+      {
+        minutes_before: {
+          type: Number,
+          min: 0,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -55,6 +86,7 @@ const meetingSchema = new Schema(
 // Indexes
 meetingSchema.index({ meeting_code: 1 });
 meetingSchema.index({ host_id: 1 });
+meetingSchema.index({ "participants": 1 });
 meetingSchema.index({ status: 1 });
 meetingSchema.index({ scheduled_at: 1 });
 

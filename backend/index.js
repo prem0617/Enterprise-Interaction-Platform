@@ -9,6 +9,7 @@ import helperRoutes from "./routes/helper.routes.js";
 import chatRouter from "./routes/chat.routes.js";
 import directChatRouter from "./routes/directChat.routes.js";
 import callRoutes from "./routes/call.routes.js";
+import meetingRoutes from "./routes/meeting.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 
@@ -60,6 +61,7 @@ app.get("/", (req, res) => {
       chat: "/api/chat",
       direct_chat: "/api/direct_chat",
       call: "/api/call",
+      meetings: "/api/meetings",
     },
   });
 });
@@ -70,6 +72,7 @@ app.use("/api/helper", helperRoutes);
 app.use("/api/chat", chatRouter);
 app.use("/api/direct_chat", directChatRouter);
 app.use("/api/call", callRoutes);
+app.use("/api/meetings", meetingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

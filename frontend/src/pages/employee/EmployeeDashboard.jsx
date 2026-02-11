@@ -12,6 +12,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import ChatInterface from "../../components/ChatInterface";
+import MeetingModule from "../../components/MeetingModule";
 
 const EmployeeDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -171,16 +172,7 @@ const EmployeeDashboard = () => {
           </div>
         )}
 
-        {activeTab === "meetings" && (
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
-            <p className="text-sm text-slate-400 mb-6">Schedule and join meetings</p>
-            <div className="bg-slate-900 rounded-xl border border-slate-700/50 p-12 text-center">
-              <Video className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-              <p className="text-sm text-slate-400">Meetings schedule coming soon...</p>
-            </div>
-          </div>
-        )}
+        {activeTab === "meetings" && <MeetingModule />}
       </main>
     </div>
   );

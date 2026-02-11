@@ -72,6 +72,7 @@ const ChatInterface = () => {
   const [socketConnected, setSocketConnected] = useState(false);
   const [groupCallStatus, setGroupCallStatus] = useState(null);
   const [activeGroupCalls, setActiveGroupCalls] = useState({});
+  const [removedFromChannelId, setRemovedFromChannelId] = useState(null);
   const messagesEndRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const selectedChatRef = useRef(null);
@@ -150,11 +151,26 @@ const ChatInterface = () => {
     if (socket.connected) setSocketConnected(true);
     else setSocketConnected(false);
 
+    const handleYouWereRemovedFromChannel = (data) => {
+      const channelId = data.channelId || data.channel_id;
+      if (!channelId) return;
+      setUserChannel((prev) => prev.filter((c) => String(c._id) !== String(channelId)));
+      setRemovedFromChannelId(channelId);
+    };
+
+    const handleMemberAdded = () => {
+      getUserChannel();
+    };
+
     socket.on("changesRole", handleRoleChange);
     socket.on("roleChanged", handleRoleChange);
     socket.on("role-changed", handleRoleChange);
     socket.on("updateRole", handleRoleChange);
     socket.on("memberRoleUpdated", handleRoleChange);
+    socket.on("youWereRemovedFromChannel", handleYouWereRemovedFromChannel);
+    socket.on("memberAdded", handleMemberAdded);
+    socket.on("member-added", handleMemberAdded);
+    socket.on("addMember", handleMemberAdded);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     return () => {
@@ -163,6 +179,10 @@ const ChatInterface = () => {
       socket.off("role-changed", handleRoleChange);
       socket.off("updateRole", handleRoleChange);
       socket.off("memberRoleUpdated", handleRoleChange);
+      socket.off("youWereRemovedFromChannel", handleYouWereRemovedFromChannel);
+      socket.off("memberAdded", handleMemberAdded);
+      socket.off("member-added", handleMemberAdded);
+      socket.off("addMember", handleMemberAdded);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
     };
@@ -1370,7 +1390,12 @@ const ChatInterface = () => {
 
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-950">
-            {loadingMessages ? (
+            {removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId) ? (
+              <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
+                <p className="text-base font-medium text-amber-400">You are removed from this group</p>
+                <p className="text-sm text-slate-500 mt-1">You will no longer see this chat after you refresh.</p>
+              </div>
+            ) : loadingMessages ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
               </div>
@@ -1523,7 +1548,8 @@ const ChatInterface = () => {
             </div>
           )}
 
-          {/* Message Input */}
+          {/* Message Input - hidden when user was removed from this group */}
+          {!(removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId)) && (
           <div className="px-4 py-3 border-t border-slate-700/50 bg-slate-900">
             {!socketConnected && (
               <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
@@ -1568,6 +1594,7 @@ const ChatInterface = () => {
               </button>
             </form>
           </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center bg-slate-950">

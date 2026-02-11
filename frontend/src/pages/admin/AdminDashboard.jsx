@@ -19,6 +19,7 @@ import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "../../components/ChatInterface";
+import MeetingModule from "../../components/MeetingModule";
 import { useAuthContext } from "../../context/AuthContextProvider";
 
 export default function AdminDashboard() {
@@ -61,16 +62,7 @@ export default function AdminDashboard() {
       case "messages":
         return <ChatInterface />;
       case "meetings":
-        return (
-          <div className="p-6 lg:p-8 max-w-5xl mx-auto">
-            <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
-            <p className="text-sm text-slate-400 mb-6">Schedule and manage meetings</p>
-            <div className="bg-slate-900 rounded-xl border border-slate-700/50 p-12 text-center">
-              <Video className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-              <p className="text-sm text-slate-400">Meeting scheduler coming soon...</p>
-            </div>
-          </div>
-        );
+        return <MeetingModule />;
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":

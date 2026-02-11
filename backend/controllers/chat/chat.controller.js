@@ -301,6 +301,19 @@ export const addChannelMembers = async (req, res) => {
       }
     }
 
+    // Notify all channel members (existing + newly added) so everyone's UI updates to match DB
+    if (addedMembers.length > 0) {
+      const allMembers = await ChannelMember.find({ channel_id: id }).select("user_id");
+      allMembers.forEach((member) => {
+        const socketId = getReceiverSocketId(member.user_id.toString());
+        if (socketId) {
+          io.to(socketId).emit("memberAdded", {
+            channelId: id,
+          });
+        }
+      });
+    }
+
     res.json({
       message: "Members processed",
       added_members: addedMembers,
@@ -352,6 +365,27 @@ export const removeChannelMember = async (req, res) => {
 
     if (!removed) {
       return res.status(404).json({ error: "Member not found in channel" });
+    }
+
+    // Notify all remaining channel members so their UI (e.g. settings modal) updates
+    const remainingMembers = await ChannelMember.find({ channel_id: id }).select("user_id");
+    const removedUserIdStr = memberId?.toString?.() ?? memberId;
+    remainingMembers.forEach((member) => {
+      const socketId = getReceiverSocketId(member.user_id.toString());
+      if (socketId) {
+        io.to(socketId).emit("memberRemoved", {
+          channelId: id,
+          removedUserId: removedUserIdStr,
+        });
+      }
+    });
+
+    // Notify the removed user so they see "You are removed from this group" until refresh
+    const removedUserSocketId = getReceiverSocketId(removedUserIdStr);
+    if (removedUserSocketId) {
+      io.to(removedUserSocketId).emit("youWereRemovedFromChannel", {
+        channelId: id,
+      });
     }
 
     res.json({ message: "Member removed successfully" });

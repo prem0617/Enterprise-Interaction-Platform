@@ -1,0 +1,223 @@
+import Meeting from "../../models/Meeting.js";
+import { scheduleRemindersForMeeting, clearRemindersForMeeting } from "../../services/meetingReminderService.js";
+
+function generateMeetingCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i += 1) {
+    code += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  }
+  return code;
+}
+
+async function ensureUniqueMeetingCode() {
+  // Try a few times to generate a unique code
+  for (let i = 0; i < 5; i += 1) {
+    const code = generateMeetingCode();
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await Meeting.findOne({ meeting_code: code }).lean();
+    if (!existing) return code;
+  }
+  // Fallback to timestamp-based code
+  return `MTG-${Date.now()}`;
+}
+
+export const createMeeting = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const {
+      title,
+      description,
+      meeting_type,
+      scheduled_at,
+      duration_minutes,
+      participants = [],
+      recording_enabled,
+      country_restriction,
+      location,
+      join_link,
+      reminders = [],
+    } = req.body;
+
+    if (!title || !meeting_type) {
+      return res.status(400).json({ error: "title and meeting_type are required" });
+    }
+
+    const meetingCode = await ensureUniqueMeetingCode();
+
+    const meeting = new Meeting({
+      meeting_code: meetingCode,
+      title,
+      description,
+      host_id: userId,
+      meeting_type,
+      scheduled_at: scheduled_at ? new Date(scheduled_at) : null,
+      duration_minutes,
+      participants,
+      recording_enabled,
+      country_restriction: country_restriction || null,
+      location,
+      join_link,
+      reminders,
+    });
+
+    await meeting.save();
+
+    scheduleRemindersForMeeting(meeting);
+
+    return res.status(201).json({ data: meeting });
+  } catch (error) {
+    // Handle unique index error gracefully
+    if (error.code === 11000 && error.keyPattern?.meeting_code) {
+      return res.status(409).json({ error: "Failed to generate unique meeting code. Please try again." });
+    }
+    console.error("[MEETING] createMeeting error:", error);
+    return res.status(500).json({ error: "Failed to create meeting" });
+  }
+};
+
+export const getMyMeetings = async (req, res) => {
+  try {
+    const userId = String(req.userId);
+    const { from, to, status } = req.query;
+
+    const query = {
+      $or: [
+        { host_id: userId },
+        { participants: userId },
+      ],
+    };
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (from || to) {
+      query.scheduled_at = {};
+      if (from) query.scheduled_at.$gte = new Date(from);
+      if (to) query.scheduled_at.$lte = new Date(to);
+    }
+
+    const meetings = await Meeting.find(query)
+      .sort({ scheduled_at: 1 })
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+
+    return res.json({ data: meetings });
+  } catch (error) {
+    console.error("[MEETING] getMyMeetings error:", error);
+    return res.status(500).json({ error: "Failed to fetch meetings" });
+  }
+};
+
+export const getMeetingById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+
+    const meeting = await Meeting.findById(id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    const isParticipant =
+      String(meeting.host_id?._id || meeting.host_id) === userId ||
+      (Array.isArray(meeting.participants) &&
+        meeting.participants.some((p) => String(p?._id || p) === userId));
+
+    if (!isParticipant) {
+      return res.status(403).json({ error: "You are not allowed to view this meeting" });
+    }
+
+    return res.json({ data: meeting });
+  } catch (error) {
+    console.error("[MEETING] getMeetingById error:", error);
+    return res.status(500).json({ error: "Failed to fetch meeting" });
+  }
+};
+
+export const updateMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    if (String(meeting.host_id) !== userId) {
+      return res.status(403).json({ error: "Only the host can update this meeting" });
+    }
+
+    const updatableFields = [
+      "title",
+      "description",
+      "meeting_type",
+      "scheduled_at",
+      "duration_minutes",
+      "participants",
+      "recording_enabled",
+      "country_restriction",
+      "location",
+      "join_link",
+      "status",
+      "reminders",
+    ];
+
+    updatableFields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        // eslint-disable-next-line no-param-reassign
+        meeting[field] =
+          field === "scheduled_at" && req.body[field]
+            ? new Date(req.body[field])
+            : req.body[field];
+      }
+    });
+
+    await meeting.save();
+
+    if (["scheduled", "active"].includes(meeting.status)) {
+      scheduleRemindersForMeeting(meeting);
+    } else {
+      clearRemindersForMeeting(meeting._id);
+    }
+
+    return res.json({ data: meeting });
+  } catch (error) {
+    console.error("[MEETING] updateMeeting error:", error);
+    return res.status(500).json({ error: "Failed to update meeting" });
+  }
+};
+
+export const cancelMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    if (String(meeting.host_id) !== userId) {
+      return res.status(403).json({ error: "Only the host can cancel this meeting" });
+    }
+
+    meeting.status = "cancelled";
+    await meeting.save();
+
+    clearRemindersForMeeting(meeting._id);
+
+    return res.json({ data: meeting });
+  } catch (error) {
+    console.error("[MEETING] cancelMeeting error:", error);
+    return res.status(500).json({ error: "Failed to cancel meeting" });
+  }
+};
+

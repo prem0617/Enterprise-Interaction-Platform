@@ -701,10 +701,13 @@ const ChannelSettingsModal = ({
       const eventChannelId = data.channelId || data.channel_id;
       if (eventChannelId === channel?._id) {
         const eventUserId =
-          data.member?.user_id?._id || data.member?.user_id || data.user_id;
+          data.removedUserId ||
+          data.member?.user_id?._id ||
+          data.member?.user_id ||
+          data.user_id;
 
         setChannelMembers((prev) =>
-          prev.filter((m) => (m.user_id?._id || m.user_id) !== eventUserId)
+          prev.filter((m) => (m.user_id?._id || m.user_id)?.toString() !== eventUserId?.toString())
         );
       }
     };
