@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Clock, Loader2, Plus, Users, X, MessageCircle } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { CalendarDays, Clock, Loader2, Plus, Users, X, MessageCircle, Link2, Copy, LogIn, Video, VideoOff, Mic, MicOff, PhoneOff } from "lucide-react";
 import axios from "axios";
-import toast from "react-hot-toast";
-import { BACKEND_URL } from "../../config";
+import { toast } from "sonner";
+import { BACKEND_URL } from "@/config";
 import { useAuthContext } from "../context/AuthContextProvider";
+import { useMeetingCall } from "@/hooks/useMeetingCall";
 
 const MEETING_TYPES = [
   { value: "internal", label: "Internal" },
@@ -48,6 +50,7 @@ function buildMonthGrid(currentMonth) {
 
 const MeetingModule = () => {
   const { socket, user } = useAuthContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -66,6 +69,12 @@ const MeetingModule = () => {
   const [roomParticipants, setRoomParticipants] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [joiningByCode, setJoiningByCode] = useState(false);
+  const [localMediaStream, setLocalMediaStream] = useState(null);
+
+  const videoRefs = useRef({});
+  const localVideoRef = useRef(null);
 
   const token = localStorage.getItem("token");
   const axiosConfig = useMemo(
@@ -75,6 +84,19 @@ const MeetingModule = () => {
       },
     }),
     [token]
+  );
+
+  const currentUserId = user?.id || user?._id;
+  const currentUserName = user
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "You"
+    : "You";
+
+  const meetingCall = useMeetingCall(
+    socket,
+    currentUserId,
+    currentUserName,
+    activeMeeting?._id,
+    roomParticipants
   );
 
   const [form, setForm] = useState({
@@ -421,10 +443,6 @@ const MeetingModule = () => {
   };
 
   const today = startOfDay(new Date());
-  const currentUserId = user?.id || user?._id;
-  const currentUserName = user
-    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "You"
-    : "You";
 
   const isHost = (meeting) =>
     currentUserId &&
@@ -452,6 +470,14 @@ const MeetingModule = () => {
       return;
     }
     const host = isHost(meeting);
+    let stream;
+    try {
+      stream = await meetingCall.startMedia();
+      setLocalMediaStream(stream);
+    } catch (err) {
+      toast.error(meetingCall.mediaError || "Camera/microphone access denied");
+      return;
+    }
     try {
       // If host and meeting not active, mark as active
       if (host && meeting.status !== "active") {
@@ -471,6 +497,9 @@ const MeetingModule = () => {
       }
     } catch (error) {
       console.error("Failed to start meeting", error);
+      meetingCall.cleanup();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      setLocalMediaStream(null);
       toast.error("Failed to start meeting");
       return;
     }
@@ -490,6 +519,11 @@ const MeetingModule = () => {
       setActiveMeeting(null);
       return;
     }
+    if (localMediaStream) {
+      localMediaStream.getTracks().forEach((t) => t.stop());
+      setLocalMediaStream(null);
+    }
+    meetingCall.cleanup();
     const meetingId = activeMeeting._id;
 
     socket.emit("meeting-leave", { meetingId });
@@ -521,6 +555,57 @@ const MeetingModule = () => {
     setChatInput("");
   };
 
+  useEffect(() => {
+    const joinCode = searchParams.get("joinCode");
+    if (joinCode) {
+      setJoinCodeInput(joinCode.toUpperCase());
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleJoinByCode = async (e) => {
+    e?.preventDefault?.();
+    const code = String(joinCodeInput || "").trim().toUpperCase();
+    if (!code) {
+      toast.error("Enter a meeting code");
+      return;
+    }
+    setJoiningByCode(true);
+    try {
+      const { data } = await axios.get(
+        `${BACKEND_URL}/meetings/join?code=${encodeURIComponent(code)}`,
+        axiosConfig
+      );
+      const meeting = data.data;
+      if (meeting.status === "cancelled") {
+        toast.error("This meeting has been cancelled");
+        return;
+      }
+      setJoinCodeInput("");
+      if (!meetings.some((m) => m._id === meeting._id)) {
+        setMeetings((prev) => [...prev, meeting]);
+      }
+      await handleEnterMeeting(meeting);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.response?.status === 404 ? "Meeting not found" : "Failed to join";
+      toast.error(msg);
+    } finally {
+      setJoiningByCode(false);
+    }
+  };
+
+  const getMeetingJoinLink = (meeting) => {
+    const code = meeting?.meeting_code || meeting?.code;
+    if (!code) return "";
+    return `${window.location.origin}/join/${code}`;
+  };
+
+  const copyMeetingLink = (meeting) => {
+    const link = getMeetingJoinLink(meeting);
+    if (!link) return;
+    navigator.clipboard.writeText(link).then(() => toast.success("Link copied to clipboard"));
+  };
+
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!activeMeeting || !socket || !chatInput.trim()) return;
@@ -537,9 +622,30 @@ const MeetingModule = () => {
     socket.emit("meeting-message", { meetingId, message });
   };
 
+  const displayLocalStream = localMediaStream || meetingCall.localStream;
+  useEffect(() => {
+    if (!displayLocalStream || !localVideoRef.current) return;
+    const video = localVideoRef.current;
+    video.srcObject = displayLocalStream;
+    video.play().catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [displayLocalStream]);
+
+  useEffect(() => {
+    Object.entries(meetingCall.remoteStreams).forEach(([userId, stream]) => {
+      const videoEl = videoRefs.current[userId];
+      if (videoEl && stream) {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(() => {});
+      }
+    });
+  }, [meetingCall.remoteStreams]);
+
   return (
     <div className="w-full h-[calc(100vh-3.5rem)] px-4 sm:px-6 lg:px-8 py-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
           <p className="text-sm text-slate-400">
@@ -554,6 +660,34 @@ const MeetingModule = () => {
           <Plus className="w-4 h-4" />
           <span>Schedule meeting</span>
         </button>
+      </div>
+
+      <div className="mb-4 p-4 bg-slate-900 rounded-xl border border-slate-700/50">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-2">
+          <Link2 className="w-4 h-4" />
+          Join by meeting code
+        </h3>
+        <p className="text-xs text-slate-400 mb-3">
+          Enter a meeting code shared by the host to join.
+        </p>
+        <form onSubmit={handleJoinByCode} className="flex gap-2">
+          <input
+            type="text"
+            value={joinCodeInput}
+            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+            placeholder="e.g. ABC12345"
+            className="flex-1 max-w-xs px-3 py-2 rounded-lg bg-slate-800 border border-slate-700/60 text-sm text-white font-mono uppercase placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            maxLength={12}
+          />
+          <button
+            type="submit"
+            disabled={joiningByCode || !joinCodeInput.trim()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition disabled:opacity-50"
+          >
+            {joiningByCode ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+            Join
+          </button>
+        </form>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 h-[calc(100%-3rem)]">
@@ -1062,162 +1196,221 @@ const MeetingModule = () => {
         </div>
       )}
 
-      {/* Live meeting room */}
+      {/* Live meeting room with video */}
       {activeMeeting && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
-          <div className="bg-slate-900 rounded-2xl border border-slate-700/60 shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/60">
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Live meeting</p>
-                <h2 className="text-sm font-semibold text-white">
-                  {activeMeeting.title}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={handleLeaveMeeting}
-                className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-400 hover:bg-red-500/20"
-              >
-                {activeMeeting.isHost ? "End meeting" : "Leave meeting"}
-              </button>
-            </div>
+        <div className="fixed inset-0 z-40 flex flex-col bg-slate-950">
+          {(() => {
+            const remoteParticipants = roomParticipants.filter(
+              (p) => String(p.userId) !== String(currentUserId)
+            );
+            const participantCount = Math.max(1, roomParticipants.length);
+            const totalVideos = (displayLocalStream ? 1 : 0) + remoteParticipants.length;
+            const gridCols = Math.min(2, Math.max(1, totalVideos));
+            const gridRows = Math.ceil(totalVideos / gridCols) || 1;
 
-            <div className="flex-1 flex flex-col md:flex-row">
-              {/* Participants */}
-              <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-700/60 p-3 flex flex-col">
-                <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-200">
-                    Participants ({roomParticipants.length || 1})
-                  </span>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-1 pr-1 text-xs">
-                  <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-800/80">
-                    <div className="w-6 h-6 rounded-full bg-indigo-500/30 flex items-center justify-center text-[11px] text-indigo-200">
-                      {currentUserName
-                        .split(" ")
-                        .map((p) => p[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
+            return (
+              <div className="flex-1 flex flex-col bg-slate-900 min-h-0">
+                <div className="h-14 px-4 border-b border-slate-700/50 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-500/80 flex items-center justify-center">
+                      <Video className="w-4 h-4 text-white" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">
-                        {currentUserName}
-                      </p>
-                      <p className="text-[10px] text-emerald-400">
-                        You {activeMeeting.isHost ? "(host)" : ""}
-                      </p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">{activeMeeting.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-slate-500">
+                          {participantCount} participant{participantCount !== 1 ? "s" : ""}
+                        </p>
+                        {activeMeeting.meeting_code && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-xs font-mono text-slate-400">
+                              {activeMeeting.meeting_code}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyMeetingLink(activeMeeting)}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+                              title="Copy invite link"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {roomParticipants
-                    .filter((p) => String(p.userId) !== String(currentUserId))
-                    .map((p) => (
-                      <div
-                        key={p.userId}
-                        className="flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-800/40"
-                      >
-                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[11px] text-slate-100">
-                          {(p.name || "U")
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-100 truncate">
-                            {p.name || "User"}
-                          </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={meetingCall.toggleMute}
+                      title={meetingCall.isMuted ? "Unmute" : "Mute"}
+                      className={`p-2 rounded-lg transition-colors ${
+                        meetingCall.isMuted
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      }`}
+                    >
+                      {meetingCall.isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={meetingCall.toggleVideo}
+                      title={meetingCall.isVideoOff ? "Turn on camera" : "Turn off camera"}
+                      className={`p-2 rounded-lg transition-colors ${
+                        meetingCall.isVideoOff
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      }`}
+                    >
+                      {meetingCall.isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLeaveMeeting}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 flex items-center gap-1"
+                    >
+                      <PhoneOff className="w-4 h-4" />
+                      {activeMeeting.isHost ? "End meeting" : "Leave"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 flex min-h-0 overflow-hidden">
+                  <div
+                    className="flex-1 grid gap-2 p-2 min-h-0 min-w-0"
+                    style={{
+                      gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {displayLocalStream && (
+                      <div className="relative bg-slate-900 rounded-lg overflow-hidden border-2 border-slate-700 min-h-[200px]">
+                        <video
+                          ref={(el) => {
+                            localVideoRef.current = el;
+                            if (el && displayLocalStream) {
+                              el.srcObject = displayLocalStream;
+                              el.play().catch(() => {});
+                            }
+                          }}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover min-h-[200px]"
+                        />
+                        {meetingCall.isVideoOff && (
+                          <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
+                            <VideoOff className="w-8 h-8 text-slate-600" />
+                          </div>
+                        )}
+                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-white text-xs font-medium">
+                          You {meetingCall.isMuted && <MicOff className="w-3 h-3 inline ml-1" />}
                         </div>
                       </div>
-                    ))}
-                  {roomParticipants.length === 0 && (
-                    <p className="text-[11px] text-slate-500 mt-2">
-                      Waiting for others to join...
-                    </p>
-                  )}
-                </div>
-              </div>
+                    )}
 
-              {/* Chat */}
-              <div className="flex-1 flex flex-col p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <MessageCircle className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-200">
-                    Live chat (not stored)
-                  </span>
-                </div>
-                <div className="flex-1 overflow-y-auto bg-slate-950/60 rounded-lg border border-slate-800/80 p-3 space-y-2 text-xs">
-                  {chatMessages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 text-[11px]">
-                      <p>No messages yet</p>
-                      <p>Start the conversation for this meeting</p>
-                    </div>
-                  ) : (
-                    chatMessages.map((m) => {
-                      const isOwn =
-                        String(m.userId) === String(currentUserId);
+                    {remoteParticipants.map((p) => {
+                      const stream = meetingCall.remoteStreams[p.userId];
                       return (
                         <div
-                          key={m.id}
-                          className={`flex ${
-                            isOwn ? "justify-end" : "justify-start"
-                          }`}
+                          key={p.userId}
+                          className="relative bg-slate-900 rounded-lg overflow-hidden border-2 border-slate-700 min-h-[200px]"
                         >
-                          <div
-                            className={`max-w-[70%] px-3 py-2 rounded-xl ${
-                              isOwn
-                                ? "bg-indigo-600 text-white"
-                                : "bg-slate-800 text-slate-100"
-                            }`}
-                          >
-                            {!isOwn && (
-                              <p className="text-[10px] font-semibold text-indigo-300 mb-0.5">
-                                {m.name || "User"}
-                              </p>
-                            )}
-                            <p className="leading-relaxed break-words">
-                              {m.content}
-                            </p>
-                            <p className="mt-1 text-[9px] opacity-60 text-right">
-                              {new Date(m.createdAt).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                }
-                              )}
-                            </p>
+                          {stream ? (
+                            <video
+                              ref={(r) => {
+                                videoRefs.current[p.userId] = r;
+                              }}
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                              <div className="text-center">
+                                <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-2">
+                                  <span className="text-indigo-400 font-semibold text-2xl">
+                                    {(p.name || "?").charAt(0)}
+                                  </span>
+                                </div>
+                                <p className="text-white text-sm font-medium">{p.name || "User"}</p>
+                                <p className="text-xs text-slate-400">Connecting...</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-white text-xs font-medium">
+                            {p.name || "User"}
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
+
+                  <div className="w-72 border-l border-slate-700/50 flex flex-col">
+                    <div className="p-2 border-b border-slate-700/30">
+                      <h3 className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" />
+                        Participants
+                      </h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/80">
+                        <div className="w-6 h-6 rounded-full bg-indigo-500/30 flex items-center justify-center text-[11px] text-indigo-200">
+                          {currentUserName.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-white truncate">{currentUserName}</p>
+                          <p className="text-[10px] text-emerald-400">
+                            You {activeMeeting.isHost ? "(host)" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      {roomParticipants
+                        .filter((p) => String(p.userId) !== String(currentUserId))
+                        .map((p) => (
+                          <div key={p.userId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/40">
+                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[11px] text-slate-100">
+                              {(p.name || "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                            </div>
+                            <p className="text-xs font-medium text-slate-100 truncate">{p.name || "User"}</p>
+                          </div>
+                        ))}
+                    </div>
+                    <div className="p-2 border-t border-slate-700/30">
+                      <div className="flex-1 overflow-y-auto space-y-2 mb-2 max-h-24">
+                        {chatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`text-xs ${msg.userId === currentUserId ? "text-right" : ""}`}
+                          >
+                            <span className="text-slate-500 text-[10px] mr-1">{msg.name}:</span>
+                            {msg.content}
+                          </div>
+                        ))}
+                      </div>
+                      <form onSubmit={handleSendChat} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Type a message..."
+                          className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700/60 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!chatInput.trim()}
+                          className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
+                      </form>
+                    </div>
+                  </div>
                 </div>
-                <form
-                  onSubmit={handleSendChat}
-                  className="mt-3 flex items-center gap-2"
-                >
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Type a message..."
-                    className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700/60 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!chatInput.trim()}
-                    className="px-3 py-2 rounded-lg bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:opacity-50"
-                  >
-                    Send
-                  </button>
-                </form>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       )}
     </div>

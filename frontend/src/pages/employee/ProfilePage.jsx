@@ -13,7 +13,7 @@ import {
   Key,
   Clock,
 } from "lucide-react";
-import { BACKEND_URL } from "../../../config";
+import { BACKEND_URL } from "@/config";
 
 const EmployeeProfilePage = () => {
   const [editing, setEditing] = useState(false);

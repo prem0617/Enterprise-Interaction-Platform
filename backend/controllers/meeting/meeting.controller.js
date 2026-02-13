@@ -1,5 +1,6 @@
 import Meeting from "../../models/Meeting.js";
 import { scheduleRemindersForMeeting, clearRemindersForMeeting } from "../../services/meetingReminderService.js";
+import { broadcastMeetingEvent } from "../../socket/socketServer.js";
 
 function generateMeetingCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -64,6 +65,11 @@ export const createMeeting = async (req, res) => {
     await meeting.save();
 
     scheduleRemindersForMeeting(meeting);
+    const populated = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    broadcastMeetingEvent("created", populated);
 
     return res.status(201).json({ data: meeting });
   } catch (error) {
@@ -108,6 +114,37 @@ export const getMyMeetings = async (req, res) => {
   } catch (error) {
     console.error("[MEETING] getMyMeetings error:", error);
     return res.status(500).json({ error: "Failed to fetch meetings" });
+  }
+};
+
+export const getMeetingByCode = async (req, res) => {
+  try {
+    const code = req.params.code || req.query.code;
+    const normalizedCode = String(code || "").trim().toUpperCase();
+
+    console.log("[MEETING] getMeetingByCode called, code:", normalizedCode);
+
+    if (!normalizedCode) {
+      return res.status(400).json({ error: "Meeting code is required" });
+    }
+
+    const meeting = await Meeting.findOne({ meeting_code: normalizedCode })
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    if (meeting.status === "cancelled") {
+      return res.status(410).json({ error: "This meeting has been cancelled" });
+    }
+
+    return res.json({ data: meeting });
+  } catch (error) {
+    console.error("[MEETING] getMeetingByCode error:", error);
+    return res.status(500).json({ error: "Failed to fetch meeting" });
   }
 };
 
@@ -187,6 +224,11 @@ export const updateMeeting = async (req, res) => {
     } else {
       clearRemindersForMeeting(meeting._id);
     }
+    const updated = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    broadcastMeetingEvent("updated", updated);
 
     return res.json({ data: meeting });
   } catch (error) {
@@ -213,6 +255,11 @@ export const cancelMeeting = async (req, res) => {
     await meeting.save();
 
     clearRemindersForMeeting(meeting._id);
+    const cancelled = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    broadcastMeetingEvent("cancelled", cancelled);
 
     return res.json({ data: meeting });
   } catch (error) {

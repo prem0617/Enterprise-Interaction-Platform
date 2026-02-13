@@ -4,6 +4,94 @@ import Employee from "../../models/Employee.js";
 import { sendEmail } from "../../utils/emailService.js";
 import { generateTempPassword } from "../../utils/passwordGenerator.js";
 
+// Admin: Reset password to temp and send via email
+export const adminResetPasswordToTemp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await Employee.findById(id).populate("user_id");
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    const user = employee.user_id;
+    const tempPassword = generateTempPassword();
+
+    const salt = await bcrypt.genSalt(10);
+    user.password_hash = await bcrypt.hash(tempPassword, salt);
+    await user.save();
+
+    const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/login`;
+    await sendEmail({
+      to: user.email,
+      subject: "Your Password Has Been Reset",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Password Reset by Administrator</h2>
+          <p>Hello ${user.first_name},</p>
+          <p>Your password has been reset by an administrator. Below are your new temporary credentials:</p>
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
+            <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background-color: #fff; padding: 5px; border-radius: 3px;">${tempPassword}</code></p>
+          </div>
+          <p style="color: #d9534f;"><strong>Important:</strong> Please change your password after logging in.</p>
+          <a href="${loginUrl}" style="display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0;">Login to Your Account</a>
+          <br>
+          <p style="color: #666;">Best regards,<br>HR Team</p>
+        </div>
+      `,
+    });
+
+    res.json({ message: "Temporary password sent to employee email" });
+  } catch (error) {
+    console.error("Admin reset password error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Admin: Change employee password directly
+export const adminChangePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters long",
+      });
+    }
+
+    const employee = await Employee.findById(id).populate("user_id");
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    const user = employee.user_id;
+    const salt = await bcrypt.genSalt(10);
+    user.password_hash = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    await sendEmail({
+      to: user.email,
+      subject: "Your Password Has Been Changed",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Password Changed</h2>
+          <p>Hello ${user.first_name},</p>
+          <p>Your password has been changed by an administrator.</p>
+          <p>You can now log in with your new password. If you did not authorize this change, please contact IT support immediately.</p>
+          <br>
+          <p style="color: #666;">Best regards,<br>HR Team</p>
+        </div>
+      `,
+    });
+
+    res.json({ message: "Password changed successfully" });
+  } catch (error) {
+    console.error("Admin change password error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Create Employee (Admin/HR only)
 export const createEmployee = async (req, res) => {
   try {
@@ -298,6 +386,7 @@ export const updateEmployee = async (req, res) => {
       team_lead_id,
       employee_type,
       is_active,
+      hire_date,
     } = req.body;
 
     // Find employee
@@ -318,9 +407,10 @@ export const updateEmployee = async (req, res) => {
     // Update employee details
     if (department) employee.department = department;
     if (position) employee.position = position;
-    if (team_lead_id !== undefined) employee.team_lead_id = team_lead_id;
+    if (team_lead_id !== undefined) employee.team_lead_id = team_lead_id || null;
     if (employee_type) employee.employee_type = employee_type;
     if (is_active !== undefined) employee.is_active = is_active;
+    if (hire_date) employee.hire_date = hire_date;
 
     await employee.save();
 

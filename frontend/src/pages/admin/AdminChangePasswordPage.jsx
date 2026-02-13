@@ -7,8 +7,8 @@ import {
   Loader2,
   Key,
 } from "lucide-react";
-import { BACKEND_URL } from "../../../config";
-import toast from "react-hot-toast";
+import { BACKEND_URL } from "@/config";
+import { toast } from "sonner";
 import axios from "axios";
 
 const AdminChangePasswordPage = ({ onNavigate }) => {

@@ -15,7 +15,7 @@
 // import { useAuthContext } from "../context/AuthContextProvider";
 // import toast from "react-hot-toast";
 // import axios from "axios";
-// import { BACKEND_URL } from "../../config";
+// import { BACKEND_URL } from "@/config";
 
 // const ChannelSettingsModal = ({
 //   show,
@@ -616,9 +616,9 @@ import {
   Check,
 } from "lucide-react";
 import { useAuthContext } from "../context/AuthContextProvider";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import axios from "axios";
-import { BACKEND_URL } from "../../config";
+import { BACKEND_URL } from "@/config";
 
 const ChannelSettingsModal = ({
   show,

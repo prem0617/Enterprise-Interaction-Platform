@@ -1,34 +1,39 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Users,
-  UserPlus,
   LayoutDashboard,
   MessageSquare,
   Video,
   LogOut,
   Menu,
   X,
-  ChevronRight,
   User,
-  Key,
 } from "lucide-react";
-import CreateEmployeePage from "./CreateEmployeePage";
 import { useNavigate } from "react-router-dom";
-import AllEmployees from "./AllEmployees";
+import EmployeeManagement from "./EmployeeManagement";
 import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
-import ChatInterface from "../../components/ChatInterface";
-import MeetingModule from "../../components/MeetingModule";
-import { useAuthContext } from "../../context/AuthContextProvider";
+import ChatInterface from "@/components/ChatInterface";
+import AdminMeetings from "./AdminMeetings";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 export default function AdminDashboard() {
-  const { socket } = useAuthContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("joinCode")) {
+      setCurrentPage("meetings");
+    }
+  }, [searchParams]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -44,8 +49,7 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { id: "employees", icon: Users, label: "Employees" },
-    { id: "create-employee", icon: UserPlus, label: "Create Employee" },
+    { id: "employees", icon: Users, label: "Employee Management" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
     { id: "profile", icon: User, label: "Profile" },
@@ -56,13 +60,11 @@ export default function AdminDashboard() {
       case "dashboard":
         return <Dashboard />;
       case "employees":
-        return <AllEmployees />;
-      case "create-employee":
-        return <CreateEmployeePage />;
+        return <EmployeeManagement />;
       case "messages":
         return <ChatInterface />;
       case "meetings":
-        return <MeetingModule />;
+        return <AdminMeetings />;
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":
@@ -73,137 +75,124 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen bg-background flex">
       {/* Sidebar - Desktop */}
       <aside
-        className={`hidden lg:flex flex-col bg-slate-900 border-r border-slate-700/50 transition-all duration-200 ${
+        className={cn(
+          "hidden lg:flex flex-col bg-card border-r border-border transition-all duration-200",
           sidebarCollapsed ? "w-16" : "w-60"
-        }`}
+        )}
       >
-        {/* Logo */}
-        <div className="h-14 flex items-center px-4 border-b border-slate-700/50 gap-3">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">EP</span>
+        <div className="h-14 flex items-center px-4 border-b border-border gap-3">
+          <div className="size-8 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
+            <span className="text-primary-foreground font-semibold text-xs">EP</span>
           </div>
           {!sidebarCollapsed && (
-            <span className="text-sm font-semibold text-white truncate">
-              Admin Portal
-            </span>
+            <span className="text-sm font-semibold truncate">Admin Portal</span>
           )}
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 p-2 space-y-0.5">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             return (
-              <button
+              <Button
                 key={item.id}
+                variant={isActive ? "secondary" : "ghost"}
+                className={cn(
+                  "w-full justify-start gap-3",
+                  sidebarCollapsed && "justify-center px-0"
+                )}
                 onClick={() => handleNavigation(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                }`}
                 title={sidebarCollapsed ? item.label : undefined}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
+                <Icon className="size-4 flex-shrink-0" />
                 {!sidebarCollapsed && <span>{item.label}</span>}
-              </button>
+              </Button>
             );
           })}
         </nav>
 
-        {/* User section */}
-        <div className="p-2 border-t border-slate-700/50">
-          <button
+        <Separator />
+        <div className="p-2 space-y-0.5">
+          <Button
+            variant="ghost"
+            className={cn("w-full justify-start gap-3", sidebarCollapsed && "justify-center px-0")}
             onClick={() => handleNavigation("profile")}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-colors ${sidebarCollapsed ? "justify-center" : ""}`}
             title="View Profile"
           >
-            <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-indigo-400 font-semibold text-xs">AD</span>
-            </div>
+            <Avatar className="size-8">
+              <AvatarFallback className="bg-muted text-muted-foreground text-xs">AD</AvatarFallback>
+            </Avatar>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-medium text-white truncate">Admin</p>
-                <p className="text-xs text-slate-500 truncate">View profile</p>
+                <p className="text-sm font-medium truncate">Admin</p>
+                <p className="text-xs text-muted-foreground truncate">View profile</p>
               </div>
             )}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+              sidebarCollapsed && "justify-center px-0"
+            )}
             onClick={handleLogout}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors ${
-              sidebarCollapsed ? "justify-center" : ""
-            }`}
             title="Logout"
           >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <LogOut className="size-4 flex-shrink-0" />
             {!sidebarCollapsed && <span>Logout</span>}
-          </button>
+          </Button>
         </div>
       </aside>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar - Mobile */}
-        <header className="lg:hidden h-14 bg-slate-900 border-b border-slate-700/50 flex items-center justify-between px-4">
+        <header className="lg:hidden h-14 bg-card border-b border-border flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">EP</span>
+            <div className="size-8 bg-primary rounded-md flex items-center justify-center">
+              <span className="text-primary-foreground font-semibold text-xs">EP</span>
             </div>
-            <span className="text-sm font-semibold text-white">Admin</span>
+            <span className="text-sm font-semibold">Admin</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleLogout}
-              className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-            <button
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
+              <LogOut className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-slate-400 hover:bg-slate-800 rounded-lg"
             >
-              {mobileMenuOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
-            </button>
+              {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            </Button>
           </div>
         </header>
 
-        {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-slate-900 border-b border-slate-700/50 p-2">
+          <div className="lg:hidden bg-card border-b border-border p-2 space-y-0.5">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
               return (
-                <button
+                <Button
                   key={item.id}
+                  variant={isActive ? "secondary" : "ghost"}
+                  className="w-full justify-start gap-3"
                   onClick={() => handleNavigation(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-slate-800 text-white"
-                      : "text-slate-400 hover:bg-slate-800/50"
-                  }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="size-4" />
                   <span>{item.label}</span>
-                </button>
+                </Button>
               );
             })}
           </div>
         )}
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto">
-          {renderPageContent()}
-        </main>
+        <main className="flex-1 overflow-auto">{renderPageContent()}</main>
       </div>
     </div>
   );

@@ -435,6 +435,37 @@ io.on("connection", async (socket) => {
     delete activeMeetings[key];
   });
 
+  // ---------- Meeting WebRTC signalling (mesh, 1:1 between participants) ----------
+  socket.on("meeting-webrtc-offer", (data) => {
+    const { meetingId, toUserId, sdp } = data;
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("meeting-webrtc-offer", toUserId, {
+      fromUserId: socket.userId,
+      meetingId,
+      sdp,
+    });
+  });
+
+  socket.on("meeting-webrtc-answer", (data) => {
+    const { meetingId, toUserId, sdp } = data;
+    if (!toUserId || !socket.userId || !sdp) return;
+    forwardToUser("meeting-webrtc-answer", toUserId, {
+      fromUserId: socket.userId,
+      meetingId,
+      sdp,
+    });
+  });
+
+  socket.on("meeting-webrtc-ice", (data) => {
+    const { meetingId, toUserId, candidate } = data;
+    if (!toUserId || !socket.userId) return;
+    forwardToUser("meeting-webrtc-ice", toUserId, {
+      fromUserId: socket.userId,
+      meetingId,
+      candidate,
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log(
       `Socket disconnected: ${socket.id} (userId=${normalizedUserId})`
@@ -510,5 +541,10 @@ export const clearUserCallStatus = (userId) => {
   const userIdStr = String(userId);
   delete userCallStatus[userIdStr];
 };
+
+// Broadcast meeting events to all connected clients (for real-time sync)
+export function broadcastMeetingEvent(event, meeting) {
+  io.emit("meeting-sync", { event, meeting });
+}
 
 export { app, server, io };

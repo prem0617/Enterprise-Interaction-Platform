@@ -18,7 +18,7 @@ import {
   Eye,
 } from "lucide-react";
 import axios from "axios";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import { useAuthContext } from "../context/AuthContextProvider";
 import CreateGroupModal from "./CreateGroupModal";
 import StartChatModal from "./StartChatModal";
@@ -37,7 +37,9 @@ import ActiveVideoCallBar from "./ActiveVideoCallBar";
 import IncomingVideoCallModal from "./IncomingVideoCallModal";
 import OutgoingVideoCallModal from "./OutgoingVideoCallModal";
 
-import { BACKEND_URL } from "../../config";
+import { BACKEND_URL } from "@/config";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const ChatInterface = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -978,38 +980,41 @@ const ChatInterface = () => {
     messages.find((m) => m._id === parentMessageId);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-slate-950">
+    <div className="flex h-[calc(100vh-3.5rem)] bg-background">
       {/* Sidebar */}
-      <div className="w-80 bg-slate-900 border-r border-slate-700/50 flex flex-col">
-        <div className="p-3 border-b border-slate-700/30">
+      <div className="w-80 bg-card border-r border-border flex flex-col">
+        <div className="p-3 border-b border-border">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-white">Messages</h2>
+            <h2 className="text-sm font-semibold text-foreground">Messages</h2>
             <div className="flex gap-1.5">
-              <button
+              <Button
+                size="sm"
+                className="h-7 px-2.5 text-xs"
                 onClick={() => setShowSearchModal(true)}
-                className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-500 transition"
               >
                 New Chat
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs"
                 onClick={() => setShowGroupModal(true)}
-                className="px-2.5 py-1 border border-slate-600 text-slate-300 rounded-md text-xs font-medium hover:bg-slate-800 transition"
               >
                 Group
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0.5 mb-2.5 p-0.5 bg-slate-800 rounded-lg">
+          <div className="flex gap-0.5 mb-2.5 p-0.5 bg-muted rounded-lg">
             {["all", "direct", "groups"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
                   activeTab === tab
-                    ? "bg-slate-700 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-300"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1019,13 +1024,13 @@ const ChatInterface = () => {
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
               type="text"
               value={chatSearchQuery}
               onChange={(e) => setChatSearchQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700/50 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500"
+              className="pl-8 h-8 text-xs"
             />
           </div>
         </div>
@@ -1034,16 +1039,16 @@ const ChatInterface = () => {
         <div className="flex-1 overflow-y-auto">
           {directMessageLoading ? (
             <div className="flex flex-col items-center justify-center h-full">
-              <Loader2 className="w-5 h-5 text-slate-600 animate-spin mb-2" />
-              <p className="text-xs text-slate-500">Loading...</p>
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mb-2" />
+              <p className="text-xs text-muted-foreground">Loading...</p>
             </div>
           ) : displayedChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-              <MessageCircle className="w-8 h-8 text-slate-700 mb-2" />
-              <p className="text-sm text-slate-400 font-medium">
+              <MessageCircle className="w-8 h-8 text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground font-medium">
                 {chatSearchQuery ? "No results" : "No conversations"}
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {chatSearchQuery
                   ? "Try different keywords"
                   : "Start a new chat"}
@@ -1061,16 +1066,16 @@ const ChatInterface = () => {
                     chat._id ?? `${chat.channel_type}-${chat.name ?? "chat"}`
                   }
                   onClick={() => selectChat(chat)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-slate-800/50 ${
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-border ${
                     selectedChat?._id === chat._id
-                      ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
-                      : "hover:bg-slate-800/50"
+                      ? "bg-primary/10 border-l-2 border-l-primary"
+                      : "hover:bg-muted/50"
                   }`}
                 >
                   <div className="relative">
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 ${
-                        displayInfo.isGroup ? "bg-slate-700" : "bg-indigo-500"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0 ${
+                        displayInfo.isGroup ? "bg-muted" : "bg-primary"
                       }`}
                     >
                       {displayInfo.isGroup ? (
@@ -1080,7 +1085,7 @@ const ChatInterface = () => {
                       )}
                     </div>
                     {!displayInfo.isGroup && userOnline && (
-                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
+                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-card" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1088,14 +1093,14 @@ const ChatInterface = () => {
                       <h3
                         className={`text-sm truncate ${
                           chat.unread_count > 0
-                            ? "font-semibold text-white"
-                            : "font-medium text-slate-300"
+                            ? "font-semibold text-foreground"
+                            : "font-medium text-muted-foreground"
                         }`}
                       >
                         {displayInfo.name}
                       </h3>
                       {displayInfo.isGroup && (
-                        <span className="text-[10px] text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded">
                           Group
                         </span>
                       )}
@@ -1109,7 +1114,7 @@ const ChatInterface = () => {
                         String(audioCall.remoteUser.id) && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          <span className="text-[10px] font-medium text-emerald-400">
+                          <span className="text-[10px] font-medium text-emerald-600">
                             On call
                           </span>
                         </div>
@@ -1119,7 +1124,7 @@ const ChatInterface = () => {
                       activeGroupCalls[chat._id] && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          <span className="text-[10px] font-medium text-emerald-400">
+                          <span className="text-[10px] font-medium text-emerald-600">
                             Active call
                           </span>
                         </div>
@@ -1129,14 +1134,14 @@ const ChatInterface = () => {
                         <p
                           className={`text-xs truncate flex-1 ${
                             chat.unread_count > 0
-                              ? "text-slate-300 font-medium"
-                              : "text-slate-500"
+                              ? "text-foreground font-medium"
+                              : "text-muted-foreground"
                           }`}
                         >
                           {chat.last_message.content}
                         </p>
                         {chat.unread_count > 0 && (
-                          <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] rounded-full font-semibold min-w-[18px] text-center">
+                          <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] rounded-full font-semibold min-w-[18px] text-center">
                             {chat.unread_count > 99 ? "99+" : chat.unread_count}
                           </span>
                         )}
@@ -1152,16 +1157,16 @@ const ChatInterface = () => {
 
       {/* Chat Area */}
       {selectedChat ? (
-        <div className="flex-1 flex flex-col bg-slate-900">
+        <div className="flex-1 flex flex-col bg-card">
           {/* Chat Header */}
-          <div className="h-14 px-4 border-b border-slate-700/50 flex items-center justify-between flex-shrink-0">
+          <div className="h-14 px-4 border-b border-border flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs ${
                     selectedChat.channel_type === "group"
-                      ? "bg-slate-700"
-                      : "bg-indigo-500"
+                      ? "bg-muted"
+                      : "bg-primary"
                   }`}
                 >
                   {selectedChat.channel_type === "group" ? (
@@ -1175,16 +1180,16 @@ const ChatInterface = () => {
                 </div>
                 {selectedChat.channel_type === "direct" &&
                   isUserOnline(selectedChat.other_user?._id) && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-card" />
                   )}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">
+                <h3 className="text-sm font-semibold text-foreground">
                   {selectedChat.channel_type === "group"
                     ? selectedChat.name
                     : selectedChat.other_user?.full_name}
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   {selectedChat.channel_type === "group"
                     ? `${selectedChat.member_count || 0} members${
                         selectedChat.department
@@ -1222,7 +1227,7 @@ const ChatInterface = () => {
                       groupCall.groupCallState !== "idle" ||
                       !isUserOnline(selectedChat.other_user._id)
                     }
-                    className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
                     title={
                       !isUserOnline(selectedChat.other_user._id)
                         ? "User is offline"
@@ -1291,7 +1296,7 @@ const ChatInterface = () => {
                       groupCall.groupCallState !== "idle" ||
                       !isUserOnline(selectedChat.other_user._id)
                     }
-                    className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
                     title={
                       !isUserOnline(selectedChat.other_user._id)
                         ? "User is offline"
@@ -1312,17 +1317,17 @@ const ChatInterface = () => {
               )}
               {selectedChat.channel_type === "group" && (
                 <>
-                  <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={groupCall.groupCallState !== "idle" || audioCall.callState !== "idle" || videoCall.callState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40" title="Start video call"><Video className="w-4 h-4" /></button>
+                  <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={groupCall.groupCallState !== "idle" || audioCall.callState !== "idle" || videoCall.callState !== "idle"} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40" title="Start video call"><Video className="w-4 h-4" /></button>
                   {groupCall.groupCallState === "idle" && !groupCallStatus?.active && selectedChat.user_role === "admin" && (
-                    <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={!socket || groupCall.groupCallState !== "idle" || audioCall.callState !== "idle"} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"><Phone className="w-4 h-4" /></button>
+                    <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={!socket || groupCall.groupCallState !== "idle" || audioCall.callState !== "idle"} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"><Phone className="w-4 h-4" /></button>
                   )}
-                  <button onClick={openChannelSettings} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"><Settings className="w-4 h-4" /></button>
+                  <button onClick={openChannelSettings} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"><Settings className="w-4 h-4" /></button>
                 </>
               )}
               {selectedChat?.member_count > 2 && (
                 <button
                   onClick={() => leaveGroup(selectedChat._id)}
-                  className="p-1.5 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
+                  className="p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
                 >
                   <Trash className="w-4 h-4" />
                 </button>
@@ -1389,23 +1394,23 @@ const ChatInterface = () => {
           ) : null}
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-950">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background">
             {removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId) ? (
               <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
                 <p className="text-base font-medium text-amber-400">You are removed from this group</p>
-                <p className="text-sm text-slate-500 mt-1">You will no longer see this chat after you refresh.</p>
+                <p className="text-sm text-muted-foreground mt-1">You will no longer see this chat after you refresh.</p>
               </div>
             ) : loadingMessages ? (
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
+                <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
-                <Send className="w-8 h-8 text-slate-700 mb-3" />
-                <p className="text-sm text-slate-400 font-medium">
+                <Send className="w-8 h-8 text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground font-medium">
                   Start the conversation
                 </p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {selectedChat.channel_type === "group"
                     ? `Send a message to ${selectedChat.name}`
                     : `Send a message to ${selectedChat.other_user?.first_name}`}
@@ -1433,8 +1438,8 @@ const ChatInterface = () => {
                         <div
                           className={`px-3.5 py-2 rounded-xl text-sm ${
                             message.is_own
-                              ? "bg-indigo-600 text-white"
-                              : "bg-slate-800 border border-slate-700/50 text-slate-100"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted border border-border text-foreground"
                           }`}
                         >
                           {parentMessage && (
@@ -1448,7 +1453,7 @@ const ChatInterface = () => {
                               <p
                                 className={`text-[11px] font-medium ${
                                   message.is_own
-                                    ? "text-white/70"
+                                    ? "text-primary-foreground/70"
                                     : "text-indigo-400"
                                 }`}
                               >
@@ -1459,8 +1464,8 @@ const ChatInterface = () => {
                               <p
                                 className={`text-[11px] truncate ${
                                   message.is_own
-                                    ? "text-white/60"
-                                    : "text-slate-500"
+                                    ? "text-primary-foreground/60"
+                                    : "text-muted-foreground"
                                 }`}
                               >
                                 {parentMessage.content}
@@ -1477,8 +1482,8 @@ const ChatInterface = () => {
                           <div
                             className={`flex items-center gap-1 justify-end mt-1 ${
                               message.is_own
-                                ? "text-white/60"
-                                : "text-slate-500"
+                                ? "text-primary-foreground/60"
+                                : "text-muted-foreground"
                             }`}
                           >
                             <span className="text-[10px]">
@@ -1499,7 +1504,7 @@ const ChatInterface = () => {
                                     )}
                                 </button>
                               ) : (
-                                <Check className="w-3 h-3 text-white/40" />
+                                <Check className="w-3 h-3 text-primary-foreground/40" />
                               ))}
                           </div>
                         </div>
@@ -1509,9 +1514,9 @@ const ChatInterface = () => {
                             message.is_own
                               ? "left-0 -translate-x-8"
                               : "right-0 translate-x-8"
-                          } p-1 bg-slate-800 border border-slate-700/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-700 shadow-sm`}
+                          } p-1 bg-muted border border-border rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted/80 shadow-sm`}
                         >
-                          <Reply className="w-3 h-3 text-slate-400" />
+                          <Reply className="w-3 h-3 text-muted-foreground" />
                         </button>
                       </div>
                     </div>
@@ -1524,33 +1529,33 @@ const ChatInterface = () => {
 
           {/* Reply Bar */}
           {replyingTo && (
-            <div className="px-4 py-2 bg-slate-800/50 border-t border-slate-700/50 flex items-center justify-between">
+            <div className="px-4 py-2 bg-muted/50 border-t border-border flex items-center justify-between">
               <div className="flex-1 flex items-start gap-2">
-                <Reply className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
+                <Reply className="w-3.5 h-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-300">
+                  <p className="text-xs font-medium text-foreground">
                     Replying to{" "}
                     {replyingTo.is_own
                       ? "yourself"
                       : replyingTo.sender?.first_name || "User"}
                   </p>
-                  <p className="text-xs text-slate-500 truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {replyingTo.content}
                   </p>
                 </div>
               </div>
               <button
                 onClick={cancelReply}
-                className="p-1 hover:bg-slate-700 rounded transition"
+                className="p-1 hover:bg-muted rounded transition"
               >
-                <X className="w-3.5 h-3.5 text-slate-500" />
+                <X className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
           )}
 
           {/* Message Input - hidden when user was removed from this group */}
           {!(removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId)) && (
-          <div className="px-4 py-3 border-t border-slate-700/50 bg-slate-900">
+          <div className="px-4 py-3 border-t border-border bg-card">
             {!socketConnected && (
               <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
                 <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
@@ -1558,14 +1563,16 @@ const ChatInterface = () => {
               </div>
             )}
             <form onSubmit={sendMessage} className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className="p-1.5 text-slate-500 hover:bg-slate-800 rounded-lg disabled:opacity-40"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
                 disabled={!socketConnected}
               >
                 <Paperclip className="w-4 h-4" />
-              </button>
-              <input
+              </Button>
+              <Input
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
@@ -1577,58 +1584,56 @@ const ChatInterface = () => {
                     : "Type a message..."
                 }
                 disabled={sendingMessage || !socketConnected}
-                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500 disabled:opacity-50"
+                className="flex-1"
               />
-              <button
+              <Button
                 type="submit"
+                size="icon"
                 disabled={
                   !newMessage.trim() || sendingMessage || !socketConnected
                 }
-                className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {sendingMessage ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-              </button>
+              </Button>
             </form>
           </div>
           )}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950">
-          <MessageCircle className="w-12 h-12 text-slate-700 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-1">
+        <div className="flex-1 flex flex-col items-center justify-center bg-background">
+          <MessageCircle className="w-12 h-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-1">
             Select a conversation
           </h3>
-          <p className="text-sm text-slate-400 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             Choose a chat or start a new one
           </p>
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-500 transition"
-          >
+          <Button onClick={() => setShowSearchModal(true)}>
             Start New Chat
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Seen By Modal */}
       {showSeenByModal && selectedMessageSeenBy && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-xl max-w-sm w-full max-h-[70vh] flex flex-col">
-            <div className="px-4 py-3 border-b border-slate-700/30 flex items-center justify-between">
+          <div className="bg-card rounded-xl border border-border shadow-xl max-w-sm w-full max-h-[70vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-semibold text-white">Seen by</h3>
+                <Eye className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Seen by</h3>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowSeenByModal(false)}
-                className="p-1 hover:bg-slate-800 rounded-lg"
               >
-                <X className="w-4 h-4 text-slate-400" />
-              </button>
+                <X className="w-4 h-4 text-muted-foreground" />
+              </Button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               {selectedMessageSeenBy.seen_by?.length > 0 ? (
@@ -1636,20 +1641,20 @@ const ChatInterface = () => {
                   {selectedMessageSeenBy.seen_by.map((seen, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-800/50"
+                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50"
                     >
-                      <div className="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
-                        <span className="text-indigo-400 font-medium text-[10px]">
+                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-primary font-medium text-[10px]">
                           {seen.user_id?.first_name?.[0] || "U"}
                           {seen.user_id?.last_name?.[0] || ""}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">
+                        <p className="text-sm font-medium text-foreground truncate">
                           {seen.user_id?.first_name || "Unknown"}{" "}
                           {seen.user_id?.last_name || ""}
                         </p>
-                        <p className="text-[10px] text-slate-500">
+                        <p className="text-[10px] text-muted-foreground">
                           {new Date(seen.seen_at).toLocaleString("en-US", {
                             month: "short",
                             day: "numeric",
@@ -1664,8 +1669,8 @@ const ChatInterface = () => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Eye className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">
+                  <Eye className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
                     No one has seen this yet
                   </p>
                 </div>

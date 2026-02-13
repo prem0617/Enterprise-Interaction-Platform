@@ -1,8 +1,9 @@
 import { Route, Routes } from "react-router-dom";
 import "./App.css";
 
-import EmployeeLogin from "./pages/employee/EmployeeLogin";
-import AdminLoginPage from "./pages/admin/AdminLoginPage";
+import JoinMeetingPage from "@/pages/JoinMeetingPage";
+import EmployeeLogin from "@/pages/employee/EmployeeLogin";
+import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import EmployeeProfilePage from "./pages/employee/ProfilePage";
@@ -13,7 +14,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
 
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
   return (
@@ -37,6 +38,8 @@ function App() {
             </PublicRoute>
           }
         />
+
+        <Route path="/join/:code" element={<JoinMeetingPage />} />
 
         {/* EMPLOYEE PROTECTED */}
         <Route
@@ -86,34 +89,7 @@ function App() {
         />
       </Routes>
 
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: "#1e293b",
-            color: "#f1f5f9",
-            border: "1px solid #334155",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            fontSize: "14px",
-            fontWeight: "500",
-            boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2)",
-          },
-          success: {
-            iconTheme: {
-              primary: "#10b981",
-              secondary: "#1e293b",
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: "#ef4444",
-              secondary: "#1e293b",
-            },
-          },
-        }}
-      />
+      <Toaster position="top-right" richColors duration={3000} />
     </AuthContextProvider>
   );
 }

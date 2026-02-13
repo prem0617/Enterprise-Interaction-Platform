@@ -44,8 +44,9 @@ export default function AuthContextProvider({ children }) {
   }, []);
 
   // Create socket connection when user is available
+  const userId = user?.id || user?._id;
   useEffect(() => {
-    if (!user || !user.id) {
+    if (!user || !userId) {
       // No user — tear down any existing socket
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -62,7 +63,7 @@ export default function AuthContextProvider({ children }) {
       socketRef.current = null;
     }
 
-    const newSocket = createSocketConnection(user.id);
+    const newSocket = createSocketConnection(userId);
     socketRef.current = newSocket;
     setSocket(newSocket);
 
@@ -74,7 +75,7 @@ export default function AuthContextProvider({ children }) {
         socketRef.current = null;
       }
     };
-  }, [user?.id]); // Only reconnect when user.id changes
+  }, [userId]); // Only reconnect when user.id changes
 
   return (
     <AuthContext.Provider
