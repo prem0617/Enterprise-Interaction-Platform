@@ -53,7 +53,7 @@ const AllEmployees = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3 text-slate-400">
+        <div className="flex items-center gap-3 text-zinc-400">
           <Loader2 className="w-5 h-5 animate-spin" />
           <span className="text-sm">Loading employees...</span>
         </div>
@@ -67,33 +67,33 @@ const AllEmployees = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-white mb-1">Employees</h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Manage and view all employees in your organization
           </p>
         </div>
-        <span className="text-sm font-medium text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
+        <span className="text-sm font-medium text-zinc-400 bg-zinc-800 px-3 py-1 rounded-full">
           {filteredEmployees.length} total
         </span>
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-900 rounded-xl border border-slate-700/50 p-4 mb-6">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -tranzinc-y-1/2 h-4 w-4 text-zinc-500" />
             <input
               type="text"
               placeholder="Search by name or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-slate-600 rounded-lg text-sm bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-500"
+              className="w-full pl-9 pr-3 py-2 border border-zinc-600 rounded-lg text-sm bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-500"
             />
           </div>
 
           <select
             value={filterDepartment}
             onChange={(e) => setFilterDepartment(e.target.value)}
-            className="px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300 bg-slate-800"
+            className="px-3 py-2 border border-zinc-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-300 bg-zinc-800"
           >
             <option value="all">All Departments</option>
             {departments.map((dept) => (
@@ -106,7 +106,7 @@ const AllEmployees = () => {
           {/* <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300 bg-slate-800"
+            className="px-3 py-2 border border-zinc-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-300 bg-zinc-800"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
@@ -117,43 +117,43 @@ const AllEmployees = () => {
 
       {/* Table */}
       {filteredEmployees.length === 0 ? (
-        <div className="bg-slate-900 rounded-xl border border-slate-700/50 p-12 text-center">
-          <Users className="mx-auto h-10 w-10 text-slate-600 mb-3" />
+        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 p-12 text-center">
+          <Users className="mx-auto h-10 w-10 text-zinc-600 mb-3" />
           <h3 className="text-sm font-medium text-white mb-1">
             No employees found
           </h3>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Try adjusting your search or filter criteria
           </p>
         </div>
       ) : (
-        <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 overflow-hidden">
           {/* Desktop Table */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-700/30">
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-zinc-700/30">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Employee
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Department
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Position
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Team Lead
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Hire Date
                   </th>
-                  {/* <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  {/* <th className="px-5 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Status
                   </th> */}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700/30">
+              <tbody className="divide-y divide-zinc-700/30">
                 {filteredEmployees.map((employee) => {
                   const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                   const teamLeadName = employee.team_lead_id
@@ -163,7 +163,7 @@ const AllEmployees = () => {
                   return (
                     <tr
                       key={employee._id}
-                      className="hover:bg-slate-800/50 transition-colors"
+                      className="hover:bg-zinc-800/50 transition-colors"
                     >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
@@ -177,24 +177,24 @@ const AllEmployees = () => {
                             <p className="text-sm font-medium text-white">
                               {fullName}
                             </p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-zinc-500">
                               {employee.user_id?.email}
                             </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-5 py-3">
-                        <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-slate-800 text-slate-300">
+                        <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300">
                           {employee?.department}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-sm text-slate-400">
+                      <td className="px-5 py-3 text-sm text-zinc-400">
                         {employee?.position}
                       </td>
-                      <td className="px-5 py-3 text-sm text-slate-400">
+                      <td className="px-5 py-3 text-sm text-zinc-400">
                         {teamLeadName}
                       </td>
-                      <td className="px-5 py-3 text-sm text-slate-400">
+                      <td className="px-5 py-3 text-sm text-zinc-400">
                         {new Date(employee?.hire_date).toLocaleDateString()}
                       </td>
                       {/* <td className="px-5 py-3">
@@ -216,7 +216,7 @@ const AllEmployees = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div className="lg:hidden divide-y divide-slate-700/30">
+          <div className="lg:hidden divide-y divide-zinc-700/30">
             {filteredEmployees.map((employee) => {
               const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
               const teamLeadName = employee.team_lead_id
@@ -226,7 +226,7 @@ const AllEmployees = () => {
               return (
                 <div
                   key={employee._id}
-                  className="p-4 hover:bg-slate-800/50 transition-colors"
+                  className="p-4 hover:bg-zinc-800/50 transition-colors"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -240,7 +240,7 @@ const AllEmployees = () => {
                         <p className="text-sm font-medium text-white">
                           {fullName}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-zinc-500">
                           {employee.user_id?.email}
                         </p>
                       </div>
@@ -257,26 +257,26 @@ const AllEmployees = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-slate-500">Department</span>
-                      <p className="font-medium text-slate-300">
+                      <span className="text-zinc-500">Department</span>
+                      <p className="font-medium text-zinc-300">
                         {employee?.department}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500">Position</span>
-                      <p className="font-medium text-slate-300">
+                      <span className="text-zinc-500">Position</span>
+                      <p className="font-medium text-zinc-300">
                         {employee?.position}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500">Team Lead</span>
-                      <p className="font-medium text-slate-300">
+                      <span className="text-zinc-500">Team Lead</span>
+                      <p className="font-medium text-zinc-300">
                         {teamLeadName}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500">Hire Date</span>
-                      <p className="font-medium text-slate-300">
+                      <span className="text-zinc-500">Hire Date</span>
+                      <p className="font-medium text-zinc-300">
                         {new Date(employee.hire_date).toLocaleDateString()}
                       </p>
                     </div>

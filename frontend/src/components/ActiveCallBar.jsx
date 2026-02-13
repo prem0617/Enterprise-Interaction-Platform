@@ -21,8 +21,8 @@ const ActiveCallBar = ({
   if (!remoteUser) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] w-full max-w-sm px-4">
-      <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-xl shadow-black/30 overflow-hidden">
+    <div className="fixed bottom-4 left-1/2 -tranzinc-x-1/2 z-[90] w-full max-w-sm px-4">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 shadow-xl shadow-black/30 overflow-hidden">
         <audio ref={remoteAudioRef} autoPlay playsInline />
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -39,7 +39,7 @@ const ActiveCallBar = ({
               <h3 className="font-medium text-white text-sm truncate max-w-[160px]">
                 {remoteUser.name}
               </h3>
-              <p className="text-slate-400 text-xs">
+              <p className="text-zinc-400 text-xs">
                 {isConnecting ? "Connecting..." : "In call"}
               </p>
             </div>

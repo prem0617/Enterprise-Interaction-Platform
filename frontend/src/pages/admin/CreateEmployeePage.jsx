@@ -198,10 +198,10 @@ const CreateEmployeePage = () => {
   }, []);
 
   const inputClasses =
-    "w-full px-3 py-2 border border-slate-600 rounded-lg text-sm bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-500 transition";
+    "w-full px-3 py-2 border border-zinc-600 rounded-lg text-sm bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-500 transition";
   const selectClasses =
-    "w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-slate-800 text-slate-300 transition appearance-none cursor-pointer";
-  const labelClasses = "block text-sm font-medium text-slate-300 mb-1.5";
+    "w-full px-3 py-2 border border-zinc-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-zinc-800 text-zinc-300 transition appearance-none cursor-pointer";
+  const labelClasses = "block text-sm font-medium text-zinc-300 mb-1.5";
 
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto">
@@ -210,12 +210,12 @@ const CreateEmployeePage = () => {
         <h1 className="text-xl font-semibold text-white mb-1">
           Create Employee
         </h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-zinc-400">
           Add a new team member to your organization
         </p>
       </div>
 
-      <div className="bg-slate-900 rounded-xl border border-slate-700/50">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/50">
         <div className="p-5 lg:p-6 space-y-5">
           {error && (
             <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
@@ -358,7 +358,7 @@ const CreateEmployeePage = () => {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -375,7 +375,7 @@ const CreateEmployeePage = () => {
             <button
               onClick={handleClear}
               disabled={loading}
-              className="px-4 py-2.5 border border-slate-600 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 transition disabled:opacity-50"
+              className="px-4 py-2.5 border border-zinc-600 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 transition disabled:opacity-50"
             >
               Clear
             </button>
@@ -383,11 +383,11 @@ const CreateEmployeePage = () => {
         </div>
 
         {/* Info Footer */}
-        <div className="bg-slate-800/50 border-t border-slate-700/50 p-5 rounded-b-xl">
+        <div className="bg-zinc-800/50 border-t border-zinc-700/50 p-5 rounded-b-xl">
           <div className="flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-slate-500">
-              <p className="font-medium text-slate-400 mb-1">What happens next?</p>
+            <Info className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-zinc-500">
+              <p className="font-medium text-zinc-400 mb-1">What happens next?</p>
               <ul className="list-disc list-inside space-y-0.5">
                 <li>User account created with provided credentials</li>
                 <li>Employee record linked to user account</li>

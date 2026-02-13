@@ -119,29 +119,29 @@ const ChangePasswordPage = () => {
     return "Strong";
   };
 
-  const inputClasses = "w-full px-3 py-2 border border-slate-600 rounded-lg text-sm bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-500 transition";
+  const inputClasses = "w-full px-3 py-2 border border-zinc-600 rounded-lg text-sm bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-500 transition";
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 flex items-center justify-center">
+    <div className="min-h-screen bg-zinc-950 p-4 flex items-center justify-center">
       <div className="w-full max-w-md">
         <button
           onClick={() => (window.location.href = "/profile")}
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-6 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Profile
         </button>
 
-        <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-5 border-b border-slate-700/30">
+          <div className="px-6 py-5 border-b border-zinc-700/30">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-800 rounded-lg flex items-center justify-center">
-                <Key className="w-4 h-4 text-slate-400" />
+              <div className="w-9 h-9 bg-zinc-800 rounded-lg flex items-center justify-center">
+                <Key className="w-4 h-4 text-zinc-400" />
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-white">Change Password</h1>
-                <p className="text-xs text-slate-500">Keep your account secure</p>
+                <p className="text-xs text-zinc-500">Keep your account secure</p>
               </div>
             </div>
           </div>
@@ -155,7 +155,7 @@ const ChangePasswordPage = () => {
 
             {/* Current Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">
                 Current Password
               </label>
               <div className="relative">
@@ -171,7 +171,7 @@ const ChangePasswordPage = () => {
                 <button
                   type="button"
                   onClick={() => toggleShowPassword("current")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
                   {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -180,7 +180,7 @@ const ChangePasswordPage = () => {
 
             {/* New Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">
                 New Password
               </label>
               <div className="relative">
@@ -196,7 +196,7 @@ const ChangePasswordPage = () => {
                 <button
                   type="button"
                   onClick={() => toggleShowPassword("new")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
                   {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -205,10 +205,10 @@ const ChangePasswordPage = () => {
               {formData.newPassword && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-500">Strength</span>
-                    <span className="text-xs font-medium text-slate-300">{getStrengthText()}</span>
+                    <span className="text-xs text-zinc-500">Strength</span>
+                    <span className="text-xs font-medium text-zinc-300">{getStrengthText()}</span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div className="w-full bg-zinc-800 rounded-full h-1.5">
                     <div
                       className={`h-1.5 rounded-full transition-all duration-300 ${getStrengthColor()}`}
                       style={{ width: `${(passwordStrength / 5) * 100}%` }}
@@ -220,7 +220,7 @@ const ChangePasswordPage = () => {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">
                 Confirm New Password
               </label>
               <div className="relative">
@@ -236,7 +236,7 @@ const ChangePasswordPage = () => {
                 <button
                   type="button"
                   onClick={() => toggleShowPassword("confirm")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
                   {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -247,8 +247,8 @@ const ChangePasswordPage = () => {
             </div>
 
             {/* Requirements */}
-            <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-3">
-              <p className="text-xs font-medium text-slate-400 mb-2">Requirements</p>
+            <div className="bg-zinc-800/50 border border-zinc-700/30 rounded-lg p-3">
+              <p className="text-xs font-medium text-zinc-400 mb-2">Requirements</p>
               <div className="space-y-1">
                 <RequirementItem text="At least 8 characters" met={formData.newPassword.length >= 8} />
                 <RequirementItem text="One uppercase letter (A-Z)" met={/[A-Z]/.test(formData.newPassword)} />
@@ -262,7 +262,7 @@ const ChangePasswordPage = () => {
             <button
               onClick={handleSubmit}
               disabled={loading || success}
-              className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -289,12 +289,12 @@ const RequirementItem = ({ text, met }) => (
   <div className="flex items-center gap-2">
     <div
       className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
-        met ? "bg-emerald-500" : "bg-slate-700"
+        met ? "bg-emerald-500" : "bg-zinc-700"
       }`}
     >
       {met && <CheckCircle className="w-2.5 h-2.5 text-white" />}
     </div>
-    <span className={`text-xs ${met ? "text-slate-300" : "text-slate-500"}`}>{text}</span>
+    <span className={`text-xs ${met ? "text-zinc-300" : "text-zinc-500"}`}>{text}</span>
   </div>
 );
 

@@ -74,9 +74,9 @@ const EmployeeProfilePage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-slate-400">
-          <div className="w-5 h-5 border-2 border-slate-600 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-zinc-400">
+          <div className="w-5 h-5 border-2 border-zinc-600 border-t-indigo-500 rounded-full animate-spin" />
           <span className="text-sm">Loading profile...</span>
         </div>
       </div>
@@ -84,21 +84,21 @@ const EmployeeProfilePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 lg:p-8">
+    <div className="min-h-screen bg-zinc-950 p-4 lg:p-8">
       <div className="max-w-3xl mx-auto">
         {/* Back Button */}
         <button
           onClick={() => (window.location.href = "/")}
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-6 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Dashboard
         </button>
 
         {/* Profile Card */}
-        <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 overflow-hidden">
           {/* Profile Header */}
-          <div className="px-6 py-5 border-b border-slate-700/30">
+          <div className="px-6 py-5 border-b border-zinc-700/30">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center">
@@ -128,7 +128,7 @@ const EmployeeProfilePage = () => {
               </div>
               {/* <button
                 onClick={() => (editing ? handleSave() : setEditing(true))}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-800 transition-colors"
               >
                 {editing ? (
                   <>
@@ -198,14 +198,14 @@ const EmployeeProfilePage = () => {
             </div>
 
             {/* Security */}
-            <div className="pt-4 border-t border-slate-700/30">
+            <div className="pt-4 border-t border-zinc-700/30">
               <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Key className="w-4 h-4 text-slate-500" />
+                <Key className="w-4 h-4 text-zinc-500" />
                 Security
               </h2>
               <button
                 onClick={() => (window.location.href = "/change-password")}
-                className="px-4 py-2 text-sm font-medium border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium border border-zinc-600 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
               >
                 <Key className="w-3.5 h-3.5" />
                 Change Password
@@ -216,7 +216,7 @@ const EmployeeProfilePage = () => {
 
         {/* Permissions */}
         {userData?.permissions?.length > 0 && (
-          <div className="mt-4 bg-slate-900 rounded-xl border border-slate-700/50 p-5">
+          <div className="mt-4 bg-zinc-900 rounded-xl border border-zinc-700/50 p-5">
             <h3 className="text-sm font-semibold text-white mb-3">
               Permissions
             </h3>
@@ -224,7 +224,7 @@ const EmployeeProfilePage = () => {
               {userData?.permissions?.slice(0, 8).map((permission, index) => (
                 <span
                   key={index}
-                  className="px-2 py-1 bg-slate-800 text-slate-400 text-xs font-medium rounded-md border border-slate-700/50"
+                  className="px-2 py-1 bg-zinc-800 text-zinc-400 text-xs font-medium rounded-md border border-zinc-700/50"
                 >
                   {permission}
                 </span>
@@ -246,10 +246,10 @@ const InfoCard = ({
   onChange,
   type = "text",
 }) => (
-  <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/30">
+  <div className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30">
     <div className="flex items-center gap-1.5 mb-1">
-      <Icon className="w-3.5 h-3.5 text-slate-500" />
-      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <Icon className="w-3.5 h-3.5 text-zinc-500" />
+      <span className="text-xs font-medium text-zinc-500">{label}</span>
     </div>
     {editing && name ? (
       <input
@@ -257,7 +257,7 @@ const InfoCard = ({
         name={name}
         value={value}
         onChange={onChange}
-        className="w-full px-2 py-1 border border-slate-600 rounded text-sm bg-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="w-full px-2 py-1 border border-zinc-600 rounded text-sm bg-zinc-800 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
     ) : (
       <p className="text-sm font-medium text-white">{value || "Not set"}</p>

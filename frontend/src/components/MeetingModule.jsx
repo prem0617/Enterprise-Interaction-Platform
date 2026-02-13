@@ -27,6 +27,10 @@ import {
   Pin,
   PinOff,
   Send,
+  Trash2,
+  Search,
+  Filter,
+  Radio,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -105,6 +109,39 @@ function getInitials(name) {
     .slice(0, 2)
     .toUpperCase();
 }
+
+function getRelativeTime(dateStr) {
+  if (!dateStr) return "";
+  const now = Date.now();
+  const target = new Date(dateStr).getTime();
+  const diffMs = target - now;
+  const absDiff = Math.abs(diffMs);
+  const minutes = Math.floor(absDiff / 60000);
+  const hours = Math.floor(absDiff / 3600000);
+  const days = Math.floor(absDiff / 86400000);
+
+  if (diffMs > 0) {
+    // Future
+    if (minutes < 1) return "starting now";
+    if (minutes < 60) return `in ${minutes} min`;
+    if (hours < 24) return `in ${hours}h ${minutes % 60}m`;
+    return `in ${days} day${days !== 1 ? "s" : ""}`;
+  } else {
+    // Past
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days} day${days !== 1 ? "s" : ""} ago`;
+  }
+}
+
+const STATUS_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "scheduled", label: "Upcoming" },
+  { value: "active", label: "Active" },
+  { value: "ended", label: "Ended" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 // ======================== Meeting Room Component ========================
 const MeetingRoom = ({
@@ -766,6 +803,8 @@ const MeetingModule = () => {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [localMediaStream, setLocalMediaStream] = useState(null);
+  const [meetingSearchQuery, setMeetingSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
@@ -833,15 +872,26 @@ const MeetingModule = () => {
     return map;
   }, [meetings]);
 
-  const selectedDateMeetings = useMemo(
-    () =>
-      meetings.filter((m) =>
-        m.scheduled_at
-          ? isSameDay(new Date(m.scheduled_at), selectedDate)
-          : false
-      ),
-    [meetings, selectedDate]
-  );
+  const selectedDateMeetings = useMemo(() => {
+    let filtered = meetings.filter((m) =>
+      m.scheduled_at
+        ? isSameDay(new Date(m.scheduled_at), selectedDate)
+        : false
+    );
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((m) => m.status === statusFilter);
+    }
+    if (meetingSearchQuery.trim()) {
+      const q = meetingSearchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (m) =>
+          m.title?.toLowerCase().includes(q) ||
+          m.description?.toLowerCase().includes(q) ||
+          m.meeting_code?.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [meetings, selectedDate, statusFilter, meetingSearchQuery]);
 
   // ---- Data loading ----
   const loadMeetings = async (dateAnchor) => {
@@ -881,6 +931,9 @@ const MeetingModule = () => {
     const handleSync = ({ event, meeting }) => {
       if (!meeting) return;
       setMeetings((prev) => {
+        if (event === "deleted") {
+          return prev.filter((m) => m._id !== meeting._id);
+        }
         // Prevent duplicates — if the meeting already exists, update it
         const exists = prev.some((m) => m._id === meeting._id);
         if (event === "created") {
@@ -1271,6 +1324,22 @@ const MeetingModule = () => {
     }
   };
 
+  // ---- Delete meeting permanently ----
+  const handleDeleteMeeting = async (meeting) => {
+    if (!window.confirm("Permanently delete this meeting? This cannot be undone.")) return;
+    try {
+      await axios.delete(
+        `${BACKEND_URL}/meetings/${meeting._id}/permanent`,
+        axiosConfig
+      );
+      setMeetings((prev) => prev.filter((m) => m._id !== meeting._id));
+      toast.success("Meeting deleted");
+    } catch (error) {
+      console.error("Failed to delete meeting", error);
+      toast.error(error.response?.data?.error || "Failed to delete meeting");
+    }
+  };
+
   // ---- Calendar helpers ----
   const changeMonth = (offset) => {
     setCurrentMonth((prev) => {
@@ -1295,10 +1364,15 @@ const MeetingModule = () => {
   };
 
   const canEnterMeeting = (meeting) => {
+    if (meeting.status === "cancelled" || meeting.status === "ended") return false;
+    // Active meetings can always be entered
+    if (meeting.status === "active") return true;
+    // Scheduled meetings: allow entry 5 minutes before start, or if host
     if (!meeting.scheduled_at) return false;
     const start = new Date(meeting.scheduled_at).getTime();
     const now = Date.now();
-    return now >= start && meeting.status !== "cancelled";
+    const earlyJoinMs = 5 * 60 * 1000; // 5 minutes early
+    return now >= start - earlyJoinMs;
   };
 
   // ---- Enter / Leave meeting room ----
@@ -1356,6 +1430,10 @@ const MeetingModule = () => {
       setActiveMeeting(null);
       return;
     }
+    // Confirm before ending if host
+    if (activeMeeting.isHost) {
+      if (!window.confirm("End this meeting for all participants?")) return;
+    }
     if (localMediaStream) {
       localMediaStream.getTracks().forEach((t) => t.stop());
       setLocalMediaStream(null);
@@ -1411,10 +1489,17 @@ const MeetingModule = () => {
         toast.error("This meeting has been cancelled");
         return;
       }
-      setJoinCodeInput("");
-      if (!meetings.some((m) => m._id === meeting._id)) {
-        setMeetings((prev) => [...prev, meeting]);
+      if (meeting.status === "ended") {
+        toast.error("This meeting has already ended");
+        return;
       }
+      setJoinCodeInput("");
+      // Update meetings list with the refreshed meeting (user now in participants)
+      setMeetings((prev) => {
+        const exists = prev.some((m) => m._id === meeting._id);
+        if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
+        return [...prev, meeting];
+      });
       await handleEnterMeeting(meeting);
     } catch (err) {
       const msg =
@@ -1628,7 +1713,7 @@ const MeetingModule = () => {
                 return (
                   <div
                     key={`blank-${idx}`}
-                    className="h-45 rounded-lg bg-zinc-900/50"
+                    className="h-[5.5rem] rounded-lg bg-zinc-900/50"
                   />
                 );        
               }
@@ -1644,7 +1729,7 @@ const MeetingModule = () => {
                   type="button"
                   onClick={() => setSelectedDate(startOfDay(day))}
                   className={[
-                    "h-30 rounded-lg flex flex-col items-center justify-center border text-sm font-medium transition-all cursor-pointer",
+                    "h-[5.5rem] rounded-lg flex flex-col items-center justify-center border text-sm font-medium transition-all cursor-pointer",
                     isSelected
                       ? "border-indigo-500 bg-indigo-500/20 text-white shadow-sm shadow-indigo-500/20"
                       : "border-zinc-700/40 text-zinc-200 hover:bg-zinc-800/80 hover:border-zinc-600",
@@ -1697,6 +1782,29 @@ const MeetingModule = () => {
             </div>
           </div>
 
+          {/* Search & Filter bar */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              <input
+                type="text"
+                value={meetingSearchQuery}
+                onChange={(e) => setMeetingSearchQuery(e.target.value)}
+                placeholder="Search meetings..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              {STATUS_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+
           {selectedDateMeetings.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
               <CalendarDays className="w-8 h-8 text-zinc-700 mb-2" />
@@ -1727,10 +1835,12 @@ const MeetingModule = () => {
                       minute: "2-digit",
                     })
                   : "--";
+                const isActive = m.status === "active";
                 const isCancelled = m.status === "cancelled";
                 const isEnded = m.status === "ended";
                 const isPast =
-                  d && d.getTime() < Date.now() && !isCancelled && !isEnded;
+                  d && d.getTime() < Date.now() && !isCancelled && !isEnded && !isActive;
+                const relTime = d ? getRelativeTime(d) : "";
                 const participants = (m.participants || []).map(
                   (p) =>
                     p.full_name ||
@@ -1767,7 +1877,15 @@ const MeetingModule = () => {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        {isCancelled ? (
+                        {isActive ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/30 inline-flex items-center gap-1">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                            </span>
+                            Live
+                          </span>
+                        ) : isCancelled ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/30">
                             Cancelled
                           </span>
@@ -1783,6 +1901,9 @@ const MeetingModule = () => {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                             Upcoming
                           </span>
+                        )}
+                        {relTime && (
+                          <span className="text-[10px] text-zinc-500">{relTime}</span>
                         )}
                         <div className="flex gap-1">
                           {m.meeting_code && (
@@ -1812,6 +1933,17 @@ const MeetingModule = () => {
                               className="px-2 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20"
                             >
                               Cancel
+                            </button>
+                          )}
+                          {(isCancelled || isEnded) && isHost(m) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMeeting(m)}
+                              className="px-2 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20 inline-flex items-center gap-1"
+                              title="Delete permanently"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Delete
                             </button>
                           )}
                           {canEnterMeeting(m) && isParticipant(m) && (

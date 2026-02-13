@@ -87,6 +87,22 @@ export const getMyMeetings = async (req, res) => {
     const userId = String(req.userId);
     const { from, to, status } = req.query;
 
+    // Auto-end meetings that are past their scheduled time + duration
+    const now = new Date();
+    await Meeting.updateMany(
+      {
+        status: "scheduled",
+        scheduled_at: { $ne: null },
+        $expr: {
+          $lt: [
+            { $add: ["$scheduled_at", { $multiply: ["$duration_minutes", 60000] }] },
+            now,
+          ],
+        },
+      },
+      { $set: { status: "ended", ended_at: now } }
+    );
+
     const query = {
       $or: [
         { host_id: userId },
@@ -121,6 +137,7 @@ export const getMeetingByCode = async (req, res) => {
   try {
     const code = req.params.code || req.query.code;
     const normalizedCode = String(code || "").trim().toUpperCase();
+    const userId = String(req.userId);
 
     console.log("[MEETING] getMeetingByCode called, code:", normalizedCode);
 
@@ -128,10 +145,7 @@ export const getMeetingByCode = async (req, res) => {
       return res.status(400).json({ error: "Meeting code is required" });
     }
 
-    const meeting = await Meeting.findOne({ meeting_code: normalizedCode })
-      .populate("host_id", "first_name last_name email")
-      .populate("participants", "first_name last_name email")
-      .lean();
+    const meeting = await Meeting.findOne({ meeting_code: normalizedCode });
 
     if (!meeting) {
       return res.status(404).json({ error: "Meeting not found" });
@@ -141,7 +155,22 @@ export const getMeetingByCode = async (req, res) => {
       return res.status(410).json({ error: "This meeting has been cancelled" });
     }
 
-    return res.json({ data: meeting });
+    // Auto-add the user as participant if they aren't already
+    const isHost = String(meeting.host_id) === userId;
+    const alreadyParticipant = meeting.participants.some(
+      (p) => String(p) === userId
+    );
+    if (!isHost && !alreadyParticipant && meeting.status !== "ended") {
+      meeting.participants.push(userId);
+      await meeting.save();
+    }
+
+    const populated = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+
+    return res.json({ data: populated });
   } catch (error) {
     console.error("[MEETING] getMeetingByCode error:", error);
     return res.status(500).json({ error: "Failed to fetch meeting" });
@@ -265,6 +294,79 @@ export const cancelMeeting = async (req, res) => {
   } catch (error) {
     console.error("[MEETING] cancelMeeting error:", error);
     return res.status(500).json({ error: "Failed to cancel meeting" });
+  }
+};
+
+// Join a meeting by its ID – adds the current user as a participant
+export const joinMeetingById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    if (meeting.status === "cancelled") {
+      return res.status(410).json({ error: "This meeting has been cancelled" });
+    }
+
+    if (meeting.status === "ended") {
+      return res.status(410).json({ error: "This meeting has already ended" });
+    }
+
+    // Check if already a participant or host
+    const isHost = String(meeting.host_id) === userId;
+    const alreadyParticipant = meeting.participants.some(
+      (p) => String(p) === userId
+    );
+
+    if (!isHost && !alreadyParticipant) {
+      meeting.participants.push(userId);
+      await meeting.save();
+    }
+
+    const populated = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    broadcastMeetingEvent("updated", populated);
+
+    return res.json({ data: populated });
+  } catch (error) {
+    console.error("[MEETING] joinMeetingById error:", error);
+    return res.status(500).json({ error: "Failed to join meeting" });
+  }
+};
+
+// Delete a meeting permanently (only host, only ended/cancelled meetings)
+export const deleteMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    if (String(meeting.host_id) !== userId) {
+      return res.status(403).json({ error: "Only the host can delete this meeting" });
+    }
+
+    if (meeting.status !== "ended" && meeting.status !== "cancelled") {
+      return res.status(400).json({ error: "Can only delete ended or cancelled meetings" });
+    }
+
+    clearRemindersForMeeting(meeting._id);
+    await Meeting.findByIdAndDelete(id);
+    broadcastMeetingEvent("deleted", { _id: id });
+
+    return res.json({ message: "Meeting deleted successfully" });
+  } catch (error) {
+    console.error("[MEETING] deleteMeeting error:", error);
+    return res.status(500).json({ error: "Failed to delete meeting" });
   }
 };
 

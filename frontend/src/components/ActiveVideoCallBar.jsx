@@ -270,7 +270,7 @@ const ActiveVideoCallBar = ({
     return (
       <div ref={containerRef} className="fixed inset-0 bg-black z-[100] flex flex-col">
         {/* Remote Video - Full Screen */}
-        <div className="flex-1 relative bg-slate-900">
+        <div className="flex-1 relative bg-zinc-900">
           {remoteStream ? (
             <video
               ref={remoteVideoRef}
@@ -280,11 +280,11 @@ const ActiveVideoCallBar = ({
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-slate-900">
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900">
               {isConnecting ? (
                 <div className="text-center">
                   <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
-                  <p className="text-slate-400 text-sm">Connecting...</p>
+                  <p className="text-zinc-400 text-sm">Connecting...</p>
                 </div>
               ) : (
                 <div className="text-center">
@@ -294,7 +294,7 @@ const ActiveVideoCallBar = ({
                     </span>
                   </div>
                   <p className="text-white text-lg font-medium">{remoteUser.name}</p>
-                  <p className="text-slate-400 text-sm mt-1">Waiting for video...</p>
+                  <p className="text-zinc-400 text-sm mt-1">Waiting for video...</p>
                 </div>
               )}
             </div>
@@ -302,7 +302,7 @@ const ActiveVideoCallBar = ({
 
           {/* Local Video - Picture-in-Picture */}
           {localStream && (
-            <div className="absolute top-4 right-4 w-64 h-48 rounded-lg overflow-hidden border-2 border-slate-700 bg-slate-900 shadow-xl">
+            <div className="absolute top-4 right-4 w-64 h-48 rounded-lg overflow-hidden border-2 border-zinc-700 bg-zinc-900 shadow-xl">
               <video
                 ref={localVideoRef}
                 key="local-fullscreen"
@@ -312,8 +312,8 @@ const ActiveVideoCallBar = ({
                 className="w-full h-full object-cover"
               />
               {isVideoOff && (
-                <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
-                  <VideoOff className="w-8 h-8 text-slate-600" />
+                <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
+                  <VideoOff className="w-8 h-8 text-zinc-600" />
                 </div>
               )}
             </div>
@@ -337,7 +337,7 @@ const ActiveVideoCallBar = ({
         </div>
 
         {/* Controls Bar - Always Visible */}
-        <div className="bg-slate-900/98 border-t border-slate-700/50 px-6 py-5 z-50 relative">
+        <div className="bg-zinc-900/98 border-t border-zinc-700/50 px-6 py-5 z-50 relative">
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={onToggleMute}
@@ -382,7 +382,7 @@ const ActiveVideoCallBar = ({
       {/* Draggable Remote Video Window - Floating above other content */}
       <div
         ref={draggableRef}
-        className={`fixed bg-slate-900 rounded-lg border-2 border-slate-700 shadow-2xl overflow-hidden z-[100] ${
+        className={`fixed bg-zinc-900 rounded-lg border-2 border-zinc-700 shadow-2xl overflow-hidden z-[100] ${
           isDragging ? "cursor-move" : "cursor-default"
         }`}
         style={{
@@ -395,67 +395,67 @@ const ActiveVideoCallBar = ({
         {/* Resize Handles */}
         {/* Top Edge */}
         <div
-          className="resize-handle absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'top')}
         />
         {/* Bottom Edge */}
         <div
-          className="resize-handle absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'bottom')}
         />
         {/* Left Edge */}
         <div
-          className="resize-handle absolute top-0 bottom-0 left-0 w-2 cursor-ew-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 bottom-0 left-0 w-2 cursor-ew-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'left')}
         />
         {/* Right Edge */}
         <div
-          className="resize-handle absolute top-0 bottom-0 right-0 w-2 cursor-ew-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 bottom-0 right-0 w-2 cursor-ew-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'right')}
         />
         {/* Top-Left Corner */}
         <div
-          className="resize-handle absolute top-0 left-0 w-4 h-4 cursor-nwse-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute top-0 left-0 w-4 h-4 cursor-nwse-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'top-left')}
         />
         {/* Top-Right Corner */}
         <div
-          className="resize-handle absolute top-0 right-0 w-4 h-4 cursor-nesw-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute top-0 right-0 w-4 h-4 cursor-nesw-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'top-right')}
         />
         {/* Bottom-Left Corner */}
         <div
-          className="resize-handle absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
         />
         {/* Bottom-Right Corner */}
         <div
-          className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
         />
         {/* Window Header - Draggable */}
         <div
-          className="draggable-header bg-slate-800 px-3 py-2 flex items-center justify-between border-b border-slate-700 cursor-move select-none"
+          className="draggable-header bg-zinc-800 px-3 py-2 flex items-center justify-between border-b border-zinc-700 cursor-move select-none"
           onMouseDown={handleMouseDown}
         >
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            <span className="text-xs text-slate-300 font-medium">
+            <span className="text-xs text-zinc-300 font-medium">
               {remoteUser.name || "Video Call"}
             </span>
           </div>
           <button
             onClick={toggleFullScreen}
-            className="p-1 hover:bg-slate-700 rounded transition-colors"
+            className="p-1 hover:bg-zinc-700 rounded transition-colors"
             title="Enter fullscreen"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <Maximize2 className="w-4 h-4 text-slate-400" />
+            <Maximize2 className="w-4 h-4 text-zinc-400" />
           </button>
         </div>
 
         {/* Remote Video */}
-        <div className="relative w-full h-[calc(100%-7rem)] bg-slate-900">
+        <div className="relative w-full h-[calc(100%-7rem)] bg-zinc-900">
           {remoteStream ? (
             <video
               ref={remoteVideoRef}
@@ -469,7 +469,7 @@ const ActiveVideoCallBar = ({
               {isConnecting ? (
                 <div className="text-center">
                   <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-2" />
-                  <p className="text-slate-400 text-xs">Connecting...</p>
+                  <p className="text-zinc-400 text-xs">Connecting...</p>
                 </div>
               ) : (
                 <div className="text-center">
@@ -486,7 +486,7 @@ const ActiveVideoCallBar = ({
 
           {/* Local Video Overlay */}
           {localStream && (
-            <div className="absolute bottom-2 right-2 w-32 h-24 rounded-lg overflow-hidden border-2 border-slate-700 bg-slate-900 shadow-lg">
+            <div className="absolute bottom-2 right-2 w-32 h-24 rounded-lg overflow-hidden border-2 border-zinc-700 bg-zinc-900 shadow-lg">
               <video
                 ref={localVideoRef}
                 key="local-draggable"
@@ -496,8 +496,8 @@ const ActiveVideoCallBar = ({
                 className="w-full h-full object-cover"
               />
               {isVideoOff && (
-                <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
-                  <VideoOff className="w-4 h-4 text-slate-600" />
+                <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
+                  <VideoOff className="w-4 h-4 text-zinc-600" />
                 </div>
               )}
             </div>
@@ -512,7 +512,7 @@ const ActiveVideoCallBar = ({
         </div>
 
         {/* Controls Bar - Always Visible */}
-        <div className="absolute bottom-0 left-0 right-0 bg-slate-900/95 px-3 py-2 flex items-center justify-center gap-2 border-t border-slate-700">
+        <div className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 px-3 py-2 flex items-center justify-center gap-2 border-t border-zinc-700">
           <button
             onClick={onToggleMute}
             className={`p-2 rounded-lg transition-colors ${

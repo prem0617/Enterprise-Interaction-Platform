@@ -1,28 +1,15 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { Eye, EyeOff, Loader2, Lock, AlertCircle } from "lucide-react";
-import { BACKEND_URL } from "@/config";
 import { useNavigate } from "react-router-dom";
-import { useAuthContext } from "@/context/AuthContextProvider";
+import { Loader2, Building2, ArrowRight } from "lucide-react";
+import { BACKEND_URL } from "@/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/adminDashboard";
-  const { setUser } = useAuthContext();
   const [formData, setFormData] = useState({ email: "", password: "" });
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,46 +18,89 @@ export default function AdminLoginPage() {
     setError("");
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true);
     setError("");
+
     try {
       const response = await axios.post(`${BACKEND_URL}/auth/admin/login`, formData);
-      localStorage.removeItem("user");
       localStorage.setItem("adminData", JSON.stringify(response.data.user));
       localStorage.setItem("token", response.data.token);
-      setUser(response.data.user);
-      navigate(returnTo.startsWith("/") ? returnTo : "/adminDashboard");
-    } catch (err) {
-      setError(err.response?.data?.message || "Invalid email or password");
+      navigate("/adminDashboard");
+    } catch (error) {
+      setError(error.response?.data?.error || "Invalid credentials");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center size-12 bg-primary rounded-lg mb-4">
-            <Lock className="size-5 text-primary-foreground" />
+    <div className="min-h-screen flex">
+      {/* Left Panel */}
+      <div className="hidden lg:flex lg:w-1/2 bg-violet-600 p-12 flex-col justify-between relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-violet-500 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-violet-700 rounded-full translate-y-1/2 -translate-x-1/2 opacity-50" />
+        
+        {/* Logo */}
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Admin Portal</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sign in to manage your platform
+          <span className="font-semibold text-white text-lg">Enterprise Platform</span>
+        </div>
+        
+        {/* Content */}
+        <div className="relative z-10 space-y-6">
+          <h1 className="text-4xl font-bold text-white leading-tight">
+            Manage your<br />organization with<br />confidence
+          </h1>
+          <p className="text-violet-200 text-lg max-w-md">
+            Access powerful tools to manage employees, communications, and resources—all in one place.
           </p>
+          <div className="flex gap-8 pt-4">
+            <div>
+              <p className="text-3xl font-bold text-white">500+</p>
+              <p className="text-violet-200 text-sm">Organizations</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-white">50k+</p>
+              <p className="text-violet-200 text-sm">Users</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-white">99.9%</p>
+              <p className="text-violet-200 text-sm">Uptime</p>
+            </div>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-lg">Sign in</CardTitle>
-            <CardDescription>Enter your admin credentials</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* Footer */}
+        <p className="text-violet-300 text-sm relative z-10">
+          © 2026 Enterprise Platform. All rights reserved.
+        </p>
+      </div>
+
+      {/* Right Panel - Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-sky-50 dark:bg-gray-950">
+        <div className="w-full max-w-sm">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center gap-3 mb-8">
+            <div className="h-10 w-10 rounded-lg bg-violet-600 flex items-center justify-center">
+              <Building2 className="h-6 w-6 text-white" />
+            </div>
+            <span className="font-semibold text-lg">Enterprise Platform</span>
+          </div>
+
+          <div className="space-y-2 mb-8">
+            <h2 className="text-2xl font-bold">Welcome back</h2>
+            <p className="text-gray-500">Sign in to your admin account</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-                <AlertCircle className="size-4 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{error}</p>
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm">
+                {error}
               </div>
             )}
 
@@ -80,60 +110,60 @@ export default function AdminLoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                placeholder="admin@company.com"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="admin@company.com"
+                required
+                className="h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password"
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="size-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="size-4 text-muted-foreground" />
-                  )}
-                </Button>
+              <div className="flex justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button type="button" className="text-xs text-violet-600 hover:underline">
+                  Forgot password?
+                </button>
               </div>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="h-11"
+              />
             </div>
 
-            <Button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full"
-            >
+            <Button type="submit" className="w-full h-11 bg-violet-600 hover:bg-violet-700 gap-2" disabled={loading}>
               {loading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Signing in...
-                </>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Sign in"
+                <>
+                  Sign in
+                  <ArrowRight className="h-4 w-4" />
+                </>
               )}
             </Button>
-          </CardContent>
-        </Card>
+          </form>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Enterprise Platform &copy; {new Date().getFullYear()}
-        </p>
+          <div className="mt-8 pt-6 border-t space-y-3">
+            <p className="text-center text-sm text-gray-500">
+              Don't have an account?{" "}
+              <a href="/adminSignup" className="text-violet-600 font-medium hover:underline">
+                Create Admin Account
+              </a>
+            </p>
+            <p className="text-center text-sm text-gray-500">
+              Employee account?{" "}
+              <a href="/login" className="text-violet-600 font-medium hover:underline">
+                Sign in here
+              </a>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

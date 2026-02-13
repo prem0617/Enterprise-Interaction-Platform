@@ -8,7 +8,7 @@ const GroupCallIncomingBanner = ({
   onDismiss,
 }) => {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
       <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
         <Phone className="w-4 h-4 text-emerald-400" />
       </div>
@@ -16,12 +16,12 @@ const GroupCallIncomingBanner = ({
         <p className="text-sm font-medium text-white truncate">
           {initiatorName} started a group call
         </p>
-        <p className="text-xs text-slate-500 truncate">{channelName || "Group"}</p>
+        <p className="text-xs text-zinc-500 truncate">{channelName || "Group"}</p>
       </div>
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           onClick={onDismiss}
-          className="p-1.5 text-slate-500 hover:bg-slate-800 rounded-lg transition"
+          className="p-1.5 text-zinc-500 hover:bg-zinc-800 rounded-lg transition"
           title="Dismiss"
         >
           <X className="w-3.5 h-3.5" />

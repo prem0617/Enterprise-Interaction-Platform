@@ -23,8 +23,8 @@ const GroupCallActiveBar = ({
   }, [remoteStreams]);
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] w-full max-w-md px-4">
-      <div className="bg-slate-900 rounded-xl border border-slate-700/50 shadow-xl shadow-black/30 overflow-hidden">
+    <div className="fixed bottom-4 left-1/2 -tranzinc-x-1/2 z-[90] w-full max-w-md px-4">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 shadow-xl shadow-black/30 overflow-hidden">
         {Object.entries(remoteStreams).map(([userId, stream]) => (
           <audio key={userId} ref={(r) => { audioRefs.current[userId] = r; }} autoPlay playsInline />
         ))}
@@ -36,7 +36,7 @@ const GroupCallActiveBar = ({
               </div>
               <div className="min-w-0">
                 <h3 className="font-medium text-white text-sm truncate">{channelName || "Group call"}</h3>
-                <p className="text-slate-400 text-xs">
+                <p className="text-zinc-400 text-xs">
                   {others.length + 1} participant{(others.length + 1) !== 1 ? "s" : ""}
                 </p>
               </div>

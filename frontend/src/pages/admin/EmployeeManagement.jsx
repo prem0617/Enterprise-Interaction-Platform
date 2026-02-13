@@ -617,7 +617,7 @@ export default function EmployeeManagement() {
             <CardContent className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -tranzinc-y-1/2 size-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by name or email..."
                   value={searchTerm}
@@ -662,16 +662,16 @@ export default function EmployeeManagement() {
                       <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                         Employee
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                         Department
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                         Position
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                         Team Lead
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                         Hire Date
                       </th>
                       <th className="px-5 py-3.5 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider w-24">

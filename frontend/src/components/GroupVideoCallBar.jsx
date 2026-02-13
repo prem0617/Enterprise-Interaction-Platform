@@ -263,7 +263,7 @@ const GroupVideoCallBar = ({
       >
         {/* Local video */}
         {localStream && (
-          <div className="relative bg-slate-900 rounded-lg overflow-hidden border-2 border-slate-700">
+          <div className="relative bg-zinc-900 rounded-lg overflow-hidden border-2 border-zinc-700">
             <video
               ref={localVideoRef}
               key="local-group"
@@ -273,8 +273,8 @@ const GroupVideoCallBar = ({
               className="w-full h-full object-cover"
             />
             {isVideoOff && (
-              <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
-                <VideoOff className="w-8 h-8 text-slate-600" />
+              <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
+                <VideoOff className="w-8 h-8 text-zinc-600" />
               </div>
             )}
             <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded text-white text-xs font-medium">
@@ -291,7 +291,7 @@ const GroupVideoCallBar = ({
             return (
               <div
                 key={participant.id}
-                className="relative bg-slate-900 rounded-lg overflow-hidden border-2 border-slate-700"
+                className="relative bg-zinc-900 rounded-lg overflow-hidden border-2 border-zinc-700"
               >
                 {stream ? (
                   <video
@@ -304,7 +304,7 @@ const GroupVideoCallBar = ({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                  <div className="w-full h-full flex items-center justify-center bg-zinc-800">
                     <div className="text-center">
                       <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-2">
                         <span className="text-indigo-400 font-semibold text-2xl">
@@ -332,14 +332,14 @@ const GroupVideoCallBar = ({
         <div className="flex-1 relative">{renderVideoGrid()}</div>
 
         {/* Controls Bar */}
-        <div className="bg-slate-900/98 border-t border-slate-700/50 px-6 py-5 z-50 relative">
+        <div className="bg-zinc-900/98 border-t border-zinc-700/50 px-6 py-5 z-50 relative">
           <div className="flex items-center justify-center gap-4">
             {/* Grid size controls */}
             <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
               <button
                 onClick={() => setGridColumns(1)}
                 className={`p-2 rounded transition-colors ${
-                  gridColumns === 1 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                  gridColumns === 1 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
                 }`}
                 title="1 column"
               >
@@ -348,7 +348,7 @@ const GroupVideoCallBar = ({
               <button
                 onClick={() => setGridColumns(2)}
                 className={`p-2 rounded transition-colors ${
-                  gridColumns === 2 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                  gridColumns === 2 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
                 }`}
                 title="2 columns"
               >
@@ -357,7 +357,7 @@ const GroupVideoCallBar = ({
               <button
                 onClick={() => setGridColumns(3)}
                 className={`p-2 rounded transition-colors ${
-                  gridColumns === 3 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                  gridColumns === 3 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
                 }`}
                 title="3 columns"
               >
@@ -415,7 +415,7 @@ const GroupVideoCallBar = ({
     <>
       <div
         ref={draggableRef}
-        className={`fixed bg-slate-900 rounded-lg border-2 border-slate-700 shadow-2xl overflow-hidden z-[100] ${
+        className={`fixed bg-zinc-900 rounded-lg border-2 border-zinc-700 shadow-2xl overflow-hidden z-[100] ${
           isDragging ? "cursor-move" : "cursor-default"
         }`}
         style={{
@@ -427,69 +427,69 @@ const GroupVideoCallBar = ({
       >
         {/* Resize Handles */}
         <div
-          className="resize-handle absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "top")}
         />
         <div
-          className="resize-handle absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "bottom")}
         />
         <div
-          className="resize-handle absolute top-0 bottom-0 left-0 w-2 cursor-ew-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 bottom-0 left-0 w-2 cursor-ew-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "left")}
         />
         <div
-          className="resize-handle absolute top-0 bottom-0 right-0 w-2 cursor-ew-resize hover:bg-blue-500/30 transition-colors z-20"
+          className="resize-handle absolute top-0 bottom-0 right-0 w-2 cursor-ew-resize hover:bg-zinc-500/30 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "right")}
         />
         <div
-          className="resize-handle absolute top-0 left-0 w-4 h-4 cursor-nwse-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute top-0 left-0 w-4 h-4 cursor-nwse-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "top-left")}
         />
         <div
-          className="resize-handle absolute top-0 right-0 w-4 h-4 cursor-nesw-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute top-0 right-0 w-4 h-4 cursor-nesw-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "top-right")}
         />
         <div
-          className="resize-handle absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "bottom-left")}
         />
         <div
-          className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-blue-500/40 transition-colors z-20"
+          className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-zinc-500/40 transition-colors z-20"
           onMouseDown={(e) => handleResizeStart(e, "bottom-right")}
         />
 
         {/* Window Header */}
         <div
-          className="draggable-header bg-slate-800 px-3 py-2 flex items-center justify-between border-b border-slate-700 cursor-move select-none"
+          className="draggable-header bg-zinc-800 px-3 py-2 flex items-center justify-between border-b border-zinc-700 cursor-move select-none"
           onMouseDown={handleMouseDown}
         >
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            <span className="text-xs text-slate-300 font-medium">{channelName || "Group Video Call"}</span>
-            <span className="text-xs text-slate-500">({totalVideos} participants)</span>
+            <span className="text-xs text-zinc-300 font-medium">{channelName || "Group Video Call"}</span>
+            <span className="text-xs text-zinc-500">({totalVideos} participants)</span>
           </div>
           <button
             onClick={toggleFullScreen}
-            className="p-1 hover:bg-slate-700 rounded transition-colors"
+            className="p-1 hover:bg-zinc-700 rounded transition-colors"
             title="Enter fullscreen"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <Maximize2 className="w-4 h-4 text-slate-400" />
+            <Maximize2 className="w-4 h-4 text-zinc-400" />
           </button>
         </div>
 
         {/* Video Grid */}
-        <div className="relative w-full h-[calc(100%-7rem)] bg-slate-900">{renderVideoGrid()}</div>
+        <div className="relative w-full h-[calc(100%-7rem)] bg-zinc-900">{renderVideoGrid()}</div>
 
         {/* Controls Bar */}
-        <div className="absolute bottom-0 left-0 right-0 bg-slate-900/95 px-3 py-2 flex items-center justify-center gap-2 border-t border-slate-700">
+        <div className="absolute bottom-0 left-0 right-0 bg-zinc-900/95 px-3 py-2 flex items-center justify-center gap-2 border-t border-zinc-700">
           {/* Grid size controls */}
           <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
             <button
               onClick={() => setGridColumns(1)}
               className={`p-1.5 rounded transition-colors ${
-                gridColumns === 1 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                gridColumns === 1 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
               }`}
               title="1 column"
             >
@@ -498,7 +498,7 @@ const GroupVideoCallBar = ({
             <button
               onClick={() => setGridColumns(2)}
               className={`p-1.5 rounded transition-colors ${
-                gridColumns === 2 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                gridColumns === 2 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
               }`}
               title="2 columns"
             >
@@ -507,7 +507,7 @@ const GroupVideoCallBar = ({
             <button
               onClick={() => setGridColumns(3)}
               className={`p-1.5 rounded transition-colors ${
-                gridColumns === 3 ? "bg-white/20 text-white" : "text-slate-400 hover:text-white"
+                gridColumns === 3 ? "bg-white/20 text-white" : "text-zinc-400 hover:text-white"
               }`}
               title="3 columns"
             >
