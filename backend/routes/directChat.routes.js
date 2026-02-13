@@ -9,6 +9,7 @@ import {
   sendMessage,
   editMessage,
   deleteMessage,
+  clearConversation,
   getUnreadCount,
   markMessagesAsSeen,
   getMessageSeenStatus,
@@ -32,6 +33,7 @@ router.get("/channels/:channelId/messages", getMessages);
 router.post("/channels/:channelId/messages", sendMessage);
 router.put("/messages/:messageId", editMessage);
 router.delete("/messages/:messageId", deleteMessage);
+router.delete("/channels/:channelId/clear", clearConversation);
 router.get("/channels/:channelId/unread", getUnreadCount);
 
 // NEW: Seen/Read receipt routes

@@ -120,8 +120,8 @@ const AdminProfilePage = ({ onNavigate }) => {
   };
 
   if (loading) {
-    return (
-      <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+      return (
+        <div className="min-h-screen p-6 lg:p-8 max-w-3xl mx-auto bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <Skeleton className="size-16 rounded-full" />
@@ -162,8 +162,8 @@ const AdminProfilePage = ({ onNavigate }) => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader className="pb-4">
+          <Card className="bg-zinc-900/90 border border-zinc-800 shadow-xl rounded-2xl">
+            <CardHeader className="pb-4 border-b border-zinc-800 bg-zinc-900/80 rounded-t-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <Avatar className="size-16">
@@ -215,7 +215,7 @@ const AdminProfilePage = ({ onNavigate }) => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 px-6 py-8">
               <div className="grid gap-4 sm:grid-cols-2">
                 <ProfileField
                   icon={User}
@@ -300,8 +300,8 @@ const AdminProfilePage = ({ onNavigate }) => {
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
+          <Card className="bg-zinc-900/90 border border-zinc-800 shadow-xl rounded-2xl">
+            <CardHeader className="border-b border-zinc-800 bg-zinc-900/80 rounded-t-2xl">
               <CardTitle className="text-base flex items-center gap-2">
                 <Key className="size-4" />
                 Password
@@ -310,11 +310,11 @@ const AdminProfilePage = ({ onNavigate }) => {
                 Change your password to keep your account secure.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-6 py-8">
               <Button
                 variant="outline"
                 onClick={() => onNavigate("change-password")}
-                className="gap-2"
+                className="gap-2 bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-700"
               >
                 <Key className="size-4" />
                 Change password

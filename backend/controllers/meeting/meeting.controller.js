@@ -71,7 +71,7 @@ export const createMeeting = async (req, res) => {
       .lean();
     broadcastMeetingEvent("created", populated);
 
-    return res.status(201).json({ data: meeting });
+    return res.status(201).json({ data: populated });
   } catch (error) {
     // Handle unique index error gracefully
     if (error.code === 11000 && error.keyPattern?.meeting_code) {
@@ -219,7 +219,7 @@ export const updateMeeting = async (req, res) => {
 
     await meeting.save();
 
-    if (["scheduled", "active"].includes(meeting.status)) {
+    if (meeting.status === "scheduled") {
       scheduleRemindersForMeeting(meeting);
     } else {
       clearRemindersForMeeting(meeting._id);
@@ -230,7 +230,7 @@ export const updateMeeting = async (req, res) => {
       .lean();
     broadcastMeetingEvent("updated", updated);
 
-    return res.json({ data: meeting });
+    return res.json({ data: updated });
   } catch (error) {
     console.error("[MEETING] updateMeeting error:", error);
     return res.status(500).json({ error: "Failed to update meeting" });
@@ -261,7 +261,7 @@ export const cancelMeeting = async (req, res) => {
       .lean();
     broadcastMeetingEvent("cancelled", cancelled);
 
-    return res.json({ data: meeting });
+    return res.json({ data: cancelled });
   } catch (error) {
     console.error("[MEETING] cancelMeeting error:", error);
     return res.status(500).json({ error: "Failed to cancel meeting" });

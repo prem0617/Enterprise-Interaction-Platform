@@ -16,7 +16,7 @@ import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "@/components/ChatInterface";
-import AdminMeetings from "./AdminMeetings";
+import MeetingModule from "@/components/MeetingModule";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
       case "messages":
         return <ChatInterface />;
       case "meetings":
-        return <AdminMeetings />;
+        return <MeetingModule />;
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":
@@ -75,7 +75,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="h-screen bg-background flex overflow-hidden">
       {/* Sidebar - Desktop */}
       <aside
         className={cn(

@@ -435,6 +435,67 @@ io.on("connection", async (socket) => {
     delete activeMeetings[key];
   });
 
+  // ---------- Meeting media-state broadcast (mute / video / hand raise) ----------
+  socket.on("meeting-media-state", (data) => {
+    const { meetingId, isMuted, isVideoOff } = data || {};
+    if (!meetingId || !socket.userId) return;
+    const key = String(meetingId);
+    const room = activeMeetings[key];
+    if (!room || !room[socket.userId]) return;
+    // Store the state so late joiners can see it
+    room[socket.userId].isMuted = !!isMuted;
+    room[socket.userId].isVideoOff = !!isVideoOff;
+    // Broadcast to others in the room
+    socket.to(`meeting:${key}`).emit("meeting-media-state", {
+      meetingId: key,
+      userId: socket.userId,
+      isMuted: !!isMuted,
+      isVideoOff: !!isVideoOff,
+    });
+  });
+
+  socket.on("meeting-hand-raise", (data) => {
+    const { meetingId, raised } = data || {};
+    if (!meetingId || !socket.userId) return;
+    const key = String(meetingId);
+    const room = activeMeetings[key];
+    if (!room || !room[socket.userId]) return;
+    room[socket.userId].handRaised = !!raised;
+    io.to(`meeting:${key}`).emit("meeting-hand-raise", {
+      meetingId: key,
+      userId: socket.userId,
+      raised: !!raised,
+    });
+  });
+
+  // ---------- Meeting screen sharing ----------
+  socket.on("meeting-screen-share-start", (data) => {
+    const { meetingId } = data || {};
+    if (!meetingId || !socket.userId) return;
+    const key = String(meetingId);
+    const room = activeMeetings[key];
+    if (!room) return;
+    room[socket.userId].screenSharing = true;
+    io.to(`meeting:${key}`).emit("meeting-screen-share-start", {
+      meetingId: key,
+      userId: socket.userId,
+      name: room[socket.userId]?.name || "User",
+    });
+  });
+
+  socket.on("meeting-screen-share-stop", (data) => {
+    const { meetingId } = data || {};
+    if (!meetingId || !socket.userId) return;
+    const key = String(meetingId);
+    const room = activeMeetings[key];
+    if (!room) return;
+    if (room[socket.userId]) room[socket.userId].screenSharing = false;
+    io.to(`meeting:${key}`).emit("meeting-screen-share-stop", {
+      meetingId: key,
+      userId: socket.userId,
+    });
+  });
+
   // ---------- Meeting WebRTC signalling (mesh, 1:1 between participants) ----------
   socket.on("meeting-webrtc-offer", (data) => {
     const { meetingId, toUserId, sdp } = data;

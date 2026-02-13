@@ -13,6 +13,8 @@ import {
   MessageCircle,
   Settings,
   Trash,
+  Trash2,
+  Eraser,
   X,
   Reply,
   Eye,
@@ -586,6 +588,37 @@ const ChatInterface = () => {
   const handleReply = (message) => setReplyingTo(message);
   const cancelReply = () => setReplyingTo(null);
 
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      await axios.delete(
+        `${BACKEND_URL}/direct_chat/messages/${messageId}`,
+        axiosConfig
+      );
+      setMessages((prev) => prev.filter((m) => m._id !== messageId));
+      toast.success("Message deleted");
+      await fetchDirectChats();
+      await getUserChannel();
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to delete message");
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (!selectedChat?._id) return;
+    try {
+      await axios.delete(
+        `${BACKEND_URL}/direct_chat/channels/${selectedChat._id}/clear`,
+        axiosConfig
+      );
+      setMessages([]);
+      toast.success("Conversation cleared");
+      await fetchDirectChats();
+      await getUserChannel();
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to clear conversation");
+    }
+  };
+
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedChat || sendingMessage) return;
@@ -896,6 +929,27 @@ const ChatInterface = () => {
     socket.on("leavechannel", handleLeaveChannel);
     socket.on("online-users-updated", handleOnlineUsersUpdate);
 
+    const handleMessageDeleted = (data) => {
+      const currentChat = selectedChatRef.current;
+      if (currentChat && String(currentChat._id) === String(data.channel_id)) {
+        setMessages((prev) => prev.filter((m) => m._id !== data.message_id));
+      }
+      fetchDirectChats();
+      getUserChannel();
+    };
+
+    const handleConversationCleared = (data) => {
+      const currentChat = selectedChatRef.current;
+      if (currentChat && String(currentChat._id) === String(data.channel_id)) {
+        setMessages([]);
+      }
+      fetchDirectChats();
+      getUserChannel();
+    };
+
+    socket.on("message_deleted", handleMessageDeleted);
+    socket.on("conversation_cleared", handleConversationCleared);
+
     // Request current online users now that the listener is set up.
     // This covers the case where the broadcast was sent before this
     // component mounted (e.g. user navigated to Messages tab after login).
@@ -908,6 +962,8 @@ const ChatInterface = () => {
       socket.off("leavechannel", handleLeaveChannel);
       socket.off("online-users-updated", handleOnlineUsersUpdate);
       socket.off("channel_name_changed", handleChannelNameUpdate);
+      socket.off("message_deleted", handleMessageDeleted);
+      socket.off("conversation_cleared", handleConversationCleared);
     };
   }, [socket]);
 
@@ -980,7 +1036,7 @@ const ChatInterface = () => {
     messages.find((m) => m._id === parentMessageId);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-background">
+    <div className="flex h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
       {/* Sidebar */}
       <div className="w-80 bg-card border-r border-border flex flex-col">
         <div className="p-3 border-b border-border">
@@ -1036,7 +1092,7 @@ const ChatInterface = () => {
         </div>
 
         {/* Chat List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-4 pt-1 bg-card" style={{ overscrollBehavior: 'contain' }}>
           {directMessageLoading ? (
             <div className="flex flex-col items-center justify-center h-full">
               <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mb-2" />
@@ -1332,6 +1388,17 @@ const ChatInterface = () => {
                   <Trash className="w-4 h-4" />
                 </button>
               )}
+              <button
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to clear all messages in this conversation? This cannot be undone.")) {
+                    handleClearConversation();
+                  }
+                }}
+                className="p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                title="Clear conversation"
+              >
+                <Eraser className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1394,7 +1461,7 @@ const ChatInterface = () => {
           ) : null}
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background" style={{ overscrollBehavior: 'contain' }}>
             {removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId) ? (
               <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
                 <p className="text-base font-medium text-amber-400">You are removed from this group</p>
@@ -1508,16 +1575,32 @@ const ChatInterface = () => {
                               ))}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleReply(message)}
-                          className={`absolute top-0 ${
+                        <div className={`absolute top-0 ${
                             message.is_own
-                              ? "left-0 -translate-x-8"
-                              : "right-0 translate-x-8"
-                          } p-1 bg-muted border border-border rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted/80 shadow-sm`}
-                        >
-                          <Reply className="w-3 h-3 text-muted-foreground" />
-                        </button>
+                              ? "left-0 -translate-x-16"
+                              : "right-0 translate-x-16"
+                          } flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                          <button
+                            onClick={() => handleReply(message)}
+                            className="p-1 bg-muted border border-border rounded-full hover:bg-muted/80 shadow-sm"
+                            title="Reply"
+                          >
+                            <Reply className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                          {message.is_own && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Delete this message?")) {
+                                  handleDeleteMessage(message._id);
+                                }
+                              }}
+                              className="p-1 bg-muted border border-border rounded-full hover:bg-destructive/20 shadow-sm"
+                              title="Delete message"
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1555,7 +1638,7 @@ const ChatInterface = () => {
 
           {/* Message Input - hidden when user was removed from this group */}
           {!(removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId)) && (
-          <div className="px-4 py-3 border-t border-border bg-card">
+          <div className="px-4 pt-3 pb-1 border-t border-border bg-card">
             {!socketConnected && (
               <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
                 <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />

@@ -51,7 +51,7 @@ export default function EmployeeDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <nav className="bg-card border-b border-border sticky top-0 z-50">
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
@@ -157,7 +157,7 @@ export default function EmployeeDashboard() {
         </div>
       </nav>
 
-      <main className="flex-1 min-h-[calc(100vh-3.5rem)]">
+      <main className="flex-1 overflow-hidden">
         {activeTab === "messages" && <ChatInterface />}
 
         {activeTab === "team" && (

@@ -768,12 +768,72 @@ export const deleteMessage = async (req, res) => {
     message.deleted_at = new Date();
     await message.save();
 
+    // Notify all channel members about the deletion in real-time
+    const channelMembers = await ChannelMember.find({ channel_id: message.channel_id });
+    channelMembers.forEach((member) => {
+      const memberSocketId = getReceiverSocketId(member.user_id.toString());
+      if (memberSocketId) {
+        io.to(memberSocketId).emit("message_deleted", {
+          message_id: messageId,
+          channel_id: message.channel_id.toString(),
+        });
+      }
+    });
+
     res.json({
       message: "Message deleted successfully",
       message_id: messageId,
     });
   } catch (error) {
     console.error("Delete message error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Clear all messages in a conversation (soft delete all)
+export const clearConversation = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const currentUserId = req.userId;
+
+    // Verify channel exists
+    const channel = await ChatChannel.findById(channelId);
+    if (!channel) {
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    // Verify user is a member
+    const membership = await ChannelMember.findOne({
+      channel_id: channelId,
+      user_id: currentUserId,
+    });
+    if (!membership) {
+      return res.status(403).json({ error: "You are not a member of this channel" });
+    }
+
+    // Soft delete all non-deleted messages in this channel
+    const result = await Message.updateMany(
+      { channel_id: channelId, deleted_at: null },
+      { $set: { deleted_at: new Date() } }
+    );
+
+    // Notify all channel members about the conversation being cleared
+    const channelMembers = await ChannelMember.find({ channel_id: channelId });
+    channelMembers.forEach((member) => {
+      const memberSocketId = getReceiverSocketId(member.user_id.toString());
+      if (memberSocketId) {
+        io.to(memberSocketId).emit("conversation_cleared", {
+          channel_id: channelId,
+        });
+      }
+    });
+
+    res.json({
+      message: "Conversation cleared successfully",
+      deleted_count: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Clear conversation error:", error);
     res.status(500).json({ error: error.message });
   }
 };

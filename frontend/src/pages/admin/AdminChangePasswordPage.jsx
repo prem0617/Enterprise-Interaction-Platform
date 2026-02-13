@@ -148,27 +148,27 @@ const AdminChangePasswordPage = ({ onNavigate }) => {
     "w-full px-3 py-2 border border-slate-600 rounded-lg text-sm bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-500 transition";
 
   return (
-    <div className="p-6 lg:p-8 max-w-md mx-auto">
+    <div className="p-6 lg:p-8 max-w-md mx-auto bg-zinc-950 min-h-screen">
       <button
         onClick={() => onNavigate("profile")}
-        className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-6 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 mb-6 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Profile
       </button>
 
-      <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-700/30">
+        <div className="px-6 py-5 border-b border-zinc-700/30">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-800 rounded-lg flex items-center justify-center">
-              <Key className="w-4 h-4 text-slate-400" />
+            <div className="w-9 h-9 bg-zinc-800 rounded-lg flex items-center justify-center">
+              <Key className="w-4 h-4 text-zinc-400" />
             </div>
             <div>
               <h1 className="text-lg font-semibold text-white">
                 Change Password
               </h1>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-zinc-500">
                 Keep your account secure
               </p>
             </div>
@@ -327,7 +327,7 @@ const AdminChangePasswordPage = ({ onNavigate }) => {
           <button
             onClick={handleSubmit}
             disabled={loading || success}
-            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-zinc-800 hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:ring-offset-2 focus:ring-offset-zinc-950 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
