@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  Home,
   MessageSquare,
   Users,
   FileText,
@@ -11,6 +12,7 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
+import EmployeeHome from "@/components/EmployeeHome";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,7 @@ import { cn } from "@/lib/utils";
 
 export default function EmployeeDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("messages");
+  const [activeTab, setActiveTab] = useState("home");
   const [searchParams] = useSearchParams();
   const userData = JSON.parse(localStorage.getItem("user"));
 
@@ -44,6 +46,7 @@ export default function EmployeeDashboard() {
   };
 
   const navItems = [
+    { id: "home", icon: Home, label: "Home" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "team", icon: Users, label: "Team" },
     { id: "files", icon: FileText, label: "Files" },
@@ -158,6 +161,7 @@ export default function EmployeeDashboard() {
       </nav>
 
       <main className="flex-1 overflow-hidden">
+        {activeTab === "home" && <EmployeeHome onNavigate={setActiveTab} />}
         {activeTab === "messages" && <ChatInterface />}
 
         {activeTab === "team" && (
