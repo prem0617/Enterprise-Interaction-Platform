@@ -12,6 +12,9 @@ import callRoutes from "./routes/call.routes.js";
 import meetingRoutes from "./routes/meeting.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
+import { Message } from "./models/Message.js";
+import Meeting from "./models/Meeting.js";
+import { verifyToken } from "./middlewares/auth.middleware.js";
 
 // Load environment variables
 dotenv.config();
@@ -83,6 +86,27 @@ app.use("/api/chat", chatRouter);
 app.use("/api/direct_chat", directChatRouter);
 app.use("/api/call", callRoutes);
 app.use("/api/meetings", meetingRoutes);
+
+// Admin dashboard stats
+app.get("/api/admin/stats", verifyToken, async (req, res) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [messagesToday, activeMeetings] = await Promise.all([
+      Message.countDocuments({
+        created_at: { $gte: todayStart },
+        deleted_at: { $exists: false },
+      }),
+      Meeting.countDocuments({ status: "active" }),
+    ]);
+
+    res.json({ messagesToday, activeMeetings });
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Failed to load stats" });
+  }
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

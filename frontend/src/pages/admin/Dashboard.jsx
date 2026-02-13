@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
+  const [stats, setStats] = useState({ messagesToday: 0, activeMeetings: 0 });
   const adminToken = localStorage.getItem("token");
 
   const activeEmployeesList = employees
@@ -33,6 +34,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadEmployees();
+    loadStats();
   }, []);
 
   const loadEmployees = async () => {
@@ -48,11 +50,22 @@ export default function Dashboard() {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      const res = await axios.get(`${BACKEND_URL}/admin/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      setStats(res.data);
+    } catch (error) {
+      console.error("Error loading stats:", error);
+    }
+  };
+
   const statsData = [
     { label: "Total Employees", value: employees?.length, icon: Users },
     { label: "Active Users", value: activeEmployeesList.length, icon: UserCheck },
-    { label: "Messages Today", value: "--", icon: MessageSquare },
-    { label: "Active Meetings", value: "--", icon: Video },
+    { label: "Messages Today", value: stats.messagesToday, icon: MessageSquare },
+    { label: "Active Meetings", value: stats.activeMeetings, icon: Video },
   ];
 
   if (loading) {
