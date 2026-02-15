@@ -9,7 +9,8 @@ const ICE_SERVERS = {
 };
 
 /**
- * Meeting video call hook. Mesh WebRTC: each participant connects to every other.
+ * Meeting video call hook. Mesh WebRTC: host creates offers to all others so that
+ * joiners reliably receive the host's video; joiners only respond to offers.
  * Uses meeting-join/meeting-leave for room membership, meeting-webrtc-* for signaling.
  *
  * Features:
@@ -18,9 +19,10 @@ const ICE_SERVERS = {
  *  - Media-state broadcast (mute / video-off indicators for remote users)
  *  - Hand raise broadcast
  */
-export function useMeetingCall(socket, currentUserId, currentUserName, meetingId, roomParticipants) {
+export function useMeetingCall(socket, currentUserId, currentUserName, meetingId, roomParticipants, isHost = false) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [remoteScreenStreams, setRemoteScreenStreams] = useState({});
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -33,6 +35,9 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   const screenStreamRef = useRef(null);
   const originalVideoTrackRef = useRef(null);
   const peerConnectionsRef = useRef({});
+  const iceCandidateBufferRef = useRef({});
+  const remoteStreamsRef = useRef({});
+  const remoteScreenStreamsRef = useRef({});
   const socketRef = useRef(socket);
   const meetingIdRef = useRef(meetingId);
 
@@ -40,6 +45,20 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
 
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { meetingIdRef.current = meetingId; }, [meetingId]);
+
+  const drainIceCandidates = useCallback(async (remoteIdStr) => {
+    const pc = peerConnectionsRef.current[remoteIdStr];
+    const buffer = iceCandidateBufferRef.current[remoteIdStr];
+    if (!pc || !buffer?.length) return;
+    delete iceCandidateBufferRef.current[remoteIdStr];
+    for (const c of buffer) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch (err) {
+        console.warn("[MEETING_CALL] addIceCandidate (drain) error:", err);
+      }
+    }
+  }, []);
 
   // ---- Shared peer-connection factory (single source of truth) ----
   const getOrCreatePeerConnection = useCallback((remoteIdStr) => {
@@ -50,16 +69,42 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionsRef.current[remoteIdStr] = pc;
 
-    // Attach local tracks if available
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) =>
         pc.addTrack(track, localStreamRef.current)
       );
     }
 
+    if (!remoteStreamsRef.current[remoteIdStr]) {
+      remoteStreamsRef.current[remoteIdStr] = new MediaStream();
+    }
+    if (!remoteScreenStreamsRef.current[remoteIdStr]) {
+      remoteScreenStreamsRef.current[remoteIdStr] = new MediaStream();
+    }
+
     pc.ontrack = (e) => {
-      if (e.streams?.[0]) {
-        setRemoteStreams((prev) => ({ ...prev, [remoteIdStr]: e.streams[0] }));
+      if (!e.track) return;
+      // Screen: explicit displaySurface (sender) or second video track from this peer (receiver fallback)
+      const isVideo = e.track.kind === "video";
+      const explicitScreen =
+        isVideo &&
+        (e.track.getSettings?.().displaySurface === "monitor" ||
+          e.track.getSettings?.().displaySurface === "window" ||
+          e.track.getSettings?.().displaySurface === "browser");
+      const cameraStream = remoteStreamsRef.current[remoteIdStr];
+      const alreadyHasVideo = cameraStream && cameraStream.getVideoTracks().length > 0;
+      const isScreen =
+        explicitScreen || (isVideo && alreadyHasVideo);
+      const streamRef = isScreen ? remoteScreenStreamsRef : remoteStreamsRef;
+      const setState = isScreen ? setRemoteScreenStreams : setRemoteStreams;
+      const stream = streamRef.current[remoteIdStr];
+      if (stream) {
+        stream.addTrack(e.track);
+        if (stream.getTracks().length === 1) {
+          setState((prev) => ({ ...prev, [remoteIdStr]: stream }));
+        } else if (isScreen) {
+          setState((prev) => ({ ...prev, [remoteIdStr]: stream }));
+        }
       }
     };
 
@@ -77,7 +122,15 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         try { pc.close(); } catch (_) {}
         delete peerConnectionsRef.current[remoteIdStr];
+        delete remoteStreamsRef.current[remoteIdStr];
+        delete remoteScreenStreamsRef.current[remoteIdStr];
+        delete iceCandidateBufferRef.current[remoteIdStr];
         setRemoteStreams((prev) => {
+          const next = { ...prev };
+          delete next[remoteIdStr];
+          return next;
+        });
+        setRemoteScreenStreams((prev) => {
           const next = { ...prev };
           delete next[remoteIdStr];
           return next;
@@ -94,6 +147,10 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       try { pc.close(); } catch (_) {}
     });
     peerConnectionsRef.current = {};
+    iceCandidateBufferRef.current = {};
+    remoteStreamsRef.current = {};
+    remoteScreenStreamsRef.current = {};
+    setRemoteScreenStreams({});
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((t) => t.stop());
       screenStreamRef.current = null;
@@ -179,22 +236,35 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       }
       screenStreamRef.current = screenStream;
 
-      // Save original camera track
+      // Save original camera track (keep it; we add screen as second track)
       if (localStreamRef.current) {
         originalVideoTrackRef.current = localStreamRef.current.getVideoTracks()[0] || null;
       }
 
-      // Replace video track on all peer connections
-      Object.values(peerConnectionsRef.current).forEach((pc) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) {
-          sender.replaceTrack(screenTrack).catch((err) =>
-            console.error("[MEETING_CALL] replaceTrack screen error:", err)
-          );
+      // Add screen track to all peer connections (keep camera track so both are sent)
+      const screenStreamForSend = new MediaStream([screenTrack]);
+      const socket = socketRef.current;
+      const meetingId = meetingIdRef.current;
+      for (const remoteIdStr of Object.keys(peerConnectionsRef.current)) {
+        const pc = peerConnectionsRef.current[remoteIdStr];
+        if (!pc) continue;
+        try {
+          pc.addTrack(screenTrack, screenStreamForSend);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          if (socket?.connected && meetingId) {
+            socket.emit("meeting-webrtc-offer", {
+              meetingId,
+              toUserId: remoteIdStr,
+              sdp: pc.localDescription,
+            });
+          }
+        } catch (err) {
+          console.error("[MEETING_CALL] addTrack/createOffer screen error:", err);
         }
-      });
+      }
 
-      // Also replace in local stream so local preview shows screen
+      // Local preview: show screen (camera still in peer send)
       if (localStreamRef.current && originalVideoTrackRef.current) {
         localStreamRef.current.removeTrack(originalVideoTrackRef.current);
         localStreamRef.current.addTrack(screenTrack);
@@ -235,31 +305,48 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     }
   }, [isScreenSharing, currentUserIdStr]);
 
-  const stopScreenShare = useCallback(() => {
+  const stopScreenShare = useCallback(async () => {
     if (!isScreenSharing && !screenStreamRef.current) return;
 
-    // Stop screen tracks
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+    // Stop screen tracks and remove senders; renegotiate so remote stops receiving
+    const screenStream = screenStreamRef.current;
+    const socket = socketRef.current;
+    const meetingId = meetingIdRef.current;
+    if (screenStream) {
+      const screenTrack = screenStream.getVideoTracks()[0];
+      screenStream.getTracks().forEach((t) => t.stop());
+      if (screenTrack) {
+        for (const remoteIdStr of Object.keys(peerConnectionsRef.current)) {
+          const pc = peerConnectionsRef.current[remoteIdStr];
+          if (!pc) continue;
+          const sender = pc.getSenders().find((s) => s.track === screenTrack);
+          if (sender) {
+            pc.removeTrack(sender);
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              if (socket?.connected && meetingId) {
+                socket.emit("meeting-webrtc-offer", {
+                  meetingId,
+                  toUserId: remoteIdStr,
+                  sdp: pc.localDescription,
+                });
+              }
+            } catch (err) {
+              console.warn("[MEETING_CALL] renegotiate after stopScreenShare:", err);
+            }
+          }
+        }
+      }
     }
 
-    // Restore original camera track
+    // Restore local preview to camera
     const origTrack = originalVideoTrackRef.current;
     if (origTrack && localStreamRef.current) {
-      const screenTrack = localStreamRef.current.getVideoTracks()[0];
-      if (screenTrack) localStreamRef.current.removeTrack(screenTrack);
+      const currentVideo = localStreamRef.current.getVideoTracks()[0];
+      if (currentVideo) localStreamRef.current.removeTrack(currentVideo);
       localStreamRef.current.addTrack(origTrack);
       setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
-
-      // Replace back on all peers
-      Object.values(peerConnectionsRef.current).forEach((pc) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) {
-          sender.replaceTrack(origTrack).catch((err) =>
-            console.error("[MEETING_CALL] replaceTrack revert error:", err)
-          );
-        }
-      });
     }
 
     screenStreamRef.current = null;
@@ -346,14 +433,25 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
 
     const handleScreenStart = (data) => {
       if (data.meetingId !== meetingId) return;
-      setScreenShareUserId(String(data.userId));
+      const sharerId = String(data.userId);
+      setScreenShareUserId(sharerId);
+      // Only one screen at a time: if someone else started sharing and I was sharing, stop mine
+      if (sharerId !== currentUserIdStr && isScreenSharing) {
+        stopScreenShare();
+      }
     };
 
     const handleScreenStop = (data) => {
       if (data.meetingId !== meetingId) return;
-      setScreenShareUserId((prev) =>
-        prev === String(data.userId) ? null : prev
-      );
+      const uid = String(data.userId);
+      setScreenShareUserId((prev) => (prev === uid ? null : prev));
+      const stream = remoteScreenStreamsRef.current[uid];
+      if (stream) stream.getTracks().forEach((t) => stream.removeTrack(t));
+      setRemoteScreenStreams((prev) => {
+        const next = { ...prev };
+        delete next[uid];
+        return next;
+      });
     };
 
     socket.on("meeting-media-state", handleMediaState);
@@ -367,7 +465,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       socket.off("meeting-screen-share-start", handleScreenStart);
       socket.off("meeting-screen-share-stop", handleScreenStop);
     };
-  }, [socket, meetingId, currentUserIdStr]);
+  }, [socket, meetingId, currentUserIdStr, isScreenSharing, stopScreenShare]);
 
   // ---- WebRTC signaling listeners ----
   useEffect(() => {
@@ -389,6 +487,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
           toUserId: fromIdStr,
           sdp: pc.localDescription,
         });
+        await drainIceCandidates(fromIdStr);
       } catch (err) {
         console.error("[MEETING_CALL] handleOffer error:", err);
       }
@@ -402,6 +501,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        await drainIceCandidates(fromIdStr);
       } catch (err) {
         console.error("[MEETING_CALL] setRemoteDescription answer error:", err);
       }
@@ -411,11 +511,21 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       const { fromUserId, meetingId: evtMeetingId, candidate } = data;
       if (evtMeetingId !== meetingId || !candidate) return;
       const fromIdStr = String(fromUserId);
-      const pc = getOrCreatePeerConnection(fromIdStr);
+      const pc = peerConnectionsRef.current[fromIdStr];
+      if (!pc) {
+        if (!iceCandidateBufferRef.current[fromIdStr]) iceCandidateBufferRef.current[fromIdStr] = [];
+        iceCandidateBufferRef.current[fromIdStr].push(candidate);
+        return;
+      }
+      if (!pc.remoteDescription) {
+        if (!iceCandidateBufferRef.current[fromIdStr]) iceCandidateBufferRef.current[fromIdStr] = [];
+        iceCandidateBufferRef.current[fromIdStr].push(candidate);
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error("[MEETING_CALL] addIceCandidate error:", err);
+        console.warn("[MEETING_CALL] addIceCandidate error:", err);
       }
     };
 
@@ -428,9 +538,9 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       socket.off("meeting-webrtc-answer", handleAnswer);
       socket.off("meeting-webrtc-ice", handleIce);
     };
-  }, [socket, currentUserIdStr, meetingId, getOrCreatePeerConnection]);
+  }, [socket, currentUserIdStr, meetingId, getOrCreatePeerConnection, drainIceCandidates]);
 
-  // ---- Create offers to other participants when we have local stream ----
+  // ---- Create offers: host to everyone (so joiners get host video); non-hosts to peers with id > self (one offer per pair) ----
   useEffect(() => {
     if (!socket || !currentUserIdStr || !meetingId || !localStreamRef.current) return;
 
@@ -438,7 +548,13 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       .map((p) => String(p.userId))
       .filter((id) => id !== currentUserIdStr);
 
+    const shouldOfferTo = (remoteIdStr) => {
+      if (isHost) return true;
+      return remoteIdStr > currentUserIdStr;
+    };
+
     const createOffersTo = async (remoteIdStr) => {
+      if (!shouldOfferTo(remoteIdStr)) return;
       if (peerConnectionsRef.current[remoteIdStr]) return;
       const pc = getOrCreatePeerConnection(remoteIdStr);
       try {
@@ -454,8 +570,13 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       }
     };
 
-    others.forEach((id) => createOffersTo(id));
-  }, [socket, currentUserIdStr, meetingId, roomParticipants, localStream, getOrCreatePeerConnection]);
+    const run = () => others.forEach((id) => createOffersTo(id));
+    if (isHost && others.length > 0) {
+      const t = setTimeout(run, 150);
+      return () => clearTimeout(t);
+    }
+    run();
+  }, [socket, currentUserIdStr, meetingId, roomParticipants, localStream, isHost, getOrCreatePeerConnection]);
 
   // ---- Remove peer connections for participants who left ----
   useEffect(() => {
@@ -470,12 +591,18 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
           try { pc.close(); } catch (_) {}
           delete peerConnectionsRef.current[remoteId];
         }
+        delete remoteStreamsRef.current[remoteId];
+        delete remoteScreenStreamsRef.current[remoteId];
         setRemoteStreams((prev) => {
           const next = { ...prev };
           delete next[remoteId];
           return next;
         });
-        // Clean up remote state
+        setRemoteScreenStreams((prev) => {
+          const next = { ...prev };
+          delete next[remoteId];
+          return next;
+        });
         setRemoteMediaStates((prev) => {
           const next = { ...prev };
           delete next[remoteId];
@@ -488,6 +615,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   return {
     localStream,
     remoteStreams,
+    remoteScreenStreams,
     isMuted,
     isVideoOff,
     isScreenSharing,

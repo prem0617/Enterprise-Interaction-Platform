@@ -38,6 +38,7 @@ export const createMeeting = async (req, res) => {
       location,
       join_link,
       reminders = [],
+      open_to_everyone = true,
     } = req.body;
 
     if (!title || !meeting_type) {
@@ -60,6 +61,7 @@ export const createMeeting = async (req, res) => {
       location,
       join_link,
       reminders,
+      open_to_everyone,
     });
 
     await meeting.save();
@@ -155,14 +157,16 @@ export const getMeetingByCode = async (req, res) => {
       return res.status(410).json({ error: "This meeting has been cancelled" });
     }
 
-    // Auto-add the user as participant if they aren't already
     const isHost = String(meeting.host_id) === userId;
     const alreadyParticipant = meeting.participants.some(
       (p) => String(p) === userId
     );
+    // Only auto-add when open to everyone, or when host/admitted
     if (!isHost && !alreadyParticipant && meeting.status !== "ended") {
-      meeting.participants.push(userId);
-      await meeting.save();
+      if (meeting.open_to_everyone !== false) {
+        meeting.participants.push(userId);
+        await meeting.save();
+      }
     }
 
     const populated = await Meeting.findById(meeting._id)
@@ -234,6 +238,7 @@ export const updateMeeting = async (req, res) => {
       "join_link",
       "status",
       "reminders",
+      "open_to_everyone",
     ];
 
     updatableFields.forEach((field) => {
@@ -337,6 +342,42 @@ export const joinMeetingById = async (req, res) => {
   } catch (error) {
     console.error("[MEETING] joinMeetingById error:", error);
     return res.status(500).json({ error: "Failed to join meeting" });
+  }
+};
+
+// Host admits a user from the lobby into the meeting
+export const admitToMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.userId);
+    const { userId: guestUserId } = req.body;
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+    if (String(meeting.host_id) !== userId) {
+      return res.status(403).json({ error: "Only the host can admit participants" });
+    }
+    if (meeting.status === "cancelled" || meeting.status === "ended") {
+      return res.status(410).json({ error: "Meeting is not active" });
+    }
+
+    const guestId = String(guestUserId);
+    const alreadyParticipant = meeting.participants.some((p) => String(p) === guestId);
+    if (!alreadyParticipant) {
+      meeting.participants.push(guestId);
+      await meeting.save();
+    }
+
+    const populated = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    return res.json({ data: populated });
+  } catch (error) {
+    console.error("[MEETING] admitToMeeting error:", error);
+    return res.status(500).json({ error: "Failed to admit participant" });
   }
 };
 

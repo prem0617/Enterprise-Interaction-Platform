@@ -166,11 +166,14 @@ const MeetingRoom = ({
   chatContainerRef,
   copyMeetingLink,
   handleLeaveMeeting,
+  lobbyRequests = [],
+  onAdmitToLobby,
 }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState("chat"); // "chat" | "participants"
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pinnedUserId, setPinnedUserId] = useState(null);
+  const [lobbyBoxOpen, setLobbyBoxOpen] = useState(false);
   const containerRef = useRef(null);
 
   const elapsed = useElapsedTimer(
@@ -233,10 +236,12 @@ const MeetingRoom = ({
     });
   }
 
-  // Remote tiles
+  // Remote tiles: camera + optional screen tile when sharing
   remoteParticipants.forEach((p) => {
     const uid = String(p.userId);
     const rState = meetingCall.remoteMediaStates[uid] || {};
+    const screenStream = meetingCall.remoteScreenStreams?.[uid];
+    const isSharing = meetingCall.screenShareUserId === uid;
     allTiles.push({
       id: uid,
       name: p.name || "User",
@@ -245,9 +250,22 @@ const MeetingRoom = ({
       isMuted: rState.isMuted ?? false,
       isVideoOff: rState.isVideoOff ?? false,
       handRaised: rState.handRaised ?? false,
-      isScreenSharing: meetingCall.screenShareUserId === uid,
+      isScreenSharing: false,
       isHost: false,
     });
+    if (isSharing && screenStream) {
+      allTiles.push({
+        id: `${uid}-screen`,
+        name: `${p.name || "User"} (screen)`,
+        isLocal: false,
+        stream: screenStream,
+        isMuted: rState.isMuted ?? false,
+        isVideoOff: false,
+        handRaised: rState.handRaised ?? false,
+        isScreenSharing: true,
+        isHost: false,
+      });
+    }
   });
 
   // Layout: if pinned, pinned tile is large, rest are small strip on side
@@ -311,7 +329,7 @@ const MeetingRoom = ({
       } else {
         videoRefs.current[tile.id] = el;
       }
-      if (el && tile.stream) {
+      if (el && tile.stream && el.srcObject !== tile.stream) {
         el.srcObject = tile.stream;
         el.play().catch(() => {});
       }
@@ -400,10 +418,68 @@ const MeetingRoom = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-40 flex flex-col bg-zinc-950"
-    >
+    <>
+      {/* Join requests popup - centered window */}
+      {lobbyBoxOpen && activeMeeting.isHost && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setLobbyBoxOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-zinc-600 bg-zinc-900 shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 bg-zinc-800/80">
+              <h3 className="text-sm font-semibold text-white">Join requests</h3>
+              <button
+                type="button"
+                onClick={() => setLobbyBoxOpen(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-64 overflow-y-auto p-3">
+              {lobbyRequests.length === 0 ? (
+                <p className="text-sm text-zinc-500 text-center py-6">No one waiting to join</p>
+              ) : (
+                <ul className="space-y-2">
+                  {lobbyRequests.map((r) => (
+                    <li
+                      key={r.userId}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-800"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-sm text-amber-200 font-medium flex-shrink-0">
+                        {getInitials(r.name)}
+                      </div>
+                      <p className="flex-1 text-sm font-medium text-zinc-100 truncate min-w-0">
+                        {r.name || "Guest"}
+                      </p>
+                      {onAdmitToLobby && (
+                        <button
+                          type="button"
+                          onClick={() => onAdmitToLobby(r.userId)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 flex-shrink-0"
+                        >
+                          Admit
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        ref={containerRef}
+        className="flex-1 flex flex-col min-h-0 bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden"
+      >
       {/* ---- Top bar ---- */}
       <div className="h-12 px-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0 bg-zinc-900/80 backdrop-blur-sm">
         <div className="flex items-center gap-3 min-w-0">
@@ -421,7 +497,7 @@ const MeetingRoom = ({
                 {participantCount} participant
                 {participantCount !== 1 ? "s" : ""}
               </span>
-              {activeMeeting.meeting_code && (
+              {activeMeeting.isHost && activeMeeting.meeting_code && (
                 <>
                   <span>&bull;</span>
                   <span className="font-mono text-zinc-400">
@@ -635,12 +711,42 @@ const MeetingRoom = ({
               >
                 <Users className="w-3.5 h-3.5" />
                 People ({participantCount})
+                {activeMeeting.isHost && lobbyRequests.length > 0 && (
+                  <span
+                    className="ml-1 w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
+                    title={`${lobbyRequests.length} waiting to join`}
+                  >
+                    {lobbyRequests.length}
+                  </span>
+                )}
               </button>
             </div>
 
             {/* Tab content */}
             {sidebarTab === "participants" ? (
-              <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              <div className="flex-1 overflow-y-auto p-3 space-y-1.5 relative">
+                {/* Join requests button (host only) */}
+                {activeMeeting.isHost && (
+                  <div className="mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setLobbyBoxOpen(true)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-sm font-medium transition-colors ${
+                        lobbyRequests.length > 0
+                          ? "bg-amber-500/15 border border-amber-500/40 text-amber-200 hover:bg-amber-500/25"
+                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <span>Join requests</span>
+                      {lobbyRequests.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-amber-500/30 text-xs font-semibold text-amber-100">
+                          {lobbyRequests.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 {/* Current user */}
                 <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-zinc-800/80">
                   <div className="w-8 h-8 rounded-full bg-indigo-500/30 flex items-center justify-center text-xs text-indigo-200 font-medium">
@@ -776,6 +882,7 @@ const MeetingRoom = ({
         )}
       </div>
     </div>
+    </>
   );
 };
 
@@ -808,6 +915,9 @@ const MeetingModule = () => {
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [meetingSearchQuery, setMeetingSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showInstantMeetingDialog, setShowInstantMeetingDialog] = useState(false);
+  const [lobbyMeeting, setLobbyMeeting] = useState(null);
+  const [lobbyRequests, setLobbyRequests] = useState([]);
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
@@ -835,7 +945,8 @@ const MeetingModule = () => {
     currentUserId,
     currentUserName,
     activeMeeting?._id,
-    roomParticipants
+    roomParticipants,
+    activeMeeting?.isHost ?? false
   );
 
   const [form, setForm] = useState({
@@ -998,12 +1109,12 @@ const MeetingModule = () => {
     if (!socket) return;
 
     const handleParticipants = (payload) => {
-      if (!activeMeeting || payload.meetingId !== activeMeeting._id) return;
+      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
       setRoomParticipants(payload.participants || []);
     };
 
     const handleMessage = (payload) => {
-      if (!activeMeeting || payload.meetingId !== activeMeeting._id) return;
+      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
       if (!payload.message) return;
       // Prevent duplicate: ignore messages we sent locally
       if (
@@ -1021,7 +1132,7 @@ const MeetingModule = () => {
     };
 
     const handleEnded = (payload) => {
-      if (!activeMeeting || payload.meetingId !== activeMeeting._id) return;
+      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
       toast("Meeting ended by host", { icon: "ℹ️" });
       if (localMediaStream) {
         localMediaStream.getTracks().forEach((t) => t.stop());
@@ -1029,31 +1140,141 @@ const MeetingModule = () => {
       }
       meetingCall.cleanup();
       setActiveMeeting(null);
+      setLobbyRequests([]);
       setRoomParticipants([]);
       setChatMessages([]);
       setChatInput("");
     };
 
+    const handleLobbyRequest = (payload) => {
+      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      setLobbyRequests((prev) => {
+        if (prev.some((r) => r.userId === payload.userId)) return prev;
+        return [...prev, { userId: payload.userId, name: payload.name }];
+      });
+    };
+    const handleLobbyLeft = (payload) => {
+      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      setLobbyRequests((prev) => prev.filter((r) => r.userId !== payload.userId));
+    };
+
     socket.on("meeting-participants", handleParticipants);
     socket.on("meeting-message", handleMessage);
     socket.on("meeting-ended", handleEnded);
+    socket.on("meeting-lobby-request", handleLobbyRequest);
+    socket.on("meeting-lobby-left", handleLobbyLeft);
 
     return () => {
       socket.off("meeting-participants", handleParticipants);
       socket.off("meeting-message", handleMessage);
       socket.off("meeting-ended", handleEnded);
+      socket.off("meeting-lobby-request", handleLobbyRequest);
+      socket.off("meeting-lobby-left", handleLobbyLeft);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, activeMeeting, currentUserId]);
 
-  // ---- Join code from URL ----
+  // Guest in lobby: listen for admission or meeting ended
+  useEffect(() => {
+    if (!socket || !lobbyMeeting) return;
+    const handleAdmitted = (payload) => {
+      if (payload.meetingId !== lobbyMeeting._id) return;
+      const meetingToEnter = lobbyMeeting;
+      setLobbyMeeting(null);
+      (async () => {
+        try {
+          const code = meetingToEnter.meeting_code || meetingToEnter.code;
+          const { data } = await axios.get(
+            `${BACKEND_URL}/meetings/join?code=${encodeURIComponent(String(code).toUpperCase())}`,
+            axiosConfig
+          );
+          const meeting = data.data;
+          setMeetings((prev) => {
+            const exists = prev.some((m) => m._id === meeting._id);
+            if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
+            return [...prev, meeting];
+          });
+          await handleEnterMeeting(meeting);
+        } catch (err) {
+          toast.error(err.response?.data?.error || "Failed to join after admission");
+        }
+      })();
+    };
+    const handleEndedWhileInLobby = (payload) => {
+      if (String(payload.meetingId) !== String(lobbyMeeting._id)) return;
+      setLobbyMeeting(null);
+      toast.info("The meeting has ended.");
+    };
+    socket.on("meeting-admitted", handleAdmitted);
+    socket.on("meeting-ended", handleEndedWhileInLobby);
+    return () => {
+      socket.off("meeting-admitted", handleAdmitted);
+      socket.off("meeting-ended", handleEndedWhileInLobby);
+    };
+  }, [socket, lobbyMeeting, axiosConfig]);
+
+  // ---- Join from link: when URL has joinCode, auto-join (meeting/lobby shown in Meeting tab) ----
+  const hasAutoJoinedRef = useRef(false);
   useEffect(() => {
     const joinCode = searchParams.get("joinCode");
-    if (joinCode) {
-      setJoinCodeInput(joinCode.toUpperCase());
-      setSearchParams({}, { replace: true });
+    if (!joinCode) {
+      hasAutoJoinedRef.current = false;
+      return;
     }
-  }, [searchParams, setSearchParams]);
+    if (hasAutoJoinedRef.current) return;
+    hasAutoJoinedRef.current = true;
+    const code = String(joinCode).trim().toUpperCase();
+    setJoinCodeInput(code);
+
+    (async () => {
+      if (!socket) {
+        toast.error("Connecting... Please wait");
+        hasAutoJoinedRef.current = false;
+        setSearchParams({}, { replace: true });
+        return;
+      }
+      setJoiningByCode(true);
+      try {
+        const { data } = await axios.get(
+          `${BACKEND_URL}/meetings/join?code=${encodeURIComponent(code)}`,
+          axiosConfig
+        );
+        const meeting = data.data;
+        if (meeting.status === "cancelled") {
+          toast.error("This meeting has been cancelled");
+          return;
+        }
+        if (meeting.status === "ended") {
+          toast.error("This meeting has already ended");
+          return;
+        }
+        setJoinCodeInput("");
+        setMeetings((prev) => {
+          const exists = prev.some((m) => m._id === meeting._id);
+          if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
+          return [...prev, meeting];
+        });
+        if (meeting.open_to_everyone === false) {
+          setLobbyMeeting(meeting);
+          socket.emit("meeting-join-request", {
+            meetingId: meeting._id,
+            name: currentUserName,
+          });
+          toast.info("Waiting for the host to admit you.");
+        } else {
+          await handleEnterMeeting(meeting);
+        }
+      } catch (err) {
+        const msg =
+          err.response?.data?.error ||
+          (err.response?.status === 404 ? "Meeting not found" : "Failed to join");
+        toast.error(msg);
+      } finally {
+        setJoiningByCode(false);
+        setSearchParams({}, { replace: true });
+      }
+    })();
+  }, [searchParams]);
 
   // ---- Form helpers ----
   const openCreateForm = () => {
@@ -1241,8 +1462,13 @@ const MeetingModule = () => {
     }
   };
 
-  // ---- Instant meeting ----
-  const handleInstantMeeting = async () => {
+  // ---- Instant meeting: dialog then start ----
+  const startInstantMeetingFlow = () => {
+    setShowInstantMeetingDialog(true);
+  };
+
+  const handleInstantMeeting = async (openToEveryone = true) => {
+    setShowInstantMeetingDialog(false);
     if (!socket) {
       toast.error("Connecting... Please wait");
       return;
@@ -1270,6 +1496,7 @@ const MeetingModule = () => {
           scheduled_at: now.toISOString(),
           duration_minutes: 30,
           participants: [],
+          open_to_everyone: openToEveryone,
         },
         axiosConfig
       );
@@ -1282,7 +1509,7 @@ const MeetingModule = () => {
       setChatMessages([]);
       setChatInput("");
       socket.emit("meeting-join", {
-        meetingId: meeting._id,
+        meetingId: String(meeting._id),
         name: currentUserName,
       });
       await axios.put(
@@ -1295,7 +1522,7 @@ const MeetingModule = () => {
           m._id === meeting._id ? { ...m, status: "active" } : m
         )
       );
-      toast.success("Meeting started");
+      toast.success("Meeting started. Copy the link below to invite others.");
     } catch (err) {
       meetingCall.cleanup();
       if (stream) {
@@ -1426,8 +1653,21 @@ const MeetingModule = () => {
     setChatMessages([]);
     setChatInput("");
 
+    const meetingIdStr = String(meeting._id);
+    if (!host) {
+      const hostId = meeting.host_id?._id ?? meeting.host_id;
+      const hostName =
+        (meeting.host_id?.first_name || meeting.host_id?.last_name)
+          ? `${meeting.host_id?.first_name || ""} ${meeting.host_id?.last_name || ""}`.trim()
+          : (meeting.host_id?.email || "Host");
+      setRoomParticipants([
+        { userId: String(hostId), name: hostName },
+        { userId: String(currentUserId), name: currentUserName },
+      ]);
+    }
+
     socket.emit("meeting-join", {
-      meetingId: meeting._id,
+      meetingId: meetingIdStr,
       name: currentUserName,
     });
   };
@@ -1477,14 +1717,21 @@ const MeetingModule = () => {
     setChatInput("");
   };
 
-  // ---- Join by code ----
+  // ---- Parse meeting code from input (raw code or full join URL) ----
+  const parseMeetingCodeFromInput = (input) => {
+    const raw = String(input || "").trim();
+    if (!raw) return "";
+    const joinMatch = raw.match(/\/join\/([A-Za-z0-9_-]+)/i);
+    if (joinMatch) return joinMatch[1].toUpperCase();
+    return raw.toUpperCase().replace(/\s/g, "").slice(0, 20);
+  };
+
+  // ---- Join by code or link ----
   const handleJoinByCode = async (e) => {
     e?.preventDefault?.();
-    const code = String(joinCodeInput || "")
-      .trim()
-      .toUpperCase();
+    const code = parseMeetingCodeFromInput(joinCodeInput);
     if (!code) {
-      toast.error("Enter a meeting code");
+      toast.error("Enter a meeting code or paste the meeting link");
       return;
     }
     setJoiningByCode(true);
@@ -1503,13 +1750,21 @@ const MeetingModule = () => {
         return;
       }
       setJoinCodeInput("");
-      // Update meetings list with the refreshed meeting (user now in participants)
       setMeetings((prev) => {
         const exists = prev.some((m) => m._id === meeting._id);
         if (exists)
           return prev.map((m) => (m._id === meeting._id ? meeting : m));
         return [...prev, meeting];
       });
+      if (meeting.open_to_everyone === false) {
+        setLobbyMeeting(meeting);
+        socket.emit("meeting-join-request", {
+          meetingId: meeting._id,
+          name: currentUserName,
+        });
+        toast.info("Waiting for the host to admit you.");
+        return;
+      }
       await handleEnterMeeting(meeting);
     } catch (err) {
       const msg =
@@ -1533,7 +1788,24 @@ const MeetingModule = () => {
     if (!link) return;
     navigator.clipboard
       .writeText(link)
-      .then(() => toast.success("Link copied to clipboard"));
+      .then(() => toast.success("Link copied to clipboard", { duration: 500 }));
+  };
+
+  const handleAdmitToLobby = async (userId) => {
+    if (!activeMeeting?.isHost || !socket) return;
+    try {
+      await axios.post(
+        `${BACKEND_URL}/meetings/${activeMeeting._id}/admit`,
+        { userId },
+        axiosConfig
+      );
+      socket.emit("meeting-admit", {
+        meetingId: activeMeeting._id,
+        userId,
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to admit");
+    }
   };
 
   // ---- In-meeting chat ----
@@ -1567,26 +1839,57 @@ const MeetingModule = () => {
   useEffect(() => {
     if (!displayLocalStream || !localVideoRef.current) return;
     const video = localVideoRef.current;
-    video.srcObject = displayLocalStream;
-    video.play().catch(() => {});
+    if (video.srcObject !== displayLocalStream) {
+      video.srcObject = displayLocalStream;
+      video.play().catch(() => {});
+    }
     return () => {
-      video.srcObject = null;
+      if (localVideoRef.current) localVideoRef.current.srcObject = null;
     };
   }, [displayLocalStream]);
 
   useEffect(() => {
-    Object.entries(meetingCall.remoteStreams).forEach(([userId, stream]) => {
+    const allRemote = {
+      ...meetingCall.remoteStreams,
+      ...Object.fromEntries(
+        Object.entries(meetingCall.remoteScreenStreams || {}).map(([k, v]) => [`${k}-screen`, v])
+      ),
+    };
+    Object.entries(allRemote).forEach(([userId, stream]) => {
       const videoEl = videoRefs.current[userId];
       if (videoEl && stream) {
-        videoEl.srcObject = stream;
-        videoEl.play().catch(() => {});
+        if (videoEl.srcObject !== stream) {
+          videoEl.srcObject = stream;
+          videoEl.play().catch(() => {});
+        }
       }
     });
-  }, [meetingCall.remoteStreams]);
+  }, [meetingCall.remoteStreams, meetingCall.remoteScreenStreams]);
 
   // ======================== RENDER ========================
 
-  // ---- Active meeting room (full-screen overlay) ----
+  // ---- Guest waiting in lobby ----
+  if (lobbyMeeting) {
+    return (
+      <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4 bg-zinc-950 rounded-xl border border-zinc-800">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
+          <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-white mb-2">Waiting to join</h2>
+          <p className="text-sm text-zinc-400 mb-2">{lobbyMeeting.title}</p>
+          <p className="text-sm text-zinc-500 mb-6">The host will admit you shortly.</p>
+          <button
+            type="button"
+            onClick={() => setLobbyMeeting(null)}
+            className="px-4 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 text-sm font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Active meeting room ----
   if (activeMeeting) {
     return (
       <MeetingRoom
@@ -1605,6 +1908,8 @@ const MeetingModule = () => {
         chatContainerRef={chatContainerRef}
         copyMeetingLink={copyMeetingLink}
         handleLeaveMeeting={handleLeaveMeeting}
+        lobbyRequests={lobbyRequests}
+        onAdmitToLobby={handleAdmitToLobby}
       />
     );
   }
@@ -1612,6 +1917,32 @@ const MeetingModule = () => {
   // ---- Main view (calendar + meeting list) ----
   return (
     <div className="w-full h-[calc(100vh-3.5rem)] px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
+      {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
+      {showInstantMeetingDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-2">Start instant meeting</h3>
+            <p className="text-sm text-zinc-400 mb-6">Is it open for everyone with the link?</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => handleInstantMeeting(true)}
+                className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-500"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInstantMeeting(false)}
+                className="flex-1 px-4 py-3 rounded-lg bg-zinc-700 text-white font-medium hover:bg-zinc-600"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
@@ -1622,7 +1953,7 @@ const MeetingModule = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleInstantMeeting}
+            onClick={startInstantMeetingFlow}
             disabled={creatingInstant || !socket}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition shadow-sm disabled:opacity-50"
           >
@@ -1646,23 +1977,22 @@ const MeetingModule = () => {
         </div>
       </div>
 
-      {/* Join by code */}
+      {/* Join by code or link */}
       <div className="mb-4 p-4 bg-zinc-900 rounded-xl border border-zinc-700/50">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-2">
           <Link2 className="w-4 h-4" />
-          Join by meeting code
+          Join by meeting code or link
         </h3>
         <p className="text-xs text-zinc-400 mb-3">
-          Enter a meeting code shared by the host to join.
+          Enter the meeting code or paste the full meeting link to join.
         </p>
         <form onSubmit={handleJoinByCode} className="flex gap-2">
           <input
             type="text"
             value={joinCodeInput}
-            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-            placeholder="e.g. ABC12345"
-            className="flex-1 max-w-xs px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-sm text-white font-mono uppercase placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            maxLength={12}
+            onChange={(e) => setJoinCodeInput(e.target.value)}
+            placeholder="e.g. ABC12345 or https://.../join/ABC12345"
+            className="flex-1 min-w-0 max-w-md px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-sm text-white font-mono placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           <button
             type="submit"
@@ -1914,7 +2244,7 @@ const MeetingModule = () => {
                           </span>
                         )}
                         <div className="flex gap-1">
-                          {m.meeting_code && (
+                          {m.meeting_code && isHost(m) && (
                             <button
                               type="button"
                               onClick={() => copyMeetingLink(m)}

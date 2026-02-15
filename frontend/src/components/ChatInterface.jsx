@@ -38,6 +38,7 @@ import GroupCallIncomingBanner from "./GroupCallIncomingBanner";
 import { useAudioCall } from "../hooks/useAudioCall";
 import { useVideoCall } from "../hooks/useVideoCall";
 import { useGroupCall } from "../hooks/useGroupCall";
+import { useCallContext } from "../context/CallContextProvider";
 import ActiveVideoCallBar from "./ActiveVideoCallBar";
 import IncomingVideoCallModal from "./IncomingVideoCallModal";
 import OutgoingVideoCallModal from "./OutgoingVideoCallModal";
@@ -371,19 +372,25 @@ const ChatInterface = () => {
     [token]
   );
 
-  const audioCall = useAudioCall(
+  const callContext = useCallContext();
+  const hasGlobalCall = Boolean(callContext?.audioCall && callContext?.videoCall);
+
+  const localAudioCall = useAudioCall(
     socket,
     user?.id,
     currentUserName,
-    requestCallApi,
-    checkOnlineApi
+    requestCallApi
   );
-  const videoCall = useVideoCall(
+  const localVideoCall = useVideoCall(
     socket,
     user?.id,
     currentUserName,
     requestVideoCallApi
   );
+
+  const audioCall = hasGlobalCall ? callContext.audioCall : localAudioCall;
+  const videoCall = hasGlobalCall ? callContext.videoCall : localVideoCall;
+  const renderCallModals = !hasGlobalCall;
 
   const startGroupCallApi = useCallback(
     async (channelId) => {
@@ -2269,7 +2276,7 @@ const ChatInterface = () => {
         roleUpdateTrigger={roleUpdateTrigger}
       />
 
-      {audioCall.callState === "incoming" && (
+      {renderCallModals && audioCall.callState === "incoming" && (
         <IncomingCallModal
           remoteUser={audioCall.remoteUser}
           onAccept={audioCall.acceptCall}
@@ -2277,26 +2284,27 @@ const ChatInterface = () => {
           errorMessage={audioCall.errorMessage}
         />
       )}
-      {audioCall.callState === "calling" && (
+      {renderCallModals && audioCall.callState === "calling" && (
         <OutgoingCallModal
           remoteUser={audioCall.remoteUser}
           onHangUp={audioCall.endCall}
         />
       )}
-      {(audioCall.callState === "connecting" ||
-        audioCall.callState === "active") && (
-        <ActiveCallBar
-          remoteUser={audioCall.remoteUser}
-          remoteStream={audioCall.remoteStream}
-          isMuted={audioCall.isMuted}
-          onToggleMute={audioCall.toggleMute}
-          onHangUp={audioCall.endCall}
-          isConnecting={audioCall.callState === "connecting"}
-          errorMessage={audioCall.errorMessage}
-        />
-      )}
+      {renderCallModals &&
+        (audioCall.callState === "connecting" ||
+          audioCall.callState === "active") && (
+          <ActiveCallBar
+            remoteUser={audioCall.remoteUser}
+            remoteStream={audioCall.remoteStream}
+            isMuted={audioCall.isMuted}
+            onToggleMute={audioCall.toggleMute}
+            onHangUp={audioCall.endCall}
+            isConnecting={audioCall.callState === "connecting"}
+            errorMessage={audioCall.errorMessage}
+          />
+        )}
 
-      {videoCall.callState === "incoming" && (
+      {renderCallModals && videoCall.callState === "incoming" && (
         <IncomingVideoCallModal
           remoteUser={videoCall.remoteUser}
           onAccept={videoCall.acceptCall}
@@ -2304,27 +2312,28 @@ const ChatInterface = () => {
           errorMessage={videoCall.errorMessage}
         />
       )}
-      {videoCall.callState === "calling" && (
+      {renderCallModals && videoCall.callState === "calling" && (
         <OutgoingVideoCallModal
           remoteUser={videoCall.remoteUser}
           onHangUp={videoCall.endCall}
         />
       )}
-      {(videoCall.callState === "connecting" ||
-        videoCall.callState === "active") && (
-        <ActiveVideoCallBar
-          remoteUser={videoCall.remoteUser}
-          localStream={videoCall.localStream}
-          remoteStream={videoCall.remoteStream}
-          isMuted={videoCall.isMuted}
-          isVideoOff={videoCall.isVideoOff}
-          onToggleMute={videoCall.toggleMute}
-          onToggleVideo={videoCall.toggleVideo}
-          onHangUp={videoCall.endCall}
-          isConnecting={videoCall.callState === "connecting"}
-          errorMessage={videoCall.errorMessage}
-        />
-      )}
+      {renderCallModals &&
+        (videoCall.callState === "connecting" ||
+          videoCall.callState === "active") && (
+          <ActiveVideoCallBar
+            remoteUser={videoCall.remoteUser}
+            localStream={videoCall.localStream}
+            remoteStream={videoCall.remoteStream}
+            isMuted={videoCall.isMuted}
+            isVideoOff={videoCall.isVideoOff}
+            onToggleMute={videoCall.toggleMute}
+            onToggleVideo={videoCall.toggleVideo}
+            onHangUp={videoCall.endCall}
+            isConnecting={videoCall.callState === "connecting"}
+            errorMessage={videoCall.errorMessage}
+          />
+        )}
 
       {groupCall.groupCallState === "waiting" && (
         <GroupCallWaitingModal

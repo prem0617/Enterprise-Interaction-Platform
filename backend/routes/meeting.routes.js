@@ -8,6 +8,7 @@ import {
   updateMeeting,
   cancelMeeting,
   joinMeetingById,
+  admitToMeeting,
   deleteMeeting,
 } from "../controllers/meeting/meeting.controller.js";
 
@@ -18,6 +19,7 @@ router.get("/", verifyToken, getMyMeetings);
 router.get("/code/:code", verifyToken, getMeetingByCode);
 router.get("/join", verifyToken, getMeetingByCode);
 router.post("/:id/join", verifyToken, joinMeetingById);
+router.post("/:id/admit", verifyToken, admitToMeeting);
 router.get("/:id", verifyToken, getMeetingById);
 router.put("/:id", verifyToken, updateMeeting);
 router.delete("/:id/permanent", verifyToken, deleteMeeting);

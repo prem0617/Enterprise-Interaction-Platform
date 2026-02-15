@@ -15,6 +15,7 @@ import {
 import EmployeeHome from "@/components/EmployeeHome";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -54,8 +55,9 @@ export default function EmployeeDashboard() {
   ];
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <nav className="bg-card border-b border-border sticky top-0 z-50">
+    <GlobalCallProvider>
+      <div className="h-screen bg-background flex flex-col overflow-hidden">
+        <nav className="bg-card border-b border-border sticky top-0 z-50">
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
@@ -160,7 +162,7 @@ export default function EmployeeDashboard() {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === "home" && <EmployeeHome onNavigate={setActiveTab} />}
         {activeTab === "messages" && <ChatInterface />}
 
@@ -188,6 +190,7 @@ export default function EmployeeDashboard() {
 
         {activeTab === "meetings" && <MeetingModule />}
       </main>
-    </div>
+      </div>
+    </GlobalCallProvider>
   );
 }

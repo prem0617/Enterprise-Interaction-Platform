@@ -18,6 +18,8 @@ const onlineUsers = new Set(); // Track online users
 const userCallStatus = {};
 // Track active meeting rooms in memory: meetingId -> { [userId]: { name } }
 const activeMeetings = {};
+// Lobby for meetings with open_to_everyone=false: meetingId -> [{ userId, name, socketId }]
+const meetingLobby = {};
 
 function forwardToUser(eventName, toUserId, payload) {
   const normalizedTo = toUserId?.toString?.() ?? toUserId;
@@ -371,6 +373,37 @@ io.on("connection", async (socket) => {
     });
   });
 
+  // Guest requests to join when meeting has lobby (open_to_everyone = false)
+  socket.on("meeting-join-request", (data) => {
+    const { meetingId, name } = data || {};
+    if (!meetingId || !socket.userId) return;
+    const key = String(meetingId);
+    if (!meetingLobby[key]) meetingLobby[key] = [];
+    const entry = { userId: socket.userId, name: name || `User ${socket.userId}`, socketId: socket.id };
+    if (meetingLobby[key].some((e) => e.userId === socket.userId)) return;
+    meetingLobby[key].push(entry);
+    io.to(`meeting:${key}`).emit("meeting-lobby-request", {
+      meetingId: key,
+      userId: socket.userId,
+      name: entry.name,
+    });
+  });
+
+  // Host admits a user from the lobby
+  socket.on("meeting-admit", (data) => {
+    const { meetingId, userId: guestUserId } = data || {};
+    if (!meetingId || !socket.userId || !guestUserId) return;
+    const key = String(meetingId);
+    const lobby = meetingLobby[key];
+    if (!lobby) return;
+    const idx = lobby.findIndex((e) => String(e.userId) === String(guestUserId));
+    if (idx === -1) return;
+    lobby.splice(idx, 1);
+    if (lobby.length === 0) delete meetingLobby[key];
+    io.to(`meeting:${key}`).emit("meeting-lobby-left", { meetingId: key, userId: guestUserId });
+    forwardToUser("meeting-admitted", guestUserId, { meetingId: key });
+  });
+
   socket.on("meeting-leave", (data) => {
     const { meetingId } = data || {};
     if (!meetingId || !socket.userId) return;
@@ -424,6 +457,15 @@ io.on("connection", async (socket) => {
     const key = String(meetingId);
     const room = activeMeetings[key];
     if (!room) return;
+
+    // Notify guests in lobby that meeting ended
+    const lobby = meetingLobby[key];
+    if (lobby) {
+      lobby.forEach((e) => {
+        io.to(e.socketId).emit("meeting-ended", { meetingId: key });
+      });
+      delete meetingLobby[key];
+    }
 
     // Broadcast end, then clear room
     io.to(`meeting:${key}`).emit("meeting-ended", { meetingId: key });
@@ -574,6 +616,14 @@ io.on("connection", async (socket) => {
             }
           });
         }
+
+        // Remove user from any meeting lobby
+        Object.keys(meetingLobby).forEach((key) => {
+          meetingLobby[key] = meetingLobby[key].filter(
+            (e) => String(e.userId) !== String(normalizedUserId)
+          );
+          if (meetingLobby[key].length === 0) delete meetingLobby[key];
+        });
 
         // Broadcast updated online users list
         broadcastOnlineUsers();

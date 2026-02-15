@@ -17,6 +17,7 @@ import AdminProfilePage from "./AdminProfilePage";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -75,8 +76,9 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
-      {/* Sidebar - Desktop */}
+    <GlobalCallProvider>
+      <div className="h-screen bg-background flex overflow-hidden">
+        {/* Sidebar - Desktop */}
       <aside
         className={cn(
           "hidden lg:flex flex-col bg-card border-r border-border transition-all duration-200",
@@ -192,8 +194,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <main className="flex-1 overflow-auto">{renderPageContent()}</main>
+        <main className="flex-1 flex flex-col min-h-0 overflow-auto">{renderPageContent()}</main>
       </div>
     </div>
+    </GlobalCallProvider>
   );
 }

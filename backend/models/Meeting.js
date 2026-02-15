@@ -56,6 +56,10 @@ const meetingSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    open_to_everyone: {
+      type: Boolean,
+      default: true,
+    },
     country_restriction: {
       type: String,
       enum: ["germany", "india", "usa"],
