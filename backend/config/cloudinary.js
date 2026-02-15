@@ -70,4 +70,30 @@ export const upload = multer({
   },
 });
 
+// Memory storage for meeting recordings (video/audio) — upload to Cloudinary in controller
+const memoryStorage = multer.memoryStorage();
+const recordingFileFilter = (req, file, cb) => {
+  const allowed = [
+    "video/webm",
+    "video/mp4",
+    "audio/webm",
+    "audio/mp4",
+    "application/octet-stream",
+    "text/plain", // some clients send blob as text/plain; we still treat body as video
+  ];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Recording type ${file.mimetype} not supported`), false);
+  }
+};
+
+export const uploadMeetingRecording = multer({
+  storage: memoryStorage,
+  fileFilter: recordingFileFilter,
+  limits: {
+    fileSize: 500 * 1024 * 1024, // 500MB per file
+  },
+});
+
 export { cloudinary };

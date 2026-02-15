@@ -28,6 +28,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareUserId, setScreenShareUserId] = useState(null);
   const [mediaError, setMediaError] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
   // Remote media states { [userId]: { isMuted, isVideoOff, handRaised } }
   const [remoteMediaStates, setRemoteMediaStates] = useState({});
 
@@ -38,6 +39,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   const iceCandidateBufferRef = useRef({});
   const remoteStreamsRef = useRef({});
   const remoteScreenStreamsRef = useRef({});
+  const recordingRecordersRef = useRef([]);
   const socketRef = useRef(socket);
   const meetingIdRef = useRef(meetingId);
 
@@ -612,6 +614,90 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     });
   }, [meetingId, roomParticipants, currentUserIdStr]);
 
+  // ---- Meeting recording (host only; call from UI) ----
+  const startRecording = useCallback((participants) => {
+    if (recordingRecordersRef.current.length > 0) return;
+    const startedAt = new Date();
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+      ? "video/webm;codecs=vp9,opus"
+      : "video/webm";
+    const recorders = [];
+
+    const addRecorder = (stream, participantId, participantName, type) => {
+      if (!stream || stream.getTracks().length === 0) return;
+      try {
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recorders.push({
+          recorder,
+          participantId,
+          participantName: participantName || "Unknown",
+          type,
+          startedAt: new Date(startedAt),
+        });
+      } catch (e) {
+        console.warn("[MEETING_CALL] MediaRecorder create failed:", e);
+      }
+    };
+
+    const participantsList = participants || [];
+    const getName = (userId) => {
+      const p = participantsList.find((x) => String(x.userId) === String(userId));
+      return p?.name || "Participant";
+    };
+
+    if (localStreamRef.current) {
+      addRecorder(localStreamRef.current, currentUserIdStr, getName(currentUserIdStr), "video");
+    }
+    Object.keys(remoteStreamsRef.current).forEach((uid) => {
+      const stream = remoteStreamsRef.current[uid];
+      if (stream) addRecorder(stream, uid, getName(uid), "video");
+    });
+    Object.keys(remoteScreenStreamsRef.current).forEach((uid) => {
+      const stream = remoteScreenStreamsRef.current[uid];
+      if (stream) addRecorder(stream, uid, `${getName(uid)} (screen)`, "screen");
+    });
+
+    recorders.forEach(({ recorder }) => recorder.start(1000));
+    recordingRecordersRef.current = recorders;
+    setIsRecording(true);
+  }, [currentUserIdStr]);
+
+  const stopRecording = useCallback(() => {
+    const list = recordingRecordersRef.current;
+    recordingRecordersRef.current = [];
+    setIsRecording(false);
+    if (list.length === 0) return Promise.resolve([]);
+
+    const endedAt = new Date();
+    return Promise.all(
+      list.map(
+        ({ recorder, participantId, participantName, type, startedAt }) =>
+          new Promise((resolve) => {
+            const chunks = [];
+            recorder.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+            recorder.onstop = () => {
+              const blob = chunks.length ? new Blob(chunks, { type: recorder.mimeType }) : null;
+              resolve(
+                blob
+                  ? {
+                      blob,
+                      participantId,
+                      participantName,
+                      type: type === "screen" ? "screen" : "video",
+                      startedAt,
+                      endedAt,
+                    }
+                  : null
+              );
+            };
+            recorder.stop();
+          })
+      )
+    ).then((results) => results.filter(Boolean));
+  }, []);
+
   return {
     localStream,
     remoteStreams,
@@ -623,6 +709,9 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     handRaised,
     remoteMediaStates,
     mediaError,
+    isRecording,
+    startRecording,
+    stopRecording,
     startMedia,
     cleanup,
     toggleMute,

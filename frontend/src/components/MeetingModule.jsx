@@ -37,6 +37,7 @@ import {
   Search,
   Filter,
   Radio,
+  Circle,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -88,6 +89,15 @@ function isSameDay(a, b) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+/** Local date as YYYY-MM-DD (no UTC shift). */
+function toLocalDateString(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function buildMonthGrid(currentMonth) {
@@ -166,6 +176,7 @@ const MeetingRoom = ({
   chatContainerRef,
   copyMeetingLink,
   handleLeaveMeeting,
+  onUploadRecordings,
   lobbyRequests = [],
   onAdmitToLobby,
 }) => {
@@ -174,7 +185,27 @@ const MeetingRoom = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pinnedUserId, setPinnedUserId] = useState(null);
   const [lobbyBoxOpen, setLobbyBoxOpen] = useState(false);
+  const [uploadingRecordings, setUploadingRecordings] = useState(false);
   const containerRef = useRef(null);
+
+  const handleRecordingToggle = async () => {
+    if (meetingCall.isRecording) {
+      const segments = await meetingCall.stopRecording();
+      if (segments.length > 0 && onUploadRecordings) {
+        setUploadingRecordings(true);
+        try {
+          await onUploadRecordings(activeMeeting._id, segments);
+          toast.success("Recordings uploaded");
+        } catch (e) {
+          toast.error("Failed to upload some recordings");
+        } finally {
+          setUploadingRecordings(false);
+        }
+      }
+    } else {
+      meetingCall.startRecording(roomParticipants);
+    }
+  };
 
   const elapsed = useElapsedTimer(
     activeMeeting.started_at || activeMeeting.scheduled_at
@@ -660,6 +691,33 @@ const MeetingRoom = ({
                 <Hand className="w-5 h-5" />
               </button>
 
+              {/* Recording (host only) */}
+              {activeMeeting.isHost && (
+                <button
+                  type="button"
+                  onClick={handleRecordingToggle}
+                  disabled={uploadingRecordings}
+                  title={
+                    meetingCall.isRecording
+                      ? "Stop recording"
+                      : "Start recording (saves to cloud)"
+                  }
+                  className={`p-3 rounded-full transition-colors ${
+                    meetingCall.isRecording
+                      ? "bg-red-500/30 text-red-400 hover:bg-red-500/40"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  } ${uploadingRecordings ? "opacity-50 pointer-events-none" : ""}`}
+                >
+                  {uploadingRecordings ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Circle
+                      className={`w-5 h-5 ${meetingCall.isRecording ? "fill-current" : ""}`}
+                    />
+                  )}
+                </button>
+              )}
+
               <div className="w-px h-8 bg-zinc-700 mx-1" />
 
               {/* Leave / End */}
@@ -918,10 +976,14 @@ const MeetingModule = () => {
   const [showInstantMeetingDialog, setShowInstantMeetingDialog] = useState(false);
   const [lobbyMeeting, setLobbyMeeting] = useState(null);
   const [lobbyRequests, setLobbyRequests] = useState([]);
+  const [recordingsExpandedId, setRecordingsExpandedId] = useState(null);
+  const [recordingsByMeeting, setRecordingsByMeeting] = useState({});
+  const [loadingRecordingsId, setLoadingRecordingsId] = useState(null);
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
   const chatContainerRef = useRef(null);
+  const participantSearchTimeoutRef = useRef(null);
 
   const token = localStorage.getItem("token");
   const axiosConfig = useMemo(
@@ -980,8 +1042,8 @@ const MeetingModule = () => {
     const map = {};
     meetings.forEach((m) => {
       if (!m.scheduled_at) return;
-      const d = startOfDay(new Date(m.scheduled_at));
-      const key = d.toISOString();
+      const d = new Date(m.scheduled_at);
+      const key = toLocalDateString(d);
       if (!map[key]) map[key] = [];
       map[key].push(m);
     });
@@ -1278,7 +1340,7 @@ const MeetingModule = () => {
 
   // ---- Form helpers ----
   const openCreateForm = () => {
-    const dateStr = selectedDate.toISOString().slice(0, 10);
+    const dateStr = toLocalDateString(selectedDate);
     const timeStr = "09:00";
     setEditingMeeting(null);
     setForm({
@@ -1302,7 +1364,7 @@ const MeetingModule = () => {
       title: meeting.title || "",
       description: meeting.description || "",
       meeting_type: meeting.meeting_type || "internal",
-      date: d ? d.toISOString().slice(0, 10) : "",
+      date: d ? toLocalDateString(d) : "",
       time: d
         ? `${String(d.getHours()).padStart(2, "0")}:${String(
             d.getMinutes()
@@ -1366,7 +1428,7 @@ const MeetingModule = () => {
       setSearchingUsers(true);
       setSearchError("");
       const { data } = await axios.get(
-        `${BACKEND_URL}/direct_chat/search?query=${encodeURIComponent(query)}`,
+        `${BACKEND_URL}/direct_chat/search?query=${encodeURIComponent(query.trim())}`,
         axiosConfig
       );
       setSearchResults(data.users || []);
@@ -1377,6 +1439,26 @@ const MeetingModule = () => {
       setSearchingUsers(false);
     }
   };
+
+  // Debounced search by name/email (same pattern as chat module)
+  const handleParticipantSearchInput = useCallback(
+    (e) => {
+      const query = e.target.value;
+      setSearchQuery(query);
+      if (participantSearchTimeoutRef.current) {
+        clearTimeout(participantSearchTimeoutRef.current);
+      }
+      if (!query.trim()) {
+        setSearchResults([]);
+        setSearchError("");
+        return;
+      }
+      participantSearchTimeoutRef.current = setTimeout(() => {
+        searchUsers(query);
+      }, 300);
+    },
+    []
+  );
 
   const addParticipant = (u) => {
     setForm((prev) => {
@@ -1406,10 +1488,14 @@ const MeetingModule = () => {
       toast.error("Date and time are required");
       return;
     }
+    const scheduledAt = new Date(`${form.date}T${form.time}:00`);
+    if (scheduledAt.getTime() < Date.now()) {
+      toast.error("Schedule date and time must be in the future");
+      return;
+    }
 
     try {
       setCreating(true);
-      const scheduledAt = new Date(`${form.date}T${form.time}:00`);
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
@@ -1583,6 +1669,25 @@ const MeetingModule = () => {
   };
 
   const today = startOfDay(new Date());
+  const todayLocalStr = toLocalDateString(today);
+  // Derived only from calendar-clicked date: true when selected day is before today (date-only)
+  const isSelectedDatePast = useMemo(() => {
+    const sy = selectedDate.getFullYear();
+    const sm = selectedDate.getMonth();
+    const sd = selectedDate.getDate();
+    const now = new Date();
+    const ty = now.getFullYear();
+    const tm = now.getMonth();
+    const td = now.getDate();
+    if (sy !== ty) return sy < ty;
+    if (sm !== tm) return sm < tm;
+    return sd < td;
+  }, [selectedDate]);
+
+  const handleCalendarDayClick = useCallback((day) => {
+    const dateAtMidnight = startOfDay(day);
+    setSelectedDate(dateAtMidnight);
+  }, []);
 
   const isHost = (meeting) =>
     currentUserId &&
@@ -1791,6 +1896,57 @@ const MeetingModule = () => {
       .then(() => toast.success("Link copied to clipboard", { duration: 500 }));
   };
 
+  const handleUploadRecordings = useCallback(
+    async (meetingId, segments) => {
+      for (const seg of segments) {
+        const form = new FormData();
+        const recordingBlob = seg.blob.type && seg.blob.type.startsWith("video/")
+          ? seg.blob
+          : new Blob([seg.blob], { type: "video/webm" });
+        form.append("recording", recordingBlob, `recording-${seg.participantId}-${seg.type}.webm`);
+        form.append("participant_id", seg.participantId);
+        form.append("participant_name", seg.participantName);
+        form.append("type", seg.type);
+        form.append("started_at", seg.startedAt.toISOString());
+        form.append("ended_at", seg.endedAt.toISOString());
+        await axios.post(`${BACKEND_URL}/meetings/${meetingId}/recordings`, form, {
+          headers: {
+            ...axiosConfig.headers,
+          },
+        });
+      }
+    },
+    [axiosConfig]
+  );
+
+  const fetchMeetingRecordings = useCallback(
+    async (meetingId) => {
+      setLoadingRecordingsId(meetingId);
+      try {
+        const { data } = await axios.get(
+          `${BACKEND_URL}/meetings/${meetingId}/recordings`,
+          axiosConfig
+        );
+        setRecordingsByMeeting((prev) => ({ ...prev, [meetingId]: data.data || [] }));
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to load recordings");
+        setRecordingsByMeeting((prev) => ({ ...prev, [meetingId]: [] }));
+      } finally {
+        setLoadingRecordingsId(null);
+      }
+    },
+    [axiosConfig]
+  );
+
+  const toggleRecordings = useCallback(
+    (meetingId) => {
+      const next = recordingsExpandedId === meetingId ? null : meetingId;
+      setRecordingsExpandedId(next);
+      if (next) fetchMeetingRecordings(next);
+    },
+    [recordingsExpandedId, fetchMeetingRecordings]
+  );
+
   const handleAdmitToLobby = async (userId) => {
     if (!activeMeeting?.isHost || !socket) return;
     try {
@@ -1908,6 +2064,7 @@ const MeetingModule = () => {
         chatContainerRef={chatContainerRef}
         copyMeetingLink={copyMeetingLink}
         handleLeaveMeeting={handleLeaveMeeting}
+        onUploadRecordings={handleUploadRecordings}
         lobbyRequests={lobbyRequests}
         onAdmitToLobby={handleAdmitToLobby}
       />
@@ -1916,7 +2073,7 @@ const MeetingModule = () => {
 
   // ---- Main view (calendar + meeting list) ----
   return (
-    <div className="w-full h-[calc(100vh-3.5rem)] px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
+    <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden px-4 sm:px-6 lg:px-8 py-6">
       {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
       {showInstantMeetingDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
@@ -1943,7 +2100,7 @@ const MeetingModule = () => {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex-shrink-0 flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-white mb-1">Meetings</h1>
           <p className="text-sm text-zinc-400">
@@ -1969,7 +2126,9 @@ const MeetingModule = () => {
           <button
             type="button"
             onClick={openCreateForm}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition shadow-sm"
+            disabled={isSelectedDatePast}
+            title={isSelectedDatePast ? "Select a current or future date to schedule" : undefined}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Schedule meeting</span>
@@ -1978,7 +2137,7 @@ const MeetingModule = () => {
       </div>
 
       {/* Join by code or link */}
-      <div className="mb-4 p-4 bg-zinc-900 rounded-xl border border-zinc-700/50">
+      <div className="flex-shrink-0 mb-4 p-4 bg-zinc-900 rounded-xl border border-zinc-700/50">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-2">
           <Link2 className="w-4 h-4" />
           Join by meeting code or link
@@ -2009,10 +2168,10 @@ const MeetingModule = () => {
         </form>
       </div>
 
-      {/* Calendar + list */}
-      <div className="flex flex-col lg:flex-row gap-6">
+      {/* Calendar + list: fills remaining space, no page scroll */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-6 overflow-hidden">
         {/* Calendar */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 p-5 w-full lg:max-w-[1000px]">
+        <div className="flex-shrink-0 bg-zinc-900 rounded-xl border border-zinc-700/50 p-5 w-full lg:max-w-[1000px]">
           <div className="flex items-center justify-between mb-4">
             <button
               type="button"
@@ -2052,7 +2211,7 @@ const MeetingModule = () => {
                 );
               }
 
-              const key = startOfDay(day).toISOString();
+              const key = toLocalDateString(day);
               const dayMeetings = meetingsByDay[key] || [];
               const isToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDate);
@@ -2061,7 +2220,7 @@ const MeetingModule = () => {
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedDate(startOfDay(day))}
+                  onClick={() => handleCalendarDayClick(day)}
                   className={[
                     "h-[5.5rem] rounded-lg flex flex-col items-center justify-center border text-sm font-medium transition-all cursor-pointer",
                     isSelected
@@ -2098,8 +2257,8 @@ const MeetingModule = () => {
           )}
         </div>
 
-        {/* Selected day meeting list */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-700/50 p-4 flex flex-col w-full lg:w-[535px] lg:max-h-[800px]">
+        {/* Selected day meeting list: fills remaining height, scrolls internally */}
+        <div className="flex-1 min-h-0 flex flex-col min-w-0 w-full lg:w-[535px] bg-zinc-900 rounded-xl border border-zinc-700/50 p-4 overflow-hidden">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs text-zinc-400 mb-0.5">Selected day</p>
@@ -2151,14 +2310,16 @@ const MeetingModule = () => {
               <button
                 type="button"
                 onClick={openCreateForm}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-100 hover:bg-zinc-700"
+                disabled={isSelectedDatePast}
+                title={isSelectedDatePast ? "Select a current or future date to schedule" : undefined}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-100 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
               >
                 <Plus className="w-3 h-3" />
                 New meeting
               </button>
             </div>
           ) : (
-            <div className="space-y-2 overflow-y-auto max-h-[560px] pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
               {selectedDateMeetings.map((m) => {
                 const d = m.scheduled_at ? new Date(m.scheduled_at) : null;
                 const timeLabel = d
@@ -2303,6 +2464,50 @@ const MeetingModule = () => {
                       </p>
                     )}
 
+                    {isEnded && isParticipant(m) && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleRecordings(m._id)}
+                          disabled={loadingRecordingsId === m._id}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+                        >
+                          {loadingRecordingsId === m._id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Circle className="w-3 h-3" />
+                          )}
+                          {recordingsExpandedId === m._id ? "Hide recordings" : "View recordings"}
+                        </button>
+                        {recordingsExpandedId === m._id && (
+                          <div className="mt-2 pt-2 border-t border-zinc-700/50 space-y-2">
+                            {loadingRecordingsId === m._id ? (
+                              <p className="text-[11px] text-zinc-500">Loading...</p>
+                            ) : (recordingsByMeeting[m._id] || []).length === 0 ? (
+                              <p className="text-[11px] text-zinc-500">No recordings for this meeting.</p>
+                            ) : (
+                              (recordingsByMeeting[m._id] || []).map((rec) => (
+                                <div key={rec._id} className="rounded-lg bg-zinc-900/80 p-2">
+                                  <p className="text-[11px] text-zinc-300 mb-1">
+                                    {rec.participant_name || rec.participant_id} • {rec.type}
+                                    {rec.duration_seconds != null && ` • ${Math.round(rec.duration_seconds)}s`}
+                                  </p>
+                                  <video
+                                    src={rec.cloudinary_url}
+                                    controls
+                                    className="w-full max-h-48 rounded border border-zinc-700/60 bg-black"
+                                    preload="metadata"
+                                  >
+                                    Your browser does not support video playback.
+                                  </video>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-1 space-y-1">
                       {participants.length > 0 && (
                         <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
@@ -2374,6 +2579,7 @@ const MeetingModule = () => {
                   <input
                     type="date"
                     value={form.date}
+                    min={todayLocalStr}
                     onChange={(e) => handleFormChange("date", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
@@ -2385,6 +2591,11 @@ const MeetingModule = () => {
                   <input
                     type="time"
                     value={form.time}
+                    min={
+                      form.date === todayLocalStr
+                        ? `${String(new Date().getHours()).padStart(2, "0")}:${String(new Date().getMinutes()).padStart(2, "0")}`
+                        : undefined
+                    }
                     onChange={(e) => handleFormChange("time", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
@@ -2458,6 +2669,9 @@ const MeetingModule = () => {
                 <label className="block text-[11px] text-zinc-400 mb-1">
                   Participants
                 </label>
+                <p className="text-[10px] text-zinc-500 mb-1.5">
+                  Only added participants will see this meeting and can join when it starts.
+                </p>
                 <div className="mb-1 flex flex-wrap gap-1">
                   {form.participants.length === 0 && (
                     <span className="text-[11px] text-zinc-500">
@@ -2480,57 +2694,58 @@ const MeetingModule = () => {
                     </span>
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                    }}
+                    onChange={handleParticipantSearchInput}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        searchUsers(searchQuery);
+                        if (searchQuery.trim()) searchUsers(searchQuery);
                       }
                     }}
-                    placeholder="Search users by name or email"
-                    className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="Search by name or email..."
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
-                  <button
-                    type="button"
-                    onClick={() => searchUsers(searchQuery)}
-                    disabled={searchingUsers}
-                    className="px-3 py-2 rounded-lg bg-zinc-800 text-xs text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
-                  >
-                    {searchingUsers ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      "Search"
-                    )}
-                  </button>
                 </div>
                 {searchError && (
                   <p className="mt-1 text-[11px] text-red-400">{searchError}</p>
                 )}
-                {searchResults.length > 0 && (
-                  <div className="mt-1 max-h-28 overflow-y-auto border border-zinc-700/60 rounded-lg bg-zinc-900/80">
-                    {searchResults.map((u) => (
-                      <button
-                        key={u._id}
-                        type="button"
-                        onClick={() => addParticipant(u)}
-                        className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-zinc-800"
-                      >
-                        <span className="truncate">
-                          {u.full_name || u.email || "User"}
-                        </span>
-                        {u.email && (
-                          <span className="ml-2 text-[10px] text-zinc-500 truncate">
-                            {u.email}
+                {searchingUsers && (
+                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-zinc-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Searching...
+                  </div>
+                )}
+                {!searchingUsers && searchQuery.trim() && searchResults.length === 0 && (
+                  <p className="mt-1.5 text-[11px] text-zinc-500">No users found</p>
+                )}
+                {!searchingUsers && searchResults.length > 0 && (
+                  <div className="mt-1.5 max-h-36 overflow-y-auto border border-zinc-700/60 rounded-lg bg-zinc-900/80 divide-y divide-zinc-700/50">
+                    {searchResults
+                      .filter(
+                        (u) => !form.participants.some((p) => String(p._id) === String(u._id))
+                      )
+                      .map((u) => (
+                        <button
+                          key={u._id}
+                          type="button"
+                          onClick={() => addParticipant(u)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 transition"
+                        >
+                          <span className="truncate font-medium">
+                            {u.full_name || u.email || "User"}
                           </span>
-                        )}
-                      </button>
-                    ))}
+                          {u.email && (
+                            <span className="ml-2 text-[10px] text-zinc-500 truncate shrink-0 max-w-[140px]">
+                              {u.email}
+                            </span>
+                          )}
+                          <span className="ml-2 text-[10px] text-indigo-400 shrink-0">Add</span>
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
