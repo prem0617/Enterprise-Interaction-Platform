@@ -1,13 +1,7 @@
 import { useState, useEffect } from "react";
-import {
-  Users,
-  MessageSquare,
-  Video,
-  Activity,
-  UserCheck,
-} from "lucide-react";
+import { Users, MessageSquare, Video, Activity, UserCheck } from "lucide-react";
 import axios from "axios";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../../config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -63,8 +57,16 @@ export default function Dashboard() {
 
   const statsData = [
     { label: "Total Employees", value: employees?.length, icon: Users },
-    { label: "Active Users", value: activeEmployeesList.length, icon: UserCheck },
-    { label: "Messages Today", value: stats.messagesToday, icon: MessageSquare },
+    {
+      label: "Active Users",
+      value: activeEmployeesList.length,
+      icon: UserCheck,
+    },
+    {
+      label: "Messages Today",
+      value: stats.messagesToday,
+      icon: MessageSquare,
+    },
     { label: "Active Meetings", value: stats.activeMeetings, icon: Video },
   ];
 
@@ -120,7 +122,9 @@ export default function Dashboard() {
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Recent Employees</CardTitle>
-            <Badge variant="secondary">{activeEmployeesList.length} active</Badge>
+            <Badge variant="secondary">
+              {activeEmployeesList.length} active
+            </Badge>
           </CardHeader>
           <CardContent>
             <div className="space-y-0">
@@ -129,7 +133,10 @@ export default function Dashboard() {
                 .slice(0, 5)
                 .map((employee) => {
                   const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
-                  const initials = fullName.split(" ").map((n) => n[0]).join("");
+                  const initials = fullName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("");
                   return (
                     <div
                       key={employee._id}
@@ -137,11 +144,15 @@ export default function Dashboard() {
                     >
                       <div className="flex items-center gap-3">
                         <Avatar className="size-8">
-                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                          <AvatarFallback className="text-xs">
+                            {initials}
+                          </AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium">{fullName}</p>
-                          <p className="text-xs text-muted-foreground">{employee.user_id?.email}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {employee.user_id?.email}
+                          </p>
                         </div>
                       </div>
                       <Badge variant="secondary">Active</Badge>
@@ -170,9 +181,14 @@ export default function Dashboard() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">{emp.name}</span> joined {emp.department}
+                      <span className="font-medium text-foreground">
+                        {emp.name}
+                      </span>{" "}
+                      joined {emp.department}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{emp.position}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {emp.position}
+                    </p>
                   </div>
                 </div>
               ))}

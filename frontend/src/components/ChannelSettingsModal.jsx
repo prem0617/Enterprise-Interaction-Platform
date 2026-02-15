@@ -15,7 +15,7 @@
 // import { useAuthContext } from "../context/AuthContextProvider";
 // import toast from "react-hot-toast";
 // import axios from "axios";
-// import { BACKEND_URL } from "@/config";
+// import { BACKEND_URL } from "../../config";
 
 // const ChannelSettingsModal = ({
 //   show,
@@ -618,7 +618,7 @@ import {
 import { useAuthContext } from "../context/AuthContextProvider";
 import { toast } from "sonner";
 import axios from "axios";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../config";
 
 const ChannelSettingsModal = ({
   show,
@@ -707,7 +707,11 @@ const ChannelSettingsModal = ({
           data.user_id;
 
         setChannelMembers((prev) =>
-          prev.filter((m) => (m.user_id?._id || m.user_id)?.toString() !== eventUserId?.toString())
+          prev.filter(
+            (m) =>
+              (m.user_id?._id || m.user_id)?.toString() !==
+              eventUserId?.toString()
+          )
         );
       }
     };

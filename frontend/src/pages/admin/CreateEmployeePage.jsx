@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  UserPlus,
-  AlertCircle,
-  Loader2,
-  Info,
-} from "lucide-react";
-import { BACKEND_URL } from "@/config";
+import { UserPlus, AlertCircle, Loader2, Info } from "lucide-react";
+import { BACKEND_URL } from "../../config";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -109,19 +104,128 @@ const CreateEmployeePage = () => {
     setError("");
   };
 
+  // Helper function to find or create team group and add member
+  const handleTeamGroupAssignment = async (
+    newEmployeeId,
+    teamLeadId,
+    adminToken
+  ) => {
+    try {
+      // Get the team lead's employee data
+      const teamLeadResponse = await axios.get(
+        `${BACKEND_URL}/employees/${teamLeadId}`,
+        {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        }
+      );
+
+      const teamLeadUserId =
+        teamLeadResponse.data.user_id._id || teamLeadResponse.data.user_id;
+
+      // Get all channels (using getUserChannels endpoint)
+      const channelsResponse = await axios.get(`${BACKEND_URL}/api/chat`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        params: { channel_type: "team" },
+      });
+
+      const channels = channelsResponse.data.channels || [];
+
+      // Find existing team group created by this team lead
+      let teamGroup = channels.find(
+        (channel) =>
+          channel.channel_type === "team" &&
+          channel.created_by._id === teamLeadUserId
+      );
+
+      if (teamGroup) {
+        // Team group exists, add the new employee to it
+        console.log("Team group found, adding member:", teamGroup._id);
+
+        await axios.post(
+          `${BACKEND_URL}/api/chat/${teamGroup._id}/members`,
+          { member_ids: [newEmployeeId] },
+          {
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        toast.success("Employee added to existing team group");
+      } else {
+        // No team group exists, create one
+        console.log("No team group found, creating new one");
+
+        const teamLeadInfo = teamLeadResponse.data;
+        const groupName = `${teamLeadInfo.user_id.first_name} ${teamLeadInfo.user_id.last_name}'s Team`;
+
+        // Create group using POST /api/chat endpoint
+        const createGroupResponse = await axios.post(
+          `${BACKEND_URL}/api/chat`,
+          {
+            channel_type: "team",
+            name: groupName,
+            department: formData.department,
+            member_ids: [newEmployeeId], // New employee will be added as member
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        toast.success("New team group created and employee added");
+      }
+    } catch (error) {
+      console.error("Error handling team group assignment:", error);
+      // Don't throw error - employee is created, group assignment is secondary
+      toast.warning("Employee created but couldn't add to team group");
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!formData.first_name.trim()) { setError("Please enter the first name"); return; }
-    if (!formData.last_name.trim()) { setError("Please enter the last name"); return; }
-    if (!formData.email.trim()) { setError("Please enter the email address"); return; }
+    if (!formData.first_name.trim()) {
+      setError("Please enter the first name");
+      return;
+    }
+    if (!formData.last_name.trim()) {
+      setError("Please enter the last name");
+      return;
+    }
+    if (!formData.email.trim()) {
+      setError("Please enter the email address");
+      return;
+    }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) { setError("Please enter a valid email address"); return; }
-    if (!formData.country) { setError("Please select a Country"); return; }
-    if (!formData.hire_date) { setError("Please select a hire date"); return; }
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    if (!formData.country) {
+      setError("Please select a Country");
+      return;
+    }
+    if (!formData.hire_date) {
+      setError("Please select a hire date");
+      return;
+    }
 
     if (formData.employee_type === "internal_team") {
-      if (!formData.position) { setError("Please select a position"); return; }
-      if (shouldShowDepartment && !formData.department) { setError("Please select a department"); return; }
-      if (shouldShowTeamLead && !formData.team_lead_id) { setError("Please select a team lead"); return; }
+      if (!formData.position) {
+        setError("Please select a position");
+        return;
+      }
+      if (shouldShowDepartment && !formData.department) {
+        setError("Please select a department");
+        return;
+      }
+      if (shouldShowTeamLead && !formData.team_lead_id) {
+        setError("Please select a team lead");
+        return;
+      }
     }
 
     setLoading(true);
@@ -147,19 +251,41 @@ const CreateEmployeePage = () => {
         if (shouldShowTeamLead) dataToSend.team_lead_id = formData.team_lead_id;
       }
 
-      const response = await axios.post(`${BACKEND_URL}/employees`, dataToSend, {
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await axios.post(
+        `${BACKEND_URL}/employees`,
+        dataToSend,
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      // If employee has a team lead, handle team group assignment
+      if (formData.team_lead_id && response.data.user_id) {
+        await handleTeamGroupAssignment(
+          response.data.user_id,
+          formData.team_lead_id,
+          adminToken
+        );
+      }
 
       setFormData({
-        email: "", first_name: "", last_name: "", phone: "", country: "", timezone: "",
-        company_id: "", employee_type: "internal_team", department: "", position: "",
-        team_lead_id: "", hire_date: new Date().toISOString().split("T")[0],
+        email: "",
+        first_name: "",
+        last_name: "",
+        phone: "",
+        country: "",
+        timezone: "",
+        company_id: "",
+        employee_type: "internal_team",
+        department: "",
+        position: "",
+        team_lead_id: "",
+        hire_date: new Date().toISOString().split("T")[0],
       });
-      toast.success("Employee Created");
+      toast.success("Employee Created Successfully");
       setLoading(false);
     } catch (error) {
       if (error.response) {
@@ -175,9 +301,18 @@ const CreateEmployeePage = () => {
 
   const handleClear = () => {
     setFormData({
-      email: "", first_name: "", last_name: "", phone: "", country: "", timezone: "",
-      company_id: "", employee_type: "internal_team", department: "", position: "",
-      team_lead_id: "", hire_date: new Date().toISOString().split("T")[0],
+      email: "",
+      first_name: "",
+      last_name: "",
+      phone: "",
+      country: "",
+      timezone: "",
+      company_id: "",
+      employee_type: "internal_team",
+      department: "",
+      position: "",
+      team_lead_id: "",
+      hire_date: new Date().toISOString().split("T")[0],
     });
     setError("");
   };
@@ -275,10 +410,17 @@ const CreateEmployeePage = () => {
             </div>
             <div>
               <label className={labelClasses}>Country *</label>
-              <select name="country" value={formData.country} onChange={handleChange} className={selectClasses}>
+              <select
+                name="country"
+                value={formData.country}
+                onChange={handleChange}
+                className={selectClasses}
+              >
                 <option value="">Select Country</option>
                 {country.map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -287,10 +429,17 @@ const CreateEmployeePage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={labelClasses}>Timezone</label>
-              <select name="timezone" value={formData.timezone} onChange={handleChange} className={selectClasses}>
+              <select
+                name="timezone"
+                value={formData.timezone}
+                onChange={handleChange}
+                className={selectClasses}
+              >
                 <option value="">Select Timezone</option>
                 {timezones.map((tz) => (
-                  <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -308,9 +457,16 @@ const CreateEmployeePage = () => {
 
           <div>
             <label className={labelClasses}>Employee Type *</label>
-            <select name="employee_type" value={formData.employee_type} onChange={handleChange} className={selectClasses}>
+            <select
+              name="employee_type"
+              value={formData.employee_type}
+              onChange={handleChange}
+              className={selectClasses}
+            >
               {employeeTypes.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
               ))}
             </select>
           </div>
@@ -318,10 +474,17 @@ const CreateEmployeePage = () => {
           {shouldShowPosition && (
             <div>
               <label className={labelClasses}>Position *</label>
-              <select name="position" value={formData.position} onChange={handleChange} className={selectClasses}>
+              <select
+                name="position"
+                value={formData.position}
+                onChange={handleChange}
+                className={selectClasses}
+              >
                 <option value="">Select Position</option>
                 {positions.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -330,10 +493,17 @@ const CreateEmployeePage = () => {
           {shouldShowDepartment && (
             <div>
               <label className={labelClasses}>Department *</label>
-              <select name="department" value={formData.department} onChange={handleChange} className={selectClasses}>
+              <select
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                className={selectClasses}
+              >
                 <option value="">Select Department</option>
                 {departments.map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -342,7 +512,12 @@ const CreateEmployeePage = () => {
           {shouldShowTeamLead && (
             <div>
               <label className={labelClasses}>Team Lead *</label>
-              <select name="team_lead_id" value={formData.team_lead_id} onChange={handleChange} className={selectClasses}>
+              <select
+                name="team_lead_id"
+                value={formData.team_lead_id}
+                onChange={handleChange}
+                className={selectClasses}
+              >
                 <option value="">Select Team Lead</option>
                 {teamLead?.map((d) => (
                   <option key={d._id} value={d._id}>
@@ -387,10 +562,15 @@ const CreateEmployeePage = () => {
           <div className="flex items-start gap-2.5">
             <Info className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
             <div className="text-xs text-zinc-500">
-              <p className="font-medium text-zinc-400 mb-1">What happens next?</p>
+              <p className="font-medium text-zinc-400 mb-1">
+                What happens next?
+              </p>
               <ul className="list-disc list-inside space-y-0.5">
                 <li>User account created with provided credentials</li>
                 <li>Employee record linked to user account</li>
+                <li>
+                  If team lead assigned, employee joins team group automatically
+                </li>
                 <li>Access permissions set based on position & department</li>
                 <li>Employee must change password on first login</li>
               </ul>

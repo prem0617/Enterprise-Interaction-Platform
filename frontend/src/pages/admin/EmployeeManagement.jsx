@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../../config";
 
 const EMPLOYEE_TYPES = [
   { value: "internal_team", label: "Internal Team" },
@@ -141,7 +141,9 @@ export default function EmployeeManagement() {
     formData.position &&
     positionsRequiringTeamLead.includes(formData.position);
 
-  const departments = [...new Set(employees.map((emp) => emp.department).filter(Boolean))];
+  const departments = [
+    ...new Set(employees.map((emp) => emp.department).filter(Boolean)),
+  ];
 
   const filteredEmployees = employees.filter((employee) => {
     const fullName =
@@ -218,8 +220,10 @@ export default function EmployeeManagement() {
     if (!formData.hire_date) return "Hire date is required";
     if (formData.employee_type === "internal_team") {
       if (!formData.position) return "Position is required";
-      if (shouldShowDepartment && !formData.department) return "Department is required";
-      if (shouldShowTeamLead && !formData.team_lead_id) return "Team lead is required";
+      if (shouldShowDepartment && !formData.department)
+        return "Department is required";
+      if (shouldShowTeamLead && !formData.team_lead_id)
+        return "Team lead is required";
     }
     return null;
   };
@@ -305,9 +309,13 @@ export default function EmployeeManagement() {
         team_lead_id: formData.team_lead_id || null,
         hire_date: formData.hire_date,
       };
-      await axios.put(`${BACKEND_URL}/employees/${editingEmployee._id}`, payload, {
-        headers: getAuthHeaders(),
-      });
+      await axios.put(
+        `${BACKEND_URL}/employees/${editingEmployee._id}`,
+        payload,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
       toast.success("Employee updated successfully");
       setEditingEmployee(null);
       setFormData(initialFormData);
@@ -373,8 +381,10 @@ export default function EmployeeManagement() {
   };
 
   const labelClasses = "block text-sm font-medium mb-1.5";
-  const inputClasses = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-  const selectClasses = "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring";
+  const inputClasses =
+    "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  const selectClasses =
+    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring";
 
   if (loading) {
     return (
@@ -392,13 +402,18 @@ export default function EmployeeManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Employee Management</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Employee Management
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage employee records, create new accounts, and handle password resets
+            Manage employee records, create new accounts, and handle password
+            resets
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="secondary">{filteredEmployees.length} employees</Badge>
+          <Badge variant="secondary">
+            {filteredEmployees.length} employees
+          </Badge>
           <Button
             onClick={() => {
               setViewMode("create");
@@ -484,7 +499,9 @@ export default function EmployeeManagement() {
                 >
                   <option value="">Select Country</option>
                   {COUNTRIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -500,7 +517,9 @@ export default function EmployeeManagement() {
                 >
                   <option value="">Select Timezone</option>
                   {TIMEZONES.map((tz) => (
-                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -524,7 +543,9 @@ export default function EmployeeManagement() {
                 className={selectClasses}
               >
                 {EMPLOYEE_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -539,7 +560,9 @@ export default function EmployeeManagement() {
                 >
                   <option value="">Select Position</option>
                   {POSITIONS.map((p) => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -555,7 +578,9 @@ export default function EmployeeManagement() {
                 >
                   <option value="">Select Department</option>
                   {DEPARTMENTS.map((d) => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -615,27 +640,29 @@ export default function EmployeeManagement() {
           {/* Filters */}
           <Card className="mb-5">
             <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -tranzinc-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name or email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -tranzinc-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <select
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                  className={selectClasses}
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className={selectClasses}
-              >
-                <option value="all">All Departments</option>
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
             </CardContent>
           </Card>
 
@@ -654,177 +681,203 @@ export default function EmployeeManagement() {
             </Card>
           ) : (
             <Card>
-            <div className="overflow-hidden">
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-zinc-800 bg-zinc-800/50">
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                        Employee
-                      </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                        Department
-                      </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                        Position
-                      </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                        Team Lead
-                      </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                        Hire Date
-                      </th>
-                      <th className="px-5 py-3.5 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider w-24">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800">
-                    {filteredEmployees.map((employee) => {
-                      const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
-                      const teamLeadName = employee.team_lead_id
-                        ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
-                        : "—";
-                      const initials = (employee.user_id?.first_name?.[0] || "") + (employee.user_id?.last_name?.[0] || "");
+              <div className="overflow-hidden">
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                        <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          Employee
+                        </th>
+                        <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          Department
+                        </th>
+                        <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          Position
+                        </th>
+                        <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          Team Lead
+                        </th>
+                        <th className="px-5 py-3.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          Hire Date
+                        </th>
+                        <th className="px-5 py-3.5 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider w-24">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800">
+                      {filteredEmployees.map((employee) => {
+                        const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
+                        const teamLeadName = employee.team_lead_id
+                          ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
+                          : "—";
+                        const initials =
+                          (employee.user_id?.first_name?.[0] || "") +
+                          (employee.user_id?.last_name?.[0] || "");
 
-                      return (
-                        <tr
-                          key={employee._id}
-                          className="hover:bg-zinc-800/40 transition-colors"
-                        >
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-full bg-zinc-700/80 flex items-center justify-center border border-zinc-600/50">
-                                <span className="text-zinc-300 font-medium text-xs">
-                                  {initials}
-                                </span>
+                        return (
+                          <tr
+                            key={employee._id}
+                            className="hover:bg-zinc-800/40 transition-colors"
+                          >
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-full bg-zinc-700/80 flex items-center justify-center border border-zinc-600/50">
+                                  <span className="text-zinc-300 font-medium text-xs">
+                                    {initials}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-zinc-200">
+                                    {fullName}
+                                  </p>
+                                  <p className="text-xs text-zinc-500">
+                                    {employee.user_id?.email}
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-sm font-medium text-zinc-200">{fullName}</p>
-                                <p className="text-xs text-zinc-500">
-                                  {employee.user_id?.email}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className="inline-flex px-2.5 py-0.5 rounded text-xs font-medium bg-zinc-700/60 text-zinc-300 border border-zinc-600/50">
-                              {employee?.department || "—"}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-sm text-zinc-400">
-                            {employee?.position || "—"}
-                          </td>
-                          <td className="px-5 py-3 text-sm text-zinc-400">
-                            {teamLeadName}
-                          </td>
-                          <td className="px-5 py-3 text-sm text-zinc-400">
-                            {employee?.hire_date
-                              ? new Date(employee.hire_date).toLocaleDateString()
-                              : "—"}
-                          </td>
-                          <td className="px-5 py-3 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8">
-                                  <MoreVertical className="size-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openEditModal(employee)}>
-                                  <Pencil className="size-3.5 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => openPasswordModal(employee)}>
-                                  <Key className="size-3.5 mr-2" />
-                                  Reset Password
-                                </DropdownMenuItem>
-                                {employee?.is_active !== false && (
-                                  <DropdownMenuItem
-                                    onClick={() => handleDeactivate(employee)}
-                                    className="text-destructive focus:text-destructive"
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="inline-flex px-2.5 py-0.5 rounded text-xs font-medium bg-zinc-700/60 text-zinc-300 border border-zinc-600/50">
+                                {employee?.department || "—"}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-sm text-zinc-400">
+                              {employee?.position || "—"}
+                            </td>
+                            <td className="px-5 py-3 text-sm text-zinc-400">
+                              {teamLeadName}
+                            </td>
+                            <td className="px-5 py-3 text-sm text-zinc-400">
+                              {employee?.hire_date
+                                ? new Date(
+                                    employee.hire_date
+                                  ).toLocaleDateString()
+                                : "—"}
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
                                   >
-                                    Deactivate
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => openEditModal(employee)}
+                                  >
+                                    <Pencil className="size-3.5 mr-2" />
+                                    Edit
                                   </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                  <DropdownMenuItem
+                                    onClick={() => openPasswordModal(employee)}
+                                  >
+                                    <Key className="size-3.5 mr-2" />
+                                    Reset Password
+                                  </DropdownMenuItem>
+                                  {employee?.is_active !== false && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeactivate(employee)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      Deactivate
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-              {/* Mobile Cards */}
-              <div className="lg:hidden divide-y divide-border">
-                {filteredEmployees.map((employee) => {
-                  const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
-                  const teamLeadName = employee.team_lead_id
-                    ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
-                    : "—";
+                {/* Mobile Cards */}
+                <div className="lg:hidden divide-y divide-border">
+                  {filteredEmployees.map((employee) => {
+                    const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
+                    const teamLeadName = employee.team_lead_id
+                      ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
+                      : "—";
 
-                  return (
-                    <div
-                      key={employee._id}
-                      className="p-4 hover:bg-zinc-800/40"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-zinc-700/80 flex items-center justify-center border border-zinc-600/50">
-                            <span className="text-zinc-300 font-medium text-xs">
-                              {employee.user_id?.first_name?.[0]}
-                              {employee.user_id?.last_name?.[0]}
-                            </span>
+                    return (
+                      <div
+                        key={employee._id}
+                        className="p-4 hover:bg-zinc-800/40"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-full bg-zinc-700/80 flex items-center justify-center border border-zinc-600/50">
+                              <span className="text-zinc-300 font-medium text-xs">
+                                {employee.user_id?.first_name?.[0]}
+                                {employee.user_id?.last_name?.[0]}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-zinc-200">
+                                {fullName}
+                              </p>
+                              <p className="text-xs text-zinc-500">
+                                {employee.user_id?.email}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openEditModal(employee)}
+                              className="p-2 rounded-md text-zinc-400 hover:bg-zinc-700/50"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openPasswordModal(employee)}
+                              className="p-2 rounded-md text-zinc-400 hover:bg-zinc-700/50"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-zinc-500">Department</span>
+                            <p className="font-medium text-zinc-300">
+                              {employee?.department}
+                            </p>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-zinc-200">{fullName}</p>
-                            <p className="text-xs text-zinc-500">{employee.user_id?.email}</p>
+                            <span className="text-zinc-500">Position</span>
+                            <p className="font-medium text-zinc-300">
+                              {employee?.position}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Team Lead</span>
+                            <p className="font-medium text-zinc-300">
+                              {teamLeadName}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Hire Date</span>
+                            <p className="font-medium text-zinc-300">
+                              {employee?.hire_date
+                                ? new Date(
+                                    employee.hire_date
+                                  ).toLocaleDateString()
+                                : "—"}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => openEditModal(employee)}
-                            className="p-2 rounded-md text-zinc-400 hover:bg-zinc-700/50"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openPasswordModal(employee)}
-                            className="p-2 rounded-md text-zinc-400 hover:bg-zinc-700/50"
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-zinc-500">Department</span>
-                          <p className="font-medium text-zinc-300">{employee?.department}</p>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">Position</span>
-                          <p className="font-medium text-zinc-300">{employee?.position}</p>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">Team Lead</span>
-                          <p className="font-medium text-zinc-300">{teamLeadName}</p>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">Hire Date</span>
-                          <p className="font-medium text-zinc-300">
-                            {employee?.hire_date
-                              ? new Date(employee.hire_date).toLocaleDateString()
-                              : "—"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
             </Card>
           )}
         </>
@@ -841,7 +894,9 @@ export default function EmployeeManagement() {
           />
           <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto border border-zinc-800 rounded-lg bg-zinc-900 shadow-xl">
             <div className="sticky top-0 px-5 py-4 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-200">Edit Employee</h2>
+              <h2 className="text-sm font-semibold text-zinc-200">
+                Edit Employee
+              </h2>
               <button
                 onClick={() => !formLoading && setEditingEmployee(null)}
                 className="p-2 rounded-md text-zinc-400 hover:bg-zinc-800"
@@ -907,7 +962,9 @@ export default function EmployeeManagement() {
                     className={selectClasses}
                   >
                     {COUNTRIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -922,7 +979,9 @@ export default function EmployeeManagement() {
                     className={selectClasses}
                   >
                     {TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -946,7 +1005,9 @@ export default function EmployeeManagement() {
                   className={selectClasses}
                 >
                   {EMPLOYEE_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -960,7 +1021,9 @@ export default function EmployeeManagement() {
                     className={selectClasses}
                   >
                     {POSITIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -975,7 +1038,9 @@ export default function EmployeeManagement() {
                     className={selectClasses}
                   >
                     {DEPARTMENTS.map((d) => (
-                      <option key={d.value} value={d.value}>{d.label}</option>
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1036,7 +1101,9 @@ export default function EmployeeManagement() {
           />
           <div className="relative w-full max-w-md border border-zinc-800 rounded-lg bg-zinc-900 shadow-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-zinc-800 bg-zinc-800/50">
-              <h2 className="text-sm font-semibold text-zinc-200">Reset Password</h2>
+              <h2 className="text-sm font-semibold text-zinc-200">
+                Reset Password
+              </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
                 {passwordModalEmployee.user_id?.first_name}{" "}
                 {passwordModalEmployee.user_id?.last_name} —{" "}
@@ -1073,8 +1140,9 @@ export default function EmployeeManagement() {
                 <div className="flex items-start gap-2 p-3 rounded-md bg-zinc-800/40 border border-zinc-700/50">
                   <Info className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-zinc-500">
-                    A temporary password will be generated and sent to the employee&apos;s email.
-                    They will be prompted to change it on next login.
+                    A temporary password will be generated and sent to the
+                    employee&apos;s email. They will be prompted to change it on
+                    next login.
                   </p>
                 </div>
               ) : (
@@ -1111,7 +1179,9 @@ export default function EmployeeManagement() {
                 )}
               </button>
               <button
-                onClick={() => !passwordResetLoading && setPasswordModalEmployee(null)}
+                onClick={() =>
+                  !passwordResetLoading && setPasswordModalEmployee(null)
+                }
                 className="px-4 py-2.5 border border-zinc-600 rounded-md text-sm font-medium text-zinc-400 hover:bg-zinc-800"
               >
                 Cancel

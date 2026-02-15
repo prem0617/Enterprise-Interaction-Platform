@@ -14,7 +14,10 @@ import {
   markMessagesAsSeen,
   getMessageSeenStatus,
   getUnreadMessageCount,
+  deleteFileMessage,
+  uploadFileMessage,
 } from "../controllers/chat/direct_message.controller.js";
+import { upload } from "../config/cloudinary.js";
 
 import { verifyToken } from "../middlewares/auth.middleware.js";
 
@@ -40,5 +43,28 @@ router.get("/channels/:channelId/unread", getUnreadCount);
 router.post("/channels/:channelId/messages/seen", markMessagesAsSeen);
 router.get("/messages/:messageId/seen-status", getMessageSeenStatus);
 router.get("/channels/:channelId/unread-count", getUnreadMessageCount);
+
+// File upload route
+router.post(
+  "/channels/:channelId/messages/upload",
+  upload.single("file"),
+  uploadFileMessage
+);
+
+// Delete file message (optional)
+router.delete("/messages/:messageId/file", deleteFileMessage);
+
+// Add to your routes file for testing
+router.post("/test-upload", verifyToken, upload.single("file"), (req, res) => {
+  console.log("Test upload - File:", req.file);
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  res.json({
+    success: true,
+    file: req.file,
+    message: "Test upload successful",
+  });
+});
 
 export default router;

@@ -9,6 +9,7 @@ import {
   leaveChannel,
   deleteChannel,
   updateChannelName,
+  searchMessagesInChannel,
 } from "../controllers/chat/chat.controller.js";
 import {
   sendMessage,
@@ -81,5 +82,8 @@ router.get("/channels/:channelId/search", searchMessages);
 
 // Get unread message count
 router.get("/unread", getUnreadCount);
+
+// Search messages in a channel
+router.get("/channels/:channelId/messages/search", searchMessagesInChannel);
 
 export default router;

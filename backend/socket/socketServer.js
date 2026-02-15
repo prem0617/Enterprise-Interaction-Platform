@@ -2,16 +2,12 @@ import { Server } from "socket.io";
 import express from "express";
 import { createServer } from "http";
 
-
 const app = express();
 const server = createServer(app);
 
 const io = new Server(server, {
-       cors: {
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000"
-    ],
+  cors: {
+    origin: ["http://localhost:5173", "http://localhost:3000"],
     credentials: true,
   },
 });
@@ -98,7 +94,7 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Mark both users as in a direct call
     const fromIdStr = String(socket.userId);
     const toIdStr = String(toUserId);
@@ -112,7 +108,7 @@ io.on("connection", async (socket) => {
       callType: "direct",
       otherUserId: fromIdStr,
     };
-    
+
     forwardToUser("call-accepted", toUserId, {
       fromUserId: socket.userId,
     });
@@ -125,11 +121,11 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Clear call status for caller (call was rejected, so no call is active)
     const fromIdStr = String(socket.userId);
     delete userCallStatus[fromIdStr];
-    
+
     forwardToUser("call-rejected", toUserId, {
       fromUserId: socket.userId,
     });
@@ -184,13 +180,13 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Clear call status for both users
     const fromIdStr = String(socket.userId);
     const toIdStr = String(toUserId);
     delete userCallStatus[fromIdStr];
     delete userCallStatus[toIdStr];
-    
+
     forwardToUser("call-ended", toUserId, {
       fromUserId: socket.userId,
     });
@@ -204,7 +200,7 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Mark both users as in a direct call
     const fromIdStr = String(socket.userId);
     const toIdStr = String(toUserId);
@@ -218,7 +214,7 @@ io.on("connection", async (socket) => {
       callType: "direct",
       otherUserId: fromIdStr,
     };
-    
+
     forwardToUser("video-call-accepted", toUserId, {
       fromUserId: socket.userId,
     });
@@ -231,11 +227,11 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Clear call status for caller (call was rejected, so no call is active)
     const fromIdStr = String(socket.userId);
     delete userCallStatus[fromIdStr];
-    
+
     forwardToUser("video-call-rejected", toUserId, {
       fromUserId: socket.userId,
     });
@@ -290,13 +286,13 @@ io.on("connection", async (socket) => {
       toUserId,
     });
     if (!toUserId || !socket.userId) return;
-    
+
     // Clear call status for both users
     const fromIdStr = String(socket.userId);
     const toIdStr = String(toUserId);
     delete userCallStatus[fromIdStr];
     delete userCallStatus[toIdStr];
-    
+
     forwardToUser("video-call-ended", toUserId, {
       fromUserId: socket.userId,
     });
@@ -306,7 +302,11 @@ io.on("connection", async (socket) => {
   socket.on("group-call-webrtc-offer", (data) => {
     const { toUserId, channelId, sdp } = data;
     if (!toUserId || !socket.userId || !sdp) return;
-    console.log("[SIGNALLING] group-call-webrtc-offer", { from: socket.userId, toUserId, channelId });
+    console.log("[SIGNALLING] group-call-webrtc-offer", {
+      from: socket.userId,
+      toUserId,
+      channelId,
+    });
     forwardToUser("group-call-webrtc-offer", toUserId, {
       fromUserId: socket.userId,
       channelId,
@@ -317,7 +317,11 @@ io.on("connection", async (socket) => {
   socket.on("group-call-webrtc-answer", (data) => {
     const { toUserId, channelId, sdp } = data;
     if (!toUserId || !socket.userId || !sdp) return;
-    console.log("[SIGNALLING] group-call-webrtc-answer", { from: socket.userId, toUserId, channelId });
+    console.log("[SIGNALLING] group-call-webrtc-answer", {
+      from: socket.userId,
+      toUserId,
+      channelId,
+    });
     forwardToUser("group-call-webrtc-answer", toUserId, {
       fromUserId: socket.userId,
       channelId,
@@ -328,7 +332,11 @@ io.on("connection", async (socket) => {
   socket.on("group-call-webrtc-ice", (data) => {
     const { toUserId, channelId, candidate } = data;
     if (!toUserId || !socket.userId) return;
-    console.log("[SIGNALLING] group-call-webrtc-ice", { from: socket.userId, toUserId, channelId });
+    console.log("[SIGNALLING] group-call-webrtc-ice", {
+      from: socket.userId,
+      toUserId,
+      channelId,
+    });
     forwardToUser("group-call-webrtc-ice", toUserId, {
       fromUserId: socket.userId,
       channelId,
@@ -396,7 +404,8 @@ io.on("connection", async (socket) => {
     if (!activeMeetings[key]) return;
 
     const safeMessage = {
-      id: message.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id:
+        message.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       userId: socket.userId,
       name: message.name || activeMeetings[key][socket.userId]?.name || "User",
       content: String(message.content).slice(0, 1000),
@@ -551,12 +560,10 @@ io.on("connection", async (socket) => {
             const room = activeMeetings[meetingId];
             if (!room) return;
             delete room[normalizedUserId];
-            const participants = Object.entries(room).map(
-              ([userId, info]) => ({
-                userId,
-                name: info.name,
-              })
-            );
+            const participants = Object.entries(room).map(([userId, info]) => ({
+              userId,
+              name: info.name,
+            }));
             if (participants.length === 0) {
               delete activeMeetings[meetingId];
             } else {

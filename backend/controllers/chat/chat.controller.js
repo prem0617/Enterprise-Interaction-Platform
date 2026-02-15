@@ -303,7 +303,9 @@ export const addChannelMembers = async (req, res) => {
 
     // Notify all channel members (existing + newly added) so everyone's UI updates to match DB
     if (addedMembers.length > 0) {
-      const allMembers = await ChannelMember.find({ channel_id: id }).select("user_id");
+      const allMembers = await ChannelMember.find({ channel_id: id }).select(
+        "user_id"
+      );
       allMembers.forEach((member) => {
         const socketId = getReceiverSocketId(member.user_id.toString());
         if (socketId) {
@@ -368,7 +370,9 @@ export const removeChannelMember = async (req, res) => {
     }
 
     // Notify all remaining channel members so their UI (e.g. settings modal) updates
-    const remainingMembers = await ChannelMember.find({ channel_id: id }).select("user_id");
+    const remainingMembers = await ChannelMember.find({
+      channel_id: id,
+    }).select("user_id");
     const removedUserIdStr = memberId?.toString?.() ?? memberId;
     remainingMembers.forEach((member) => {
       const socketId = getReceiverSocketId(member.user_id.toString());
@@ -639,6 +643,77 @@ export const updateChannelName = async (req, res) => {
       success: false,
       error: "Failed to update channel name",
       details: error.message,
+    });
+  }
+};
+
+export const searchMessagesInChannel = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { query } = req.query;
+    const userId = req.user.id;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+
+    // Find the channel and verify it exists
+    const channel = await ChatChannel.findById(channelId);
+    if (!channel) {
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    // Check if user is a member of this channel
+    const membershipExists = await ChannelMember.findOne({
+      channel_id: channelId,
+      user_id: userId,
+    });
+
+    if (!membershipExists) {
+      return res
+        .status(403)
+        .json({ error: "You are not a member of this channel" });
+    }
+
+    // Search messages using case-insensitive regex
+    const searchRegex = new RegExp(query.trim(), "i");
+
+    const messages = await Message.find({
+      channel_id: channelId,
+      content: searchRegex,
+      deleted_at: null, // Exclude deleted messages
+    })
+      .populate("sender_id", "first_name last_name full_name email user_type")
+      .populate("seen_by.user_id", "first_name last_name full_name email")
+      .populate("parent_message_id", "content sender_id") // Populate parent message if exists
+      .sort({ created_at: -1 }) // Most recent first
+      .limit(100) // Limit results to prevent performance issues
+      .lean();
+
+    // Add is_own flag and format response
+    const messagesWithFlags = messages.map((msg) => ({
+      ...msg,
+      _id: msg._id.toString(),
+      sender: msg.sender_id,
+      is_own: msg.sender_id?._id.toString() === userId.toString(),
+      seen_count: msg.seen_by ? msg.seen_by.length : 0,
+      is_seen: msg.seen_by
+        ? msg.seen_by.some(
+            (seen) => seen.user_id._id.toString() === userId.toString()
+          )
+        : false,
+    }));
+
+    res.json({
+      messages: messagesWithFlags,
+      total: messagesWithFlags.length,
+      query: query.trim(),
+    });
+  } catch (error) {
+    console.error("Error searching messages:", error);
+    res.status(500).json({
+      error: "Failed to search messages",
+      message: error.message,
     });
   }
 };

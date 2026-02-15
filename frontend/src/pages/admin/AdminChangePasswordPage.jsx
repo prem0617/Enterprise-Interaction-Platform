@@ -7,7 +7,7 @@ import {
   Loader2,
   Key,
 } from "lucide-react";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
 import axios from "axios";
 
@@ -83,7 +83,9 @@ const AdminChangePasswordPage = ({ onNavigate }) => {
       return;
     }
     if (!/[@#$!%*?&]/.test(formData.newPassword)) {
-      setError("Password must contain at least one special character (@#$!%*?&)");
+      setError(
+        "Password must contain at least one special character (@#$!%*?&)"
+      );
       setLoading(false);
       return;
     }
@@ -168,9 +170,7 @@ const AdminChangePasswordPage = ({ onNavigate }) => {
               <h1 className="text-lg font-semibold text-white">
                 Change Password
               </h1>
-              <p className="text-xs text-zinc-500">
-                Keep your account secure
-              </p>
+              <p className="text-xs text-zinc-500">Keep your account secure</p>
             </div>
           </div>
         </div>

@@ -1,4 +1,3 @@
-// context/AuthContextProvider.jsx
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createSocketConnection } from "../hooks/useSocket";
 
@@ -9,6 +8,11 @@ export default function AuthContextProvider({ children }) {
   const [user, setUser] = useState(null);
   const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
+
+  // Function to update user and trigger socket connection
+  const updateUser = (userData) => {
+    setUser(userData);
+  };
 
   // Load user from localStorage
   useEffect(() => {
@@ -35,9 +39,17 @@ export default function AuthContextProvider({ children }) {
         localStorage.removeItem("adminData");
       }
     } else if (adminData) {
-      try { setUser(JSON.parse(adminData)); } catch { localStorage.removeItem("adminData"); }
+      try {
+        setUser(JSON.parse(adminData));
+      } catch {
+        localStorage.removeItem("adminData");
+      }
     } else if (employeeData) {
-      try { setUser(JSON.parse(employeeData)); } catch { localStorage.removeItem("user"); }
+      try {
+        setUser(JSON.parse(employeeData));
+      } catch {
+        localStorage.removeItem("user");
+      }
     }
 
     setLoading(false);
@@ -75,14 +87,14 @@ export default function AuthContextProvider({ children }) {
         socketRef.current = null;
       }
     };
-  }, [userId]); // Only reconnect when user.id changes
+  }, [userId, user]); // Added 'user' dependency to trigger when user object changes
 
   return (
     <AuthContext.Provider
       value={{
         loading,
         user,
-        setUser,
+        setUser: updateUser, // Use the wrapper function instead of direct setState
         setLoading,
         socket,
       }}

@@ -15,7 +15,7 @@ import {
   Building,
   X,
 } from "lucide-react";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,12 +79,16 @@ const AdminProfilePage = ({ onNavigate }) => {
     setSaving(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put(`${BACKEND_URL}/auth/profile`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await axios.put(
+        `${BACKEND_URL}/auth/profile`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.data.success) {
         setProfileData((prev) => ({ ...prev, ...response.data.user }));
@@ -116,12 +120,14 @@ const AdminProfilePage = ({ onNavigate }) => {
 
   const getInitials = () => {
     if (!profileData) return "AD";
-    return `${profileData.first_name?.[0] || ""}${profileData.last_name?.[0] || ""}`.toUpperCase();
+    return `${profileData.first_name?.[0] || ""}${
+      profileData.last_name?.[0] || ""
+    }`.toUpperCase();
   };
 
   if (loading) {
-      return (
-        <div className="min-h-screen p-6 lg:p-8 max-w-3xl mx-auto bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800">
+    return (
+      <div className="min-h-screen p-6 lg:p-8 max-w-3xl mx-auto bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <Skeleton className="size-16 rounded-full" />
@@ -178,7 +184,11 @@ const AdminProfilePage = ({ onNavigate }) => {
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       <Badge variant="secondary">Admin</Badge>
                       <Badge
-                        variant={profileData?.status === "active" ? "default" : "outline"}
+                        variant={
+                          profileData?.status === "active"
+                            ? "default"
+                            : "outline"
+                        }
                       >
                         {profileData?.status?.charAt(0).toUpperCase() +
                           profileData?.status?.slice(1)}
@@ -189,7 +199,11 @@ const AdminProfilePage = ({ onNavigate }) => {
                 <div className="flex gap-2">
                   {editing ? (
                     <>
-                      <Button variant="outline" size="sm" onClick={handleCancel}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancel}
+                      >
                         <X className="size-3.5 mr-1" />
                         Cancel
                       </Button>

@@ -5,6 +5,7 @@ import { ChatChannel } from "../../models/ChatChannel.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
+import { cloudinary } from "../../config/cloudinary.js";
 
 // Search users for direct chat
 export const searchUsers = async (req, res) => {
@@ -475,6 +476,14 @@ export const getMessages = async (req, res) => {
           email: msg.sender_id.email,
           user_type: msg.sender_id.user_type,
         },
+        // ✅ CRITICAL FIX: Include message_type and all file fields
+        message_type: msg.message_type || "text",
+        file_url: msg.file_url || null,
+        file_name: msg.file_name || null,
+        file_type: msg.file_type || null,
+        file_size: msg.file_size || null,
+        cloudinary_public_id: msg.cloudinary_public_id || null,
+        // End of file fields
         parent_message_id: msg.parent_message_id?._id || null,
         parent_message: msg.parent_message_id
           ? {
@@ -559,6 +568,7 @@ export const sendMessage = async (req, res) => {
       channel_id: channelId,
       sender_id: currentUserId,
       content: content.trim(),
+      message_type: "text", // ✅ Explicitly set for text messages
       parent_message_id: parent_message_id || null,
       seen_by: [],
     });
@@ -599,6 +609,7 @@ export const sendMessage = async (req, res) => {
         email: populatedMessage.sender_id.email,
         user_type: populatedMessage.sender_id.user_type,
       },
+      message_type: populatedMessage.message_type || "text", // ✅ Include message_type
       parent_message_id: populatedMessage.parent_message_id?._id || null,
       parent_message: populatedMessage.parent_message_id
         ? {
@@ -769,7 +780,9 @@ export const deleteMessage = async (req, res) => {
     await message.save();
 
     // Notify all channel members about the deletion in real-time
-    const channelMembers = await ChannelMember.find({ channel_id: message.channel_id });
+    const channelMembers = await ChannelMember.find({
+      channel_id: message.channel_id,
+    });
     channelMembers.forEach((member) => {
       const memberSocketId = getReceiverSocketId(member.user_id.toString());
       if (memberSocketId) {
@@ -808,7 +821,9 @@ export const clearConversation = async (req, res) => {
       user_id: currentUserId,
     });
     if (!membership) {
-      return res.status(403).json({ error: "You are not a member of this channel" });
+      return res
+        .status(403)
+        .json({ error: "You are not a member of this channel" });
     }
 
     // Soft delete all non-deleted messages in this channel
@@ -1060,5 +1075,176 @@ export const getUnreadMessageCount = async (req, res) => {
   } catch (error) {
     console.error("Error getting unread count:", error);
     return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const uploadFileMessage = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { caption } = req.body;
+    const userId = req.user.id;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const channel = await ChatChannel.findById(channelId);
+    if (!channel) {
+      if (req.file.filename) {
+        await cloudinary.uploader.destroy(req.file.filename);
+      }
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    const membershipExists = await ChannelMember.findOne({
+      channel_id: channelId,
+      user_id: userId,
+    });
+
+    if (!membershipExists) {
+      if (req.file.filename) {
+        await cloudinary.uploader.destroy(req.file.filename);
+      }
+      return res
+        .status(403)
+        .json({ error: "You are not a member of this channel" });
+    }
+
+    // Create the message with file data
+    const newMessage = new Message({
+      channel_id: channelId,
+      sender_id: userId,
+      content: caption || req.file.originalname,
+      message_type: "file", // ✅ Explicitly set
+      file_url: req.file.path,
+      file_name: req.file.originalname,
+      file_type: req.file.mimetype,
+      file_size: req.file.size,
+      cloudinary_public_id: req.file.filename,
+    });
+
+    await newMessage.save();
+    await newMessage.populate(
+      "sender_id",
+      "first_name last_name full_name email user_type"
+    );
+
+    // ✅ Complete response object
+    const messageResponse = {
+      _id: newMessage._id,
+      channel_id: newMessage.channel_id,
+      sender_id: newMessage.sender_id._id,
+      content: newMessage.content,
+      message_type: "file", // ✅ Critical field
+      file_url: newMessage.file_url,
+      file_name: newMessage.file_name,
+      file_type: newMessage.file_type,
+      file_size: newMessage.file_size,
+      cloudinary_public_id: newMessage.cloudinary_public_id,
+      created_at: newMessage.created_at,
+      updated_at: newMessage.updated_at,
+      sender: {
+        _id: newMessage.sender_id._id,
+        first_name: newMessage.sender_id.first_name,
+        last_name: newMessage.sender_id.last_name,
+        full_name: newMessage.sender_id.full_name,
+        email: newMessage.sender_id.email,
+        user_type: newMessage.sender_id.user_type,
+      },
+      is_own: true,
+      seen_by: [],
+      seen_count: 0,
+    };
+
+    // ✅ Emit socket event with complete data
+    if (io) {
+      const channelMembers = await ChannelMember.find({
+        channel_id: channelId,
+        user_id: { $ne: userId },
+      }).select("user_id");
+
+      const socketMessage = {
+        ...messageResponse,
+        is_own: false,
+      };
+
+      channelMembers.forEach((member) => {
+        const receiverId = member.user_id.toString();
+
+        const receiverSocketId = getReceiverSocketId(receiverId);
+
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("new_message", socketMessage);
+        }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: messageResponse,
+      message: "File uploaded successfully",
+    });
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    if (req.file && req.file.filename) {
+      try {
+        await cloudinary.uploader.destroy(req.file.filename);
+      } catch (cleanupError) {
+        console.error("Error cleaning up file:", cleanupError);
+      }
+    }
+    res.status(500).json({
+      error: "Failed to upload file",
+      message: error.message,
+    });
+  }
+};
+
+// Optional: Delete file message (also removes from Cloudinary)
+export const deleteFileMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    // Check if user is the sender
+    if (message.sender_id.toString() !== userId.toString()) {
+      return res
+        .status(403)
+        .json({ error: "You can only delete your own messages" });
+    }
+
+    // Delete file from Cloudinary if it exists
+    if (message.cloudinary_public_id) {
+      try {
+        await cloudinary.uploader.destroy(message.cloudinary_public_id, {
+          resource_type: "auto",
+        });
+      } catch (cloudinaryError) {
+        console.error("Error deleting from Cloudinary:", cloudinaryError);
+      }
+    }
+
+    // Soft delete the message
+    message.deleted_at = new Date();
+    await message.save();
+
+    // Emit socket event
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.channel_id.toString()).emit("message_deleted", {
+        message_id: messageId,
+        channel_id: message.channel_id,
+      });
+    }
+
+    res.json({ success: true, message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting file message:", error);
+    res.status(500).json({ error: "Failed to delete message" });
   }
 };

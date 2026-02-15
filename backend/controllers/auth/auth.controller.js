@@ -85,17 +85,18 @@ export const adminSignup = async (req, res) => {
 export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
-
+    console.log({ email, password });
     // Find user
     const user = await User.findOne({
       email: email.toLowerCase(),
-      user_type: "admin",
+      // user_type: "admin",
     });
-
+    console.log("USer not found");
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
-
+    console.log("USer not found");
+    console.log({ user });
     // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
@@ -371,7 +372,9 @@ export const getProfile = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const user = await User.findById(userId).select("-password_hash -resetPasswordToken -resetPasswordExpire");
+    const user = await User.findById(userId).select(
+      "-password_hash -resetPasswordToken -resetPasswordExpire"
+    );
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }

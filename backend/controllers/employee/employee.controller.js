@@ -20,7 +20,9 @@ export const adminResetPasswordToTemp = async (req, res) => {
     user.password_hash = await bcrypt.hash(tempPassword, salt);
     await user.save();
 
-    const loginUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/login`;
+    const loginUrl = `${
+      process.env.FRONTEND_URL || "http://localhost:5173"
+    }/login`;
     await sendEmail({
       to: user.email,
       subject: "Your Password Has Been Reset",
@@ -195,7 +197,7 @@ export const createEmployee = async (req, res) => {
 
     // Generate temporary password
     const tempPassword = generateTempPassword();
-
+    console.log({ tempPassword });
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(tempPassword, salt);
@@ -407,7 +409,8 @@ export const updateEmployee = async (req, res) => {
     // Update employee details
     if (department) employee.department = department;
     if (position) employee.position = position;
-    if (team_lead_id !== undefined) employee.team_lead_id = team_lead_id || null;
+    if (team_lead_id !== undefined)
+      employee.team_lead_id = team_lead_id || null;
     if (employee_type) employee.employee_type = employee_type;
     if (is_active !== undefined) employee.is_active = is_active;
     if (hire_date) employee.hire_date = hire_date;

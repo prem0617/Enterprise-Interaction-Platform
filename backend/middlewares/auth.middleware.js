@@ -9,6 +9,7 @@ export const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     // console.log({ authHeader });
     const token = authHeader?.replace("Bearer ", "");
+    // console.log({ token });
     if (!token) {
       console.log("no token ");
       return res.status(401).json({ error: "No token, authorization denied" });
@@ -17,7 +18,7 @@ export const verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     // console.log({ decoded });
     const user = await User.findById(decoded.id).select("-password_hash");
-    console.log({ user });
+    // console.log({ user });
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }

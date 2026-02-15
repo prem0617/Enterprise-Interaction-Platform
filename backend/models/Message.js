@@ -25,6 +25,25 @@ const messageSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Message",
     },
+    file_url: {
+      type: String,
+    },
+    file_name: {
+      type: String,
+    },
+    file_type: {
+      type: String,
+    },
+    file_size: {
+      type: Number,
+    },
+    cloudinary_public_id: {
+      type: String,
+    },
+    parent_message_id: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+    },
     edited_at: {
       type: Date,
     },

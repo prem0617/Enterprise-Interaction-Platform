@@ -16,7 +16,7 @@ import {
   Shield,
   Headphones,
 } from "lucide-react";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../config";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -60,9 +60,7 @@ export default function EmployeeHome({ onNavigate }) {
       const now = new Date();
       const upcoming = (res.data.meetings || [])
         .filter(
-          (m) =>
-            m.status === "scheduled" &&
-            new Date(m.scheduled_at) > now
+          (m) => m.status === "scheduled" && new Date(m.scheduled_at) > now
         )
         .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
         .slice(0, 3);
@@ -347,9 +345,7 @@ export default function EmployeeHome({ onNavigate }) {
                   />
                   <span
                     className={`text-sm ${
-                      item.done
-                        ? "text-zinc-500 line-through"
-                        : "text-zinc-300"
+                      item.done ? "text-zinc-500 line-through" : "text-zinc-300"
                     }`}
                   >
                     {item.text}

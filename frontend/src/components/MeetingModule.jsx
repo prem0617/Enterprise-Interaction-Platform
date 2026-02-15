@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
@@ -34,7 +40,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../config";
 import { useAuthContext } from "../context/AuthContextProvider";
 import { useMeetingCall } from "@/hooks/useMeetingCall";
 
@@ -253,12 +259,8 @@ const MeetingRoom = ({
     : allTiles;
 
   const totalUnpinned = unpinnedTiles.length;
-  const gridCols = pinnedTile
-    ? 1
-    : Math.min(3, Math.max(1, totalUnpinned));
-  const gridRows = pinnedTile
-    ? 1
-    : Math.ceil(totalUnpinned / gridCols) || 1;
+  const gridCols = pinnedTile ? 1 : Math.min(3, Math.max(1, totalUnpinned));
+  const gridRows = pinnedTile ? 1 : Math.ceil(totalUnpinned / gridCols) || 1;
 
   // Unread chat counter
   const [unreadChat, setUnreadChat] = useState(0);
@@ -269,7 +271,9 @@ const MeetingRoom = ({
       setUnreadChat(0);
       lastChatCountRef.current = chatMessages.length;
     } else if (chatMessages.length > lastChatCountRef.current) {
-      setUnreadChat((prev) => prev + (chatMessages.length - lastChatCountRef.current));
+      setUnreadChat(
+        (prev) => prev + (chatMessages.length - lastChatCountRef.current)
+      );
       lastChatCountRef.current = chatMessages.length;
     }
   }, [chatMessages.length, sidebarTab, showSidebar]);
@@ -551,9 +555,7 @@ const MeetingRoom = ({
                 type="button"
                 onClick={meetingCall.toggleScreenShare}
                 title={
-                  meetingCall.isScreenSharing
-                    ? "Stop sharing"
-                    : "Share screen"
+                  meetingCall.isScreenSharing ? "Stop sharing" : "Share screen"
                 }
                 className={`p-3 rounded-full transition-colors ${
                   meetingCall.isScreenSharing
@@ -717,8 +719,7 @@ const MeetingRoom = ({
                     </div>
                   )}
                   {chatMessages.map((msg) => {
-                    const isOwn =
-                      String(msg.userId) === String(currentUserId);
+                    const isOwn = String(msg.userId) === String(currentUserId);
                     return (
                       <div
                         key={msg.id}
@@ -731,10 +732,10 @@ const MeetingRoom = ({
                             {isOwn ? "You" : msg.name}
                           </span>
                           <span className="text-[9px] text-zinc-600">
-                            {new Date(msg.createdAt).toLocaleTimeString(
-                              [],
-                              { hour: "2-digit", minute: "2-digit" }
-                            )}
+                            {new Date(msg.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </span>
                         </div>
                         <div
@@ -785,7 +786,9 @@ const MeetingModule = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() =>
+    startOfDay(new Date())
+  );
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -822,7 +825,9 @@ const MeetingModule = () => {
 
   const currentUserId = user?.id || user?._id;
   const currentUserName = user
-    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "You"
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+      user.email ||
+      "You"
     : "You";
 
   const meetingCall = useMeetingCall(
@@ -874,9 +879,7 @@ const MeetingModule = () => {
 
   const selectedDateMeetings = useMemo(() => {
     let filtered = meetings.filter((m) =>
-      m.scheduled_at
-        ? isSameDay(new Date(m.scheduled_at), selectedDate)
-        : false
+      m.scheduled_at ? isSameDay(new Date(m.scheduled_at), selectedDate) : false
     );
     if (statusFilter !== "all") {
       filtered = filtered.filter((m) => m.status === statusFilter);
@@ -1326,7 +1329,10 @@ const MeetingModule = () => {
 
   // ---- Delete meeting permanently ----
   const handleDeleteMeeting = async (meeting) => {
-    if (!window.confirm("Permanently delete this meeting? This cannot be undone.")) return;
+    if (
+      !window.confirm("Permanently delete this meeting? This cannot be undone.")
+    )
+      return;
     try {
       await axios.delete(
         `${BACKEND_URL}/meetings/${meeting._id}/permanent`,
@@ -1364,7 +1370,8 @@ const MeetingModule = () => {
   };
 
   const canEnterMeeting = (meeting) => {
-    if (meeting.status === "cancelled" || meeting.status === "ended") return false;
+    if (meeting.status === "cancelled" || meeting.status === "ended")
+      return false;
     // Active meetings can always be entered
     if (meeting.status === "active") return true;
     // Scheduled meetings: allow entry 5 minutes before start, or if host
@@ -1473,7 +1480,9 @@ const MeetingModule = () => {
   // ---- Join by code ----
   const handleJoinByCode = async (e) => {
     e?.preventDefault?.();
-    const code = String(joinCodeInput || "").trim().toUpperCase();
+    const code = String(joinCodeInput || "")
+      .trim()
+      .toUpperCase();
     if (!code) {
       toast.error("Enter a meeting code");
       return;
@@ -1497,16 +1506,15 @@ const MeetingModule = () => {
       // Update meetings list with the refreshed meeting (user now in participants)
       setMeetings((prev) => {
         const exists = prev.some((m) => m._id === meeting._id);
-        if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
+        if (exists)
+          return prev.map((m) => (m._id === meeting._id ? meeting : m));
         return [...prev, meeting];
       });
       await handleEnterMeeting(meeting);
     } catch (err) {
       const msg =
         err.response?.data?.error ||
-        (err.response?.status === 404
-          ? "Meeting not found"
-          : "Failed to join");
+        (err.response?.status === 404 ? "Meeting not found" : "Failed to join");
       toast.error(msg);
     } finally {
       setJoiningByCode(false);
@@ -1651,9 +1659,7 @@ const MeetingModule = () => {
           <input
             type="text"
             value={joinCodeInput}
-            onChange={(e) =>
-              setJoinCodeInput(e.target.value.toUpperCase())
-            }
+            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
             placeholder="e.g. ABC12345"
             className="flex-1 max-w-xs px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-sm text-white font-mono uppercase placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             maxLength={12}
@@ -1698,13 +1704,11 @@ const MeetingModule = () => {
           </div>
 
           <div className="grid grid-cols-7 text-xs font-medium text-zinc-400 mb-2">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-              (d) => (
-                <div key={d} className="text-center py-1.5">
-                  {d}
-                </div>
-              )
-            )}
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+              <div key={d} className="text-center py-1.5">
+                {d}
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-7 gap-1.5 text-sm">
@@ -1715,7 +1719,7 @@ const MeetingModule = () => {
                     key={`blank-${idx}`}
                     className="h-[5.5rem] rounded-lg bg-zinc-900/50"
                   />
-                );        
+                );
               }
 
               const key = startOfDay(day).toISOString();
@@ -1740,9 +1744,7 @@ const MeetingModule = () => {
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  <span className="leading-none">
-                    {day.getDate()}
-                  </span>
+                  <span className="leading-none">{day.getDate()}</span>
                   {dayMeetings.length > 0 && (
                     <div className="flex items-center gap-0.5 mt-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -1800,7 +1802,9 @@ const MeetingModule = () => {
               className="px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               {STATUS_FILTERS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
               ))}
             </select>
           </div>
@@ -1826,9 +1830,7 @@ const MeetingModule = () => {
           ) : (
             <div className="space-y-2 overflow-y-auto max-h-[560px] pr-1">
               {selectedDateMeetings.map((m) => {
-                const d = m.scheduled_at
-                  ? new Date(m.scheduled_at)
-                  : null;
+                const d = m.scheduled_at ? new Date(m.scheduled_at) : null;
                 const timeLabel = d
                   ? d.toLocaleTimeString("en-US", {
                       hour: "numeric",
@@ -1839,7 +1841,11 @@ const MeetingModule = () => {
                 const isCancelled = m.status === "cancelled";
                 const isEnded = m.status === "ended";
                 const isPast =
-                  d && d.getTime() < Date.now() && !isCancelled && !isEnded && !isActive;
+                  d &&
+                  d.getTime() < Date.now() &&
+                  !isCancelled &&
+                  !isEnded &&
+                  !isActive;
                 const relTime = d ? getRelativeTime(d) : "";
                 const participants = (m.participants || []).map(
                   (p) =>
@@ -1903,7 +1909,9 @@ const MeetingModule = () => {
                           </span>
                         )}
                         {relTime && (
-                          <span className="text-[10px] text-zinc-500">{relTime}</span>
+                          <span className="text-[10px] text-zinc-500">
+                            {relTime}
+                          </span>
                         )}
                         <div className="flex gap-1">
                           {m.meeting_code && (
@@ -1952,9 +1960,7 @@ const MeetingModule = () => {
                               onClick={() => handleEnterMeeting(m)}
                               className="px-2 py-0.5 rounded text-[10px] bg-indigo-600 text-white hover:bg-indigo-500"
                             >
-                              {isHost(m)
-                                ? "Start meeting"
-                                : "Join meeting"}
+                              {isHost(m) ? "Start meeting" : "Join meeting"}
                             </button>
                           )}
                         </div>
@@ -1979,9 +1985,7 @@ const MeetingModule = () => {
                       {m.location && (
                         <p className="text-[11px] text-zinc-400">
                           Location:{" "}
-                          <span className="text-zinc-200">
-                            {m.location}
-                          </span>
+                          <span className="text-zinc-200">{m.location}</span>
                         </p>
                       )}
                     </div>
@@ -2000,9 +2004,7 @@ const MeetingModule = () => {
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/50">
               <div>
                 <h2 className="text-sm font-semibold text-white">
-                  {editingMeeting
-                    ? "Edit meeting"
-                    : "Schedule a meeting"}
+                  {editingMeeting ? "Edit meeting" : "Schedule a meeting"}
                 </h2>
                 <p className="text-xs text-zinc-400">
                   Set meeting details, participants and reminders
@@ -2028,9 +2030,7 @@ const MeetingModule = () => {
                 <input
                   type="text"
                   value={form.title}
-                  onChange={(e) =>
-                    handleFormChange("title", e.target.value)
-                  }
+                  onChange={(e) => handleFormChange("title", e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   placeholder="Team sync, client call, support session..."
                 />
@@ -2044,9 +2044,7 @@ const MeetingModule = () => {
                   <input
                     type="date"
                     value={form.date}
-                    onChange={(e) =>
-                      handleFormChange("date", e.target.value)
-                    }
+                    onChange={(e) => handleFormChange("date", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -2057,9 +2055,7 @@ const MeetingModule = () => {
                   <input
                     type="time"
                     value={form.time}
-                    onChange={(e) =>
-                      handleFormChange("time", e.target.value)
-                    }
+                    onChange={(e) => handleFormChange("time", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -2093,10 +2089,7 @@ const MeetingModule = () => {
                     min="1"
                     value={form.duration_minutes}
                     onChange={(e) =>
-                      handleFormChange(
-                        "duration_minutes",
-                        e.target.value
-                      )
+                      handleFormChange("duration_minutes", e.target.value)
                     }
                     className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
@@ -2125,9 +2118,7 @@ const MeetingModule = () => {
                 <input
                   type="text"
                   value={form.location}
-                  onChange={(e) =>
-                    handleFormChange("location", e.target.value)
-                  }
+                  onChange={(e) => handleFormChange("location", e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   placeholder="Meeting room, office..."
                 />
@@ -2189,9 +2180,7 @@ const MeetingModule = () => {
                   </button>
                 </div>
                 {searchError && (
-                  <p className="mt-1 text-[11px] text-red-400">
-                    {searchError}
-                  </p>
+                  <p className="mt-1 text-[11px] text-red-400">{searchError}</p>
                 )}
                 {searchResults.length > 0 && (
                   <div className="mt-1 max-h-28 overflow-y-auto border border-zinc-700/60 rounded-lg bg-zinc-900/80">
@@ -2260,13 +2249,9 @@ const MeetingModule = () => {
                   disabled={creating}
                   className="px-3 py-1.5 rounded-lg bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:opacity-60 inline-flex items-center gap-1.5"
                 >
-                  {creating && (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  )}
+                  {creating && <Loader2 className="w-3 h-3 animate-spin" />}
                   <span>
-                    {editingMeeting
-                      ? "Save changes"
-                      : "Create meeting"}
+                    {editingMeeting ? "Save changes" : "Create meeting"}
                   </span>
                 </button>
               </div>

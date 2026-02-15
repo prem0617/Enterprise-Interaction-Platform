@@ -9,7 +9,7 @@ import {
   Key,
   Shield,
 } from "lucide-react";
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -61,12 +61,38 @@ const ChangePasswordPage = () => {
     setError("");
     setSuccess(false);
 
-    if (formData.newPassword !== formData.confirmPassword) { setError("New passwords do not match"); setLoading(false); return; }
-    if (formData.newPassword.length < 8) { setError("Password must be at least 8 characters"); setLoading(false); return; }
-    if (!/[A-Z]/.test(formData.newPassword)) { setError("Password must contain at least one uppercase letter"); setLoading(false); return; }
-    if (!/[a-z]/.test(formData.newPassword)) { setError("Password must contain at least one lowercase letter"); setLoading(false); return; }
-    if (!/[0-9]/.test(formData.newPassword)) { setError("Password must contain at least one number"); setLoading(false); return; }
-    if (!/[@#$!%*?&]/.test(formData.newPassword)) { setError("Password must contain at least one special character (@#$!%*?&)"); setLoading(false); return; }
+    if (formData.newPassword !== formData.confirmPassword) {
+      setError("New passwords do not match");
+      setLoading(false);
+      return;
+    }
+    if (formData.newPassword.length < 8) {
+      setError("Password must be at least 8 characters");
+      setLoading(false);
+      return;
+    }
+    if (!/[A-Z]/.test(formData.newPassword)) {
+      setError("Password must contain at least one uppercase letter");
+      setLoading(false);
+      return;
+    }
+    if (!/[a-z]/.test(formData.newPassword)) {
+      setError("Password must contain at least one lowercase letter");
+      setLoading(false);
+      return;
+    }
+    if (!/[0-9]/.test(formData.newPassword)) {
+      setError("Password must contain at least one number");
+      setLoading(false);
+      return;
+    }
+    if (!/[@#$!%*?&]/.test(formData.newPassword)) {
+      setError(
+        "Password must contain at least one special character (@#$!%*?&)"
+      );
+      setLoading(false);
+      return;
+    }
 
     try {
       const token = localStorage.getItem("token");
@@ -88,7 +114,11 @@ const ChangePasswordPage = () => {
       const result = response.data;
       if (result.success) {
         setSuccess(true);
-        setFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setFormData({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
         setPasswordStrength(0);
         navigate("/profile");
         toast.success("Password Changed");
@@ -97,7 +127,8 @@ const ChangePasswordPage = () => {
         toast.error(result.message || "Failed to change password");
       }
     } catch (err) {
-      const message = err.response?.data?.error || "Network error. Please try again.";
+      const message =
+        err.response?.data?.error || "Network error. Please try again.";
       setError(message);
       toast.error(message);
     } finally {
@@ -119,7 +150,8 @@ const ChangePasswordPage = () => {
     return "Strong";
   };
 
-  const inputClasses = "w-full px-3 py-2 border border-zinc-600 rounded-lg text-sm bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-500 transition";
+  const inputClasses =
+    "w-full px-3 py-2 border border-zinc-600 rounded-lg text-sm bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-zinc-500 transition";
 
   return (
     <div className="min-h-screen bg-zinc-950 p-4 flex items-center justify-center">
@@ -140,8 +172,12 @@ const ChangePasswordPage = () => {
                 <Key className="w-4 h-4 text-zinc-400" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-white">Change Password</h1>
-                <p className="text-xs text-zinc-500">Keep your account secure</p>
+                <h1 className="text-lg font-semibold text-white">
+                  Change Password
+                </h1>
+                <p className="text-xs text-zinc-500">
+                  Keep your account secure
+                </p>
               </div>
             </div>
           </div>
@@ -173,7 +209,11 @@ const ChangePasswordPage = () => {
                   onClick={() => toggleShowPassword("current")}
                   className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
-                  {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPasswords.current ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -198,7 +238,11 @@ const ChangePasswordPage = () => {
                   onClick={() => toggleShowPassword("new")}
                   className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
-                  {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPasswords.new ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
 
@@ -206,7 +250,9 @@ const ChangePasswordPage = () => {
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-zinc-500">Strength</span>
-                    <span className="text-xs font-medium text-zinc-300">{getStrengthText()}</span>
+                    <span className="text-xs font-medium text-zinc-300">
+                      {getStrengthText()}
+                    </span>
                   </div>
                   <div className="w-full bg-zinc-800 rounded-full h-1.5">
                     <div
@@ -238,23 +284,47 @@ const ChangePasswordPage = () => {
                   onClick={() => toggleShowPassword("confirm")}
                   className="absolute right-2.5 top-1/2 -tranzinc-y-1/2 text-zinc-500 hover:text-zinc-300"
                 >
-                  {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPasswords.confirm ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
-              {formData.confirmPassword && formData.newPassword !== formData.confirmPassword && (
-                <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
-              )}
+              {formData.confirmPassword &&
+                formData.newPassword !== formData.confirmPassword && (
+                  <p className="mt-1 text-xs text-red-400">
+                    Passwords do not match
+                  </p>
+                )}
             </div>
 
             {/* Requirements */}
             <div className="bg-zinc-800/50 border border-zinc-700/30 rounded-lg p-3">
-              <p className="text-xs font-medium text-zinc-400 mb-2">Requirements</p>
+              <p className="text-xs font-medium text-zinc-400 mb-2">
+                Requirements
+              </p>
               <div className="space-y-1">
-                <RequirementItem text="At least 8 characters" met={formData.newPassword.length >= 8} />
-                <RequirementItem text="One uppercase letter (A-Z)" met={/[A-Z]/.test(formData.newPassword)} />
-                <RequirementItem text="One lowercase letter (a-z)" met={/[a-z]/.test(formData.newPassword)} />
-                <RequirementItem text="One number (0-9)" met={/[0-9]/.test(formData.newPassword)} />
-                <RequirementItem text="One special character (@#$!%*?&)" met={/[@#$!%*?&]/.test(formData.newPassword)} />
+                <RequirementItem
+                  text="At least 8 characters"
+                  met={formData.newPassword.length >= 8}
+                />
+                <RequirementItem
+                  text="One uppercase letter (A-Z)"
+                  met={/[A-Z]/.test(formData.newPassword)}
+                />
+                <RequirementItem
+                  text="One lowercase letter (a-z)"
+                  met={/[a-z]/.test(formData.newPassword)}
+                />
+                <RequirementItem
+                  text="One number (0-9)"
+                  met={/[0-9]/.test(formData.newPassword)}
+                />
+                <RequirementItem
+                  text="One special character (@#$!%*?&)"
+                  met={/[@#$!%*?&]/.test(formData.newPassword)}
+                />
               </div>
             </div>
 
@@ -294,7 +364,9 @@ const RequirementItem = ({ text, met }) => (
     >
       {met && <CheckCircle className="w-2.5 h-2.5 text-white" />}
     </div>
-    <span className={`text-xs ${met ? "text-zinc-300" : "text-zinc-500"}`}>{text}</span>
+    <span className={`text-xs ${met ? "text-zinc-300" : "text-zinc-500"}`}>
+      {text}
+    </span>
   </div>
 );
 

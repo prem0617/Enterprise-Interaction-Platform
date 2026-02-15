@@ -1,7 +1,9 @@
+import "./env.js";
 import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
 import cors from "cors";
-import http from "http";
+
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
@@ -17,7 +19,6 @@ import Meeting from "./models/Meeting.js";
 import { verifyToken } from "./middlewares/auth.middleware.js";
 
 // Load environment variables
-dotenv.config();
 
 // const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,7 +33,6 @@ app.use(express.urlencoded({ extended: true }));
 //   credentials: true
 // }));
 
-
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -40,21 +40,21 @@ const allowedOrigins = [
   "http://127.0.0.1:3000",
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
-
-
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 // Connect to MongoDB
 connectDB();

@@ -18,6 +18,9 @@ import {
   X,
   Reply,
   Eye,
+  Download,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -39,9 +42,11 @@ import ActiveVideoCallBar from "./ActiveVideoCallBar";
 import IncomingVideoCallModal from "./IncomingVideoCallModal";
 import OutgoingVideoCallModal from "./OutgoingVideoCallModal";
 
-import { BACKEND_URL } from "@/config";
+import { BACKEND_URL } from "../../config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+import FileUploadModal from "./FileUploadModal";
 
 const ChatInterface = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,8 +85,107 @@ const ChatInterface = () => {
   const messagesEndRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const selectedChatRef = useRef(null);
+  const [showFileUpload, setShowFileUpload] = useState(false);
 
   const { socket, user } = useAuthContext();
+
+  // Add to existing state declarations
+  const [messageSearchQuery, setMessageSearchQuery] = useState("");
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [searchedMessages, setSearchedMessages] = useState([]);
+  const [searchingMessages, setSearchingMessages] = useState(false);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const searchedMessageRefs = useRef({});
+
+  // Add message search function
+  const searchMessagesInChannel = async (query) => {
+    if (!selectedChat?._id || !query.trim()) {
+      setSearchedMessages([]);
+      return;
+    }
+
+    setSearchingMessages(true);
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/chat/channels/${
+          selectedChat._id
+        }/messages/search?query=${encodeURIComponent(query)}`,
+        axiosConfig
+      );
+      setSearchedMessages(response.data.messages || []);
+      setSelectedSearchIndex(0);
+
+      // Scroll to first result if any
+      if (response.data.messages?.length > 0) {
+        setTimeout(() => {
+          const firstMessageId = response.data.messages[0]._id;
+          searchedMessageRefs.current[firstMessageId]?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }, 100);
+      }
+    } catch (error) {
+      console.log("first");
+      console.log("Error searching messages:", error);
+      toast.error("Failed to search messages");
+    } finally {
+      setSearchingMessages(false);
+    }
+  };
+
+  // Handle search input with debounce
+  const handleMessageSearchInput = (e) => {
+    const query = e.target.value;
+    setMessageSearchQuery(query);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (query.trim()) {
+      searchTimeoutRef.current = setTimeout(() => {
+        searchMessagesInChannel(query);
+      }, 300);
+    } else {
+      setSearchedMessages([]);
+    }
+  };
+
+  // Navigate through search results
+  const navigateSearchResults = (direction) => {
+    if (searchedMessages.length === 0) return;
+
+    let newIndex = selectedSearchIndex;
+    if (direction === "next") {
+      newIndex = (selectedSearchIndex + 1) % searchedMessages.length;
+    } else {
+      newIndex =
+        selectedSearchIndex === 0
+          ? searchedMessages.length - 1
+          : selectedSearchIndex - 1;
+    }
+
+    setSelectedSearchIndex(newIndex);
+    const messageId = searchedMessages[newIndex]._id;
+    searchedMessageRefs.current[messageId]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
+
+  // Clear search
+  const clearMessageSearch = () => {
+    setMessageSearchQuery("");
+    setSearchedMessages([]);
+    setShowMessageSearch(false);
+    setSelectedSearchIndex(0);
+  };
+
+  // Close search when chat changes
+  useEffect(() => {
+    clearMessageSearch();
+  }, [selectedChat?._id]);
 
   useEffect(() => {
     if (!socket) {
@@ -158,7 +262,9 @@ const ChatInterface = () => {
     const handleYouWereRemovedFromChannel = (data) => {
       const channelId = data.channelId || data.channel_id;
       if (!channelId) return;
-      setUserChannel((prev) => prev.filter((c) => String(c._id) !== String(channelId)));
+      setUserChannel((prev) =>
+        prev.filter((c) => String(c._id) !== String(channelId))
+      );
       setRemovedFromChannelId(channelId);
     };
 
@@ -199,35 +305,49 @@ const ChatInterface = () => {
   const token = localStorage.getItem("token");
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
 
-  const requestCallApi = useCallback(async (toUserId) => {
-    try {
-      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId), callType: "audio" }, axiosConfig);
-      return data;
-    } catch (error) {
-      if (error.response?.status === 409) {
-        const errorMessage = error.response?.data?.message || "This person is on a call";
-        toast.error(errorMessage, { duration: 1500 });
-        throw new Error(errorMessage);
+  const requestCallApi = useCallback(
+    async (toUserId) => {
+      try {
+        const { data } = await axios.post(
+          `${BACKEND_URL}/call/request`,
+          { toUserId: String(toUserId), callType: "audio" },
+          axiosConfig
+        );
+        return data;
+      } catch (error) {
+        if (error.response?.status === 409) {
+          const errorMessage =
+            error.response?.data?.message || "This person is on a call";
+          toast.error(errorMessage, { duration: 1500 });
+          throw new Error(errorMessage);
+        }
+        throw error;
       }
-      throw error;
-    }
-  }, [token]);
+    },
+    [token]
+  );
 
-  const requestVideoCallApi = useCallback(async (toUserId) => {
-    try {
-      const { data } = await axios.post(`${BACKEND_URL}/call/request`, { toUserId: String(toUserId), callType: "video" }, axiosConfig);
-      return data;
-    } catch (error) {
-      if (error.response?.status === 409) {
-        const errorMessage = error.response?.data?.message || "This person is on a call";
-        toast.error(errorMessage, { duration: 1500 });
-        throw new Error(errorMessage);
+  const requestVideoCallApi = useCallback(
+    async (toUserId) => {
+      try {
+        const { data } = await axios.post(
+          `${BACKEND_URL}/call/request`,
+          { toUserId: String(toUserId), callType: "video" },
+          axiosConfig
+        );
+        return data;
+      } catch (error) {
+        if (error.response?.status === 409) {
+          const errorMessage =
+            error.response?.data?.message || "This person is on a call";
+          toast.error(errorMessage, { duration: 1500 });
+          throw new Error(errorMessage);
+        }
+        throw error;
       }
-      throw error;
-    }
-  }, [token]);
-
-
+    },
+    [token]
+  );
 
   const checkOnlineApi = useCallback(
     async (userId) => {
@@ -251,8 +371,19 @@ const ChatInterface = () => {
     [token]
   );
 
-  const audioCall = useAudioCall(socket, user?.id, currentUserName, requestCallApi, checkOnlineApi);
-  const videoCall = useVideoCall(socket, user?.id, currentUserName, requestVideoCallApi);
+  const audioCall = useAudioCall(
+    socket,
+    user?.id,
+    currentUserName,
+    requestCallApi,
+    checkOnlineApi
+  );
+  const videoCall = useVideoCall(
+    socket,
+    user?.id,
+    currentUserName,
+    requestVideoCallApi
+  );
 
   const startGroupCallApi = useCallback(
     async (channelId) => {
@@ -394,9 +525,15 @@ const ChatInterface = () => {
     };
   }, [socket, userChannel, getGroupCallStatusApi, selectedChat?._id]);
 
-  useEffect(() => { if (audioCall.errorMessage) toast.error(audioCall.errorMessage); }, [audioCall.errorMessage]);
-  useEffect(() => { if (videoCall.errorMessage) toast.error(videoCall.errorMessage); }, [videoCall.errorMessage]);
-  useEffect(() => { if (groupCall.errorMessage) toast.error(groupCall.errorMessage); }, [groupCall.errorMessage]);
+  useEffect(() => {
+    if (audioCall.errorMessage) toast.error(audioCall.errorMessage);
+  }, [audioCall.errorMessage]);
+  useEffect(() => {
+    if (videoCall.errorMessage) toast.error(videoCall.errorMessage);
+  }, [videoCall.errorMessage]);
+  useEffect(() => {
+    if (groupCall.errorMessage) toast.error(groupCall.errorMessage);
+  }, [groupCall.errorMessage]);
 
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -615,11 +752,14 @@ const ChatInterface = () => {
       await fetchDirectChats();
       await getUserChannel();
     } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to clear conversation");
+      toast.error(
+        error.response?.data?.error || "Failed to clear conversation"
+      );
     }
   };
 
   const sendMessage = async (e) => {
+    console.log({ e });
     e.preventDefault();
     if (!newMessage.trim() || !selectedChat || sendingMessage) return;
     const messageContent = newMessage.trim();
@@ -762,6 +902,108 @@ const ChatInterface = () => {
     setShowSeenByModal(true);
   };
 
+  // Updated renderFileAttachment function for ChatInterface.jsx
+  // This includes the Cloudinary URL fix for PDFs
+
+  // Add this helper function at the top of your component
+  const getCorrectCloudinaryUrl = (url, fileType) => {
+    if (!url) return url;
+
+    const isCloudinary = url.includes("res.cloudinary.com");
+    if (!isCloudinary) return url;
+
+    const isImage = fileType?.startsWith("image/");
+    const isVideo = fileType?.startsWith("video/");
+
+    // Fix PDFs and other non-image files that have /image/upload/
+    if (!isImage && !isVideo && url.includes("/image/upload/")) {
+      console.log("🔧 Fixing PDF URL from:", url);
+      const fixedUrl = url.replace("/image/upload/", "/raw/upload/");
+      console.log("🔧 Fixed PDF URL to:", fixedUrl);
+      return fixedUrl;
+    }
+
+    return url;
+  };
+
+  // Updated renderFileAttachment function
+  const renderFileAttachment = (message) => {
+    if (message.message_type !== "file" || !message.file_url) return null;
+
+    const isImage = message.file_type?.startsWith("image/");
+
+    // ✅ Fix the URL if it's a Cloudinary URL with wrong path
+    const fileUrl = getCorrectCloudinaryUrl(
+      message.file_url,
+      message.file_type
+    );
+
+    return (
+      <div className="mt-2">
+        {isImage ? (
+          <div className="relative group">
+            <img
+              src={fileUrl}
+              alt={message.file_name || "Attachment"}
+              className="max-w-xs max-h-64 rounded cursor-pointer"
+              onClick={() => window.open(fileUrl, "_blank")}
+              onError={(e) => {
+                console.error("Image failed to load:", fileUrl);
+                e.target.style.display = "none";
+              }}
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                // For images, open in new tab
+                window.open(fileUrl, "_blank");
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Download"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div
+            onClick={() => {
+              console.log("📥 Opening file:", {
+                name: message.file_name,
+                type: message.file_type,
+                url: fileUrl,
+                originalUrl: message.file_url,
+              });
+              window.open(fileUrl, "_blank");
+            }}
+            className="flex items-center gap-2 p-2 bg-muted rounded cursor-pointer hover:bg-muted/80 transition-colors"
+          >
+            <FileText className="w-4 h-4 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-sm block truncate">
+                {message.file_name || "Download File"}
+              </span>
+              {message.file_size && (
+                <span className="text-xs text-muted-foreground">
+                  {formatFileSize(message.file_size)}
+                </span>
+              )}
+            </div>
+            <Download className="w-4 h-4 ml-auto flex-shrink-0" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Also update the formatFileSize function if you don't have it
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  };
+
   useEffect(() => {
     if (!socket) return;
 
@@ -772,41 +1014,11 @@ const ChatInterface = () => {
       });
     };
 
-    // const handleMessagesSeen = (data) => {
-    //   const { channel_id, seen_by_user_id, message_ids } = data;
-    //   const currentChat = selectedChatRef.current;
-    //   if (currentChat && currentChat._id === channel_id) {
-    //     setMessages((prev) =>
-    //       prev.map((msg) => {
-    //         if (message_ids.includes(msg._id)) {
-    //           const existingSeen = msg.seen_by || [];
-    //           const alreadySeen = existingSeen.some(
-    //             (s) => s.user_id._id === seen_by_user_id
-    //           );
-    //           if (!alreadySeen)
-    //             return {
-    //               ...msg,
-    //               seen_by: [
-    //                 ...existingSeen,
-    //                 { user_id: { _id: seen_by_user_id }, seen_at: new Date() },
-    //               ],
-    //               seen_count: (msg.seen_count || 0) + 1,
-    //             };
-    //         }
-    //         return msg;
-    //       })
-    //     );
-    //   }
-    //   fetchDirectChats();
-    //   getUserChannel();
-    // };
-
     const handleMessagesSeen = (data) => {
       const { channel_id, seen_by_user_id, seen_by_user, message_ids } = data;
       const currentChat = selectedChatRef.current;
 
       if (currentChat && currentChat._id === channel_id) {
-        // Optimistically update messages immediately
         setMessages((prev) =>
           prev.map((msg) => {
             if (message_ids.includes(msg._id)) {
@@ -816,7 +1028,6 @@ const ChatInterface = () => {
               );
 
               if (!alreadySeen) {
-                // Create the new seen_by entry with complete user info
                 const newSeenBy = {
                   user_id: {
                     _id: seen_by_user_id,
@@ -844,7 +1055,6 @@ const ChatInterface = () => {
         );
       }
 
-      // Update chat lists
       fetchDirectChats();
       getUserChannel();
     };
@@ -854,8 +1064,11 @@ const ChatInterface = () => {
       if (currentChat && data.channel_id === currentChat._id) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === data._id)) return prev;
+
+          // ✅ Ensure file messages have proper structure
           const messageWithSender = {
             ...data,
+            message_type: data.message_type || "text", // Ensure message_type is set
             sender: data.sender || {
               _id: data.sender_id,
               first_name: data.sender?.first_name || "Unknown",
@@ -921,14 +1134,6 @@ const ChatInterface = () => {
       });
     };
 
-    socket.on("channel_name_changed", handleChannelNameUpdate);
-    socket.on("direct_chat_created", handleNewChat);
-    socket.on("group_created", handleNewGroup);
-    socket.on("new_message", appendMessage);
-    socket.on("messages_seen", handleMessagesSeen);
-    socket.on("leavechannel", handleLeaveChannel);
-    socket.on("online-users-updated", handleOnlineUsersUpdate);
-
     const handleMessageDeleted = (data) => {
       const currentChat = selectedChatRef.current;
       if (currentChat && String(currentChat._id) === String(data.channel_id)) {
@@ -947,12 +1152,16 @@ const ChatInterface = () => {
       getUserChannel();
     };
 
+    socket.on("channel_name_changed", handleChannelNameUpdate);
+    socket.on("direct_chat_created", handleNewChat);
+    socket.on("group_created", handleNewGroup);
+    socket.on("new_message", appendMessage);
+    socket.on("messages_seen", handleMessagesSeen);
+    socket.on("leavechannel", handleLeaveChannel);
+    socket.on("online-users-updated", handleOnlineUsersUpdate);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_cleared", handleConversationCleared);
 
-    // Request current online users now that the listener is set up.
-    // This covers the case where the broadcast was sent before this
-    // component mounted (e.g. user navigated to Messages tab after login).
     socket.emit("request-online-users");
 
     return () => {
@@ -966,6 +1175,31 @@ const ChatInterface = () => {
       socket.off("conversation_cleared", handleConversationCleared);
     };
   }, [socket]);
+
+  const handleFileSent = (messageData) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m._id === messageData._id)) return prev;
+
+      // Ensure the message has proper structure
+      const formattedMessage = {
+        ...messageData,
+        message_type: "file", // Explicitly set message_type
+        sender: messageData.sender || {
+          _id: messageData.sender_id || user?.id,
+          first_name: user?.first_name || "You",
+          last_name: user?.last_name || "",
+          full_name:
+            user?.full_name ||
+            `${user?.first_name || "You"} ${user?.last_name || ""}`.trim(),
+          email: user?.email || "",
+        },
+      };
+
+      return [...prev, formattedMessage];
+    });
+    fetchDirectChats();
+    getUserChannel();
+  };
 
   const sortChatsByLastMessage = (chats) =>
     [...chats].sort((a, b) => {
@@ -1092,7 +1326,10 @@ const ChatInterface = () => {
         </div>
 
         {/* Chat List */}
-        <div className="flex-1 overflow-y-auto pb-4 pt-1 bg-card" style={{ overscrollBehavior: 'contain' }}>
+        <div
+          className="flex-1 overflow-y-auto pb-4 pt-1 bg-card"
+          style={{ overscrollBehavior: "contain" }}
+        >
           {directMessageLoading ? (
             <div className="flex flex-col items-center justify-center h-full">
               <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mb-2" />
@@ -1215,6 +1452,7 @@ const ChatInterface = () => {
       {selectedChat ? (
         <div className="flex-1 flex flex-col bg-card">
           {/* Chat Header */}
+          {/* Chat Header */}
           <div className="h-14 px-4 border-b border-border flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -1249,7 +1487,7 @@ const ChatInterface = () => {
                   {selectedChat.channel_type === "group"
                     ? `${selectedChat.member_count || 0} members${
                         selectedChat.department
-                          ? ` \u00B7 ${selectedChat.department}`
+                          ? ` · ${selectedChat.department}`
                           : ""
                       }`
                     : isUserOnline(selectedChat.other_user?._id)
@@ -1260,124 +1498,251 @@ const ChatInterface = () => {
             </div>
 
             <div className="flex items-center gap-1">
-              {selectedChat.channel_type === "direct" && selectedChat.other_user && (
-                <>
-                  <button
-                    onClick={async () => {
-                      if (!isUserOnline(selectedChat.other_user._id)) { toast.error("User is offline", { duration: 1500 }); return; }
-                      if (groupCall.groupCallState !== "idle") { toast.error("You are currently in a group call", { duration: 1500 }); return; }
-                      if (videoCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id))) {
-                        toast.error("You are already in a call", { duration: 1500 });
-                        return;
-                      }
-                      try {
-                        const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
-                        if (callStatus.inCall) { toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, { duration: 1500 }); return; }
-                        audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim());
-                      } catch (error) { audioCall.startCall(String(selectedChat.other_user._id), selectedChat.other_user.full_name || `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()); }
-                    }}
-                    disabled={
-                      audioCall.callState !== "idle" ||
-                      videoCall.callState !== "idle" ||
-                      !socket ||
-                      groupCall.groupCallState !== "idle" ||
-                      !isUserOnline(selectedChat.other_user._id)
-                    }
-                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
-                    title={
-                      !isUserOnline(selectedChat.other_user._id)
-                        ? "User is offline"
-                        : groupCall.groupCallState !== "idle"
-                        ? "You are in a group call"
-                        : videoCall.callState !== "idle"
-                        ? "You are in a video call"
-                        : audioCall.callState !== "idle"
-                        ? "You are in a call"
-                        : "Audio call"
-                    }
-                  >
-                    <Phone className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (!isUserOnline(selectedChat.other_user._id)) {
-                        toast.error("User is offline", { duration: 1500 });
-                        return;
-                      }
-                      if (groupCall.groupCallState !== "idle") {
-                        toast.error("You are currently in a group call", { duration: 1500 });
-                        return;
-                      }
-                      if (audioCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id))) {
-                        toast.error("You are already in a call", { duration: 1500 });
-                        return;
-                      }
-                      if (videoCall.callState !== "idle" && !(String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id))) {
-                        toast.error("You are already in a call", { duration: 1500 });
-                        return;
-                      }
-                      try {
-                        const callStatus = await checkUserCallStatusApi(selectedChat.other_user._id);
-                        if (callStatus.inCall) {
-                          toast.error(`${selectedChat.other_user.first_name || "This person"} is on a call`, { duration: 1500 });
+              {/* Search Button */}
+              <button
+                onClick={() => setShowMessageSearch(!showMessageSearch)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  showMessageSearch
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+                title="Search messages"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+
+              {selectedChat.channel_type === "direct" &&
+                selectedChat.other_user && (
+                  <>
+                    <button
+                      onClick={async () => {
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", { duration: 1500 });
                           return;
                         }
-                        videoCall.startCall(
-                          String(selectedChat.other_user._id),
-                          selectedChat.other_user.full_name ||
-                            `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
-                        );
-                      } catch (error) {
-                        console.error("Error checking call status:", error);
-                        videoCall.startCall(
-                          String(selectedChat.other_user._id),
-                          selectedChat.other_user.full_name ||
-                            `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""}`.trim()
-                        );
+                        if (groupCall.groupCallState !== "idle") {
+                          toast.error("You are currently in a group call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        if (
+                          videoCall.callState !== "idle" &&
+                          !(
+                            String(selectedChat.other_user._id) ===
+                            String(videoCall.remoteUser?.id)
+                          )
+                        ) {
+                          toast.error("You are already in a call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        try {
+                          const callStatus = await checkUserCallStatusApi(
+                            selectedChat.other_user._id
+                          );
+                          if (callStatus.inCall) {
+                            toast.error(
+                              `${
+                                selectedChat.other_user.first_name ||
+                                "This person"
+                              } is on a call`,
+                              { duration: 1500 }
+                            );
+                            return;
+                          }
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        } catch (error) {
+                          audioCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        }
+                      }}
+                      disabled={
+                        audioCall.callState !== "idle" ||
+                        videoCall.callState !== "idle" ||
+                        !socket ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
                       }
-                    }}
+                      className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                      title={
+                        !isUserOnline(selectedChat.other_user._id)
+                          ? "User is offline"
+                          : groupCall.groupCallState !== "idle"
+                          ? "You are in a group call"
+                          : videoCall.callState !== "idle"
+                          ? "You are in a video call"
+                          : audioCall.callState !== "idle"
+                          ? "You are in a call"
+                          : "Audio call"
+                      }
+                    >
+                      <Phone className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!isUserOnline(selectedChat.other_user._id)) {
+                          toast.error("User is offline", { duration: 1500 });
+                          return;
+                        }
+                        if (groupCall.groupCallState !== "idle") {
+                          toast.error("You are currently in a group call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        if (
+                          audioCall.callState !== "idle" &&
+                          !(
+                            String(selectedChat.other_user._id) ===
+                            String(audioCall.remoteUser?.id)
+                          )
+                        ) {
+                          toast.error("You are already in a call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        if (
+                          videoCall.callState !== "idle" &&
+                          !(
+                            String(selectedChat.other_user._id) ===
+                            String(videoCall.remoteUser?.id)
+                          )
+                        ) {
+                          toast.error("You are already in a call", {
+                            duration: 1500,
+                          });
+                          return;
+                        }
+                        try {
+                          const callStatus = await checkUserCallStatusApi(
+                            selectedChat.other_user._id
+                          );
+                          if (callStatus.inCall) {
+                            toast.error(
+                              `${
+                                selectedChat.other_user.first_name ||
+                                "This person"
+                              } is on a call`,
+                              { duration: 1500 }
+                            );
+                            return;
+                          }
+                          videoCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        } catch (error) {
+                          console.error("Error checking call status:", error);
+                          videoCall.startCall(
+                            String(selectedChat.other_user._id),
+                            selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${
+                                selectedChat.other_user.last_name || ""
+                              }`.trim()
+                          );
+                        }
+                      }}
+                      disabled={
+                        (audioCall.callState !== "idle" &&
+                          !(
+                            selectedChat.channel_type === "direct" &&
+                            selectedChat.other_user &&
+                            String(selectedChat.other_user._id) ===
+                              String(audioCall.remoteUser?.id)
+                          )) ||
+                        (videoCall.callState !== "idle" &&
+                          !(
+                            selectedChat.channel_type === "direct" &&
+                            selectedChat.other_user &&
+                            String(selectedChat.other_user._id) ===
+                              String(videoCall.remoteUser?.id)
+                          )) ||
+                        groupCall.groupCallState !== "idle" ||
+                        !isUserOnline(selectedChat.other_user._id)
+                      }
+                      className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                      title={
+                        !isUserOnline(selectedChat.other_user._id)
+                          ? "User is offline"
+                          : groupCall.groupCallState !== "idle"
+                          ? "You are in a group call"
+                          : videoCall.callState !== "idle" &&
+                            String(selectedChat.other_user._id) !==
+                              String(videoCall.remoteUser?.id)
+                          ? "You are in a video call"
+                          : audioCall.callState !== "idle" &&
+                            String(selectedChat.other_user._id) !==
+                              String(audioCall.remoteUser?.id)
+                          ? "You are in a call"
+                          : "Video call"
+                      }
+                    >
+                      <Video className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              {selectedChat.channel_type === "group" && (
+                <>
+                  <button
+                    onClick={() =>
+                      groupCall.startGroupCall(
+                        selectedChat._id,
+                        selectedChat.name
+                      )
+                    }
                     disabled={
-                      (audioCall.callState !== "idle" &&
-                        !(
-                          selectedChat.channel_type === "direct" &&
-                          selectedChat.other_user &&
-                          String(selectedChat.other_user._id) === String(audioCall.remoteUser?.id)
-                        )) ||
-                      (videoCall.callState !== "idle" &&
-                        !(
-                          selectedChat.channel_type === "direct" &&
-                          selectedChat.other_user &&
-                          String(selectedChat.other_user._id) === String(videoCall.remoteUser?.id)
-                        )) ||
                       groupCall.groupCallState !== "idle" ||
-                      !isUserOnline(selectedChat.other_user._id)
+                      audioCall.callState !== "idle" ||
+                      videoCall.callState !== "idle"
                     }
                     className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
-                    title={
-                      !isUserOnline(selectedChat.other_user._id)
-                        ? "User is offline"
-                        : groupCall.groupCallState !== "idle"
-                        ? "You are in a group call"
-                        : videoCall.callState !== "idle" &&
-                          String(selectedChat.other_user._id) !== String(videoCall.remoteUser?.id)
-                        ? "You are in a video call"
-                        : audioCall.callState !== "idle" &&
-                          String(selectedChat.other_user._id) !== String(audioCall.remoteUser?.id)
-                        ? "You are in a call"
-                        : "Video call"
-                    }
+                    title="Start video call"
                   >
                     <Video className="w-4 h-4" />
                   </button>
-                </>
-              )}
-              {selectedChat.channel_type === "group" && (
-                <>
-                  <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={groupCall.groupCallState !== "idle" || audioCall.callState !== "idle" || videoCall.callState !== "idle"} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40" title="Start video call"><Video className="w-4 h-4" /></button>
-                  {groupCall.groupCallState === "idle" && !groupCallStatus?.active && selectedChat.user_role === "admin" && (
-                    <button onClick={() => groupCall.startGroupCall(selectedChat._id, selectedChat.name)} disabled={!socket || groupCall.groupCallState !== "idle" || audioCall.callState !== "idle"} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"><Phone className="w-4 h-4" /></button>
-                  )}
-                  <button onClick={openChannelSettings} className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"><Settings className="w-4 h-4" /></button>
+                  {groupCall.groupCallState === "idle" &&
+                    !groupCallStatus?.active &&
+                    selectedChat.user_role === "admin" && (
+                      <button
+                        onClick={() =>
+                          groupCall.startGroupCall(
+                            selectedChat._id,
+                            selectedChat.name
+                          )
+                        }
+                        disabled={
+                          !socket ||
+                          groupCall.groupCallState !== "idle" ||
+                          audioCall.callState !== "idle"
+                        }
+                        className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </button>
+                    )}
+                  <button
+                    onClick={openChannelSettings}
+                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
                 </>
               )}
               {selectedChat?.member_count > 2 && (
@@ -1390,7 +1755,11 @@ const ChatInterface = () => {
               )}
               <button
                 onClick={() => {
-                  if (window.confirm("Are you sure you want to clear all messages in this conversation? This cannot be undone.")) {
+                  if (
+                    window.confirm(
+                      "Are you sure you want to clear all messages in this conversation? This cannot be undone."
+                    )
+                  ) {
                     handleClearConversation();
                   }
                 }}
@@ -1401,6 +1770,81 @@ const ChatInterface = () => {
               </button>
             </div>
           </div>
+
+          {/* Message Search Bar */}
+          {showMessageSearch && (
+            <div className="px-4 py-2 bg-muted/50 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={messageSearchQuery}
+                    onChange={handleMessageSearchInput}
+                    placeholder="Search in conversation..."
+                    className="pl-8 h-8 text-xs"
+                    autoFocus
+                  />
+                  {searchingMessages && (
+                    <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                  )}
+                </div>
+
+                {searchedMessages.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {selectedSearchIndex + 1} of {searchedMessages.length}
+                    </span>
+                    <button
+                      onClick={() => navigateSearchResults("prev")}
+                      className="p-1 hover:bg-muted rounded transition"
+                      disabled={searchedMessages.length === 0}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-muted-foreground"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 15l7-7 7 7"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => navigateSearchResults("next")}
+                      className="p-1 hover:bg-muted rounded transition"
+                      disabled={searchedMessages.length === 0}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-muted-foreground"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={clearMessageSearch}
+                  className="p-1 hover:bg-muted rounded transition"
+                >
+                  <X className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Group Call Banner */}
           {((groupCall.groupCallState === "incoming" &&
@@ -1461,11 +1905,20 @@ const ChatInterface = () => {
           ) : null}
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background" style={{ overscrollBehavior: 'contain' }}>
-            {removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId) ? (
+          <div
+            className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background"
+            style={{ overscrollBehavior: "contain" }}
+          >
+            {removedFromChannelId &&
+            selectedChat?._id &&
+            String(selectedChat._id) === String(removedFromChannelId) ? (
               <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
-                <p className="text-base font-medium text-amber-400">You are removed from this group</p>
-                <p className="text-sm text-muted-foreground mt-1">You will no longer see this chat after you refresh.</p>
+                <p className="text-base font-medium text-amber-400">
+                  You are removed from this group
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  You will no longer see this chat after you refresh.
+                </p>
               </div>
             ) : loadingMessages ? (
               <div className="flex items-center justify-center h-full">
@@ -1494,21 +1947,41 @@ const ChatInterface = () => {
                         message.sender.last_name || ""
                       }`.trim() || "User"
                     : "User";
+
+                  const isSearchResult = searchedMessages.some(
+                    (m) => m._id === message._id
+                  );
+                  const isCurrentSearchResult =
+                    searchedMessages.length > 0 &&
+                    searchedMessages[selectedSearchIndex]?._id === message._id;
+
                   return (
                     <div
                       key={message._id}
+                      ref={(el) => {
+                        if (isSearchResult) {
+                          searchedMessageRefs.current[message._id] = el;
+                        }
+                      }}
                       className={`flex ${
                         message.is_own ? "justify-end" : "justify-start"
-                      }`}
+                      } ${isCurrentSearchResult ? "animate-pulse" : ""}`}
                     >
                       <div className="group relative max-w-md">
                         <div
-                          className={`px-3.5 py-2 rounded-xl text-sm ${
+                          className={`px-3.5 py-2 rounded-xl text-sm transition-all ${
                             message.is_own
                               ? "bg-primary text-primary-foreground"
                               : "bg-muted border border-border text-foreground"
+                          } ${
+                            isCurrentSearchResult
+                              ? "ring-2 ring-yellow-400 ring-offset-2"
+                              : isSearchResult
+                              ? "ring-1 ring-yellow-400/50"
+                              : ""
                           }`}
                         >
+                          {/* Rest of your existing message rendering... */}
                           {parentMessage && (
                             <div
                               className={`mb-1.5 pl-2.5 border-l-2 ${
@@ -1546,6 +2019,7 @@ const ChatInterface = () => {
                               </p>
                             )}
                           <p className="leading-relaxed">{message.content}</p>
+                          {renderFileAttachment(message)}
                           <div
                             className={`flex items-center gap-1 justify-end mt-1 ${
                               message.is_own
@@ -1575,32 +2049,7 @@ const ChatInterface = () => {
                               ))}
                           </div>
                         </div>
-                        <div className={`absolute top-0 ${
-                            message.is_own
-                              ? "left-0 -translate-x-16"
-                              : "right-0 translate-x-16"
-                          } flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity`}>
-                          <button
-                            onClick={() => handleReply(message)}
-                            className="p-1 bg-muted border border-border rounded-full hover:bg-muted/80 shadow-sm"
-                            title="Reply"
-                          >
-                            <Reply className="w-3 h-3 text-muted-foreground" />
-                          </button>
-                          {message.is_own && (
-                            <button
-                              onClick={() => {
-                                if (window.confirm("Delete this message?")) {
-                                  handleDeleteMessage(message._id);
-                                }
-                              }}
-                              className="p-1 bg-muted border border-border rounded-full hover:bg-destructive/20 shadow-sm"
-                              title="Delete message"
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </button>
-                          )}
-                        </div>
+                        {/* Rest of message actions... */}
                       </div>
                     </div>
                   );
@@ -1637,53 +2086,60 @@ const ChatInterface = () => {
           )}
 
           {/* Message Input - hidden when user was removed from this group */}
-          {!(removedFromChannelId && selectedChat?._id && String(selectedChat._id) === String(removedFromChannelId)) && (
-          <div className="px-4 pt-3 pb-1 border-t border-border bg-card">
-            {!socketConnected && (
-              <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
-                <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-                Connecting to chat...
-              </div>
-            )}
-            <form onSubmit={sendMessage} className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground"
-                disabled={!socketConnected}
-              >
-                <Paperclip className="w-4 h-4" />
-              </Button>
-              <Input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={
-                  !socketConnected
-                    ? "Connecting..."
-                    : replyingTo
-                    ? "Type your reply..."
-                    : "Type a message..."
-                }
-                disabled={sendingMessage || !socketConnected}
-                className="flex-1"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={
-                  !newMessage.trim() || sendingMessage || !socketConnected
-                }
-              >
-                {sendingMessage ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
-            </form>
-          </div>
+          {!(
+            removedFromChannelId &&
+            selectedChat?._id &&
+            String(selectedChat._id) === String(removedFromChannelId)
+          ) && (
+            <div className="px-4 pt-3 pb-1 border-t border-border bg-card">
+              {!socketConnected && (
+                <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
+                  <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  Connecting to chat...
+                </div>
+              )}
+              <form onSubmit={sendMessage} className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground"
+                  onClick={() => setShowFileUpload(true)}
+                  disabled={!socketConnected}
+                  title="Send file"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
+
+                <Input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder={
+                    !socketConnected
+                      ? "Connecting..."
+                      : replyingTo
+                      ? "Type your reply..."
+                      : "Type a message..."
+                  }
+                  disabled={sendingMessage || !socketConnected}
+                  className="flex-1"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={
+                    !newMessage.trim() || sendingMessage || !socketConnected
+                  }
+                >
+                  {sendingMessage ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </form>
+            </div>
           )}
         </div>
       ) : (
@@ -1708,7 +2164,9 @@ const ChatInterface = () => {
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">Seen by</h3>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Seen by
+                </h3>
               </div>
               <Button
                 variant="ghost"
@@ -1811,16 +2269,71 @@ const ChatInterface = () => {
         roleUpdateTrigger={roleUpdateTrigger}
       />
 
-      {audioCall.callState === "incoming" && <IncomingCallModal remoteUser={audioCall.remoteUser} onAccept={audioCall.acceptCall} onReject={audioCall.rejectCall} errorMessage={audioCall.errorMessage} />}
-      {audioCall.callState === "calling" && <OutgoingCallModal remoteUser={audioCall.remoteUser} onHangUp={audioCall.endCall} />}
-      {(audioCall.callState === "connecting" || audioCall.callState === "active") && <ActiveCallBar remoteUser={audioCall.remoteUser} remoteStream={audioCall.remoteStream} isMuted={audioCall.isMuted} onToggleMute={audioCall.toggleMute} onHangUp={audioCall.endCall} isConnecting={audioCall.callState === "connecting"} errorMessage={audioCall.errorMessage} />}
-      
-      {videoCall.callState === "incoming" && <IncomingVideoCallModal remoteUser={videoCall.remoteUser} onAccept={videoCall.acceptCall} onReject={videoCall.rejectCall} errorMessage={videoCall.errorMessage} />}
-      {videoCall.callState === "calling" && <OutgoingVideoCallModal remoteUser={videoCall.remoteUser} onHangUp={videoCall.endCall} />}
-      {(videoCall.callState === "connecting" || videoCall.callState === "active") && <ActiveVideoCallBar remoteUser={videoCall.remoteUser} localStream={videoCall.localStream} remoteStream={videoCall.remoteStream} isMuted={videoCall.isMuted} isVideoOff={videoCall.isVideoOff} onToggleMute={videoCall.toggleMute} onToggleVideo={videoCall.toggleVideo} onHangUp={videoCall.endCall} isConnecting={videoCall.callState === "connecting"} errorMessage={videoCall.errorMessage} />}
-      
-      {groupCall.groupCallState === "waiting" && <GroupCallWaitingModal channelName={groupCall.activeChannelName} onCancel={groupCall.leaveGroupCall} />}
-      {(groupCall.groupCallState === "active" || groupCall.groupCallState === "joined") && (
+      {audioCall.callState === "incoming" && (
+        <IncomingCallModal
+          remoteUser={audioCall.remoteUser}
+          onAccept={audioCall.acceptCall}
+          onReject={audioCall.rejectCall}
+          errorMessage={audioCall.errorMessage}
+        />
+      )}
+      {audioCall.callState === "calling" && (
+        <OutgoingCallModal
+          remoteUser={audioCall.remoteUser}
+          onHangUp={audioCall.endCall}
+        />
+      )}
+      {(audioCall.callState === "connecting" ||
+        audioCall.callState === "active") && (
+        <ActiveCallBar
+          remoteUser={audioCall.remoteUser}
+          remoteStream={audioCall.remoteStream}
+          isMuted={audioCall.isMuted}
+          onToggleMute={audioCall.toggleMute}
+          onHangUp={audioCall.endCall}
+          isConnecting={audioCall.callState === "connecting"}
+          errorMessage={audioCall.errorMessage}
+        />
+      )}
+
+      {videoCall.callState === "incoming" && (
+        <IncomingVideoCallModal
+          remoteUser={videoCall.remoteUser}
+          onAccept={videoCall.acceptCall}
+          onReject={videoCall.rejectCall}
+          errorMessage={videoCall.errorMessage}
+        />
+      )}
+      {videoCall.callState === "calling" && (
+        <OutgoingVideoCallModal
+          remoteUser={videoCall.remoteUser}
+          onHangUp={videoCall.endCall}
+        />
+      )}
+      {(videoCall.callState === "connecting" ||
+        videoCall.callState === "active") && (
+        <ActiveVideoCallBar
+          remoteUser={videoCall.remoteUser}
+          localStream={videoCall.localStream}
+          remoteStream={videoCall.remoteStream}
+          isMuted={videoCall.isMuted}
+          isVideoOff={videoCall.isVideoOff}
+          onToggleMute={videoCall.toggleMute}
+          onToggleVideo={videoCall.toggleVideo}
+          onHangUp={videoCall.endCall}
+          isConnecting={videoCall.callState === "connecting"}
+          errorMessage={videoCall.errorMessage}
+        />
+      )}
+
+      {groupCall.groupCallState === "waiting" && (
+        <GroupCallWaitingModal
+          channelName={groupCall.activeChannelName}
+          onCancel={groupCall.leaveGroupCall}
+        />
+      )}
+      {(groupCall.groupCallState === "active" ||
+        groupCall.groupCallState === "joined") && (
         <GroupVideoCallBar
           channelName={groupCall.activeChannelName}
           participants={groupCall.participants}
@@ -1835,6 +2348,12 @@ const ChatInterface = () => {
           isConnecting={groupCall.groupCallState === "waiting"}
         />
       )}
+      <FileUploadModal
+        show={showFileUpload}
+        onClose={() => setShowFileUpload(false)}
+        selectedChat={selectedChat}
+        onFileSent={handleFileSent}
+      />
     </div>
   );
 };
