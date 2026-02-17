@@ -21,6 +21,7 @@ import {
   Download,
   FileText,
   Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -87,7 +88,9 @@ const ChatInterface = () => {
   const searchTimeoutRef = useRef(null);
   const selectedChatRef = useRef(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
-
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
   const { socket, user } = useAuthContext();
 
   // Add to existing state declarations
@@ -97,7 +100,24 @@ const ChatInterface = () => {
   const [searchingMessages, setSearchingMessages] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const searchedMessageRefs = useRef({});
-
+  const fetchChatSummary = async () => {
+    if (!selectedChat?._id) return;
+    setSummaryLoading(true);
+    setShowSummaryModal(true);
+    setSummaryData(null);
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/ai/chatsummary/${selectedChat._id}`,
+        axiosConfig
+      );
+      setSummaryData(response.data);
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to generate summary");
+      setShowSummaryModal(false);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
   // Add message search function
   const searchMessagesInChannel = async (query) => {
     if (!selectedChat?._id || !query.trim()) {
@@ -1517,7 +1537,13 @@ const ChatInterface = () => {
               >
                 <Search className="w-4 h-4" />
               </button>
-
+              <button
+                onClick={fetchChatSummary}
+                className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                title="Summarize unseen messages"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
               {selectedChat.channel_type === "direct" &&
                 selectedChat.other_user && (
                   <>
@@ -2363,6 +2389,90 @@ const ChatInterface = () => {
         selectedChat={selectedChat}
         onFileSent={handleFileSent}
       />
+      {/* Chat Summary Modal */}
+      {showSummaryModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl border border-border shadow-xl max-w-md w-full flex flex-col">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Unseen Messages Summary
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowSummaryModal(false)}
+                className="p-1 hover:bg-muted rounded transition"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4">
+              {summaryLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-3">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                  <p className="text-sm text-muted-foreground">
+                    Generating summary...
+                  </p>
+                </div>
+              ) : summaryData?.summary === null ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <CheckCheck className="w-8 h-8 text-emerald-500" />
+                  <p className="text-sm font-medium text-foreground">
+                    You're all caught up!
+                  </p>
+                  <p className="text-xs text-muted-foreground text-center">
+                    No unseen messages in this conversation.
+                  </p>
+                </div>
+              ) : summaryData ? (
+                <div className="space-y-3">
+                  {/* Unseen count badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full">
+                      {summaryData.unseen_count} unseen{" "}
+                      {summaryData.unseen_count === 1 ? "message" : "messages"}
+                    </span>
+                    {summaryData.channel?.name && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        in {summaryData.channel.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Summary text */}
+                  <div className="bg-muted/50 rounded-lg p-3 border border-border">
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {summaryData.summary}
+                    </p>
+                  </div>
+
+                  {/* Footer note */}
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Generated by AI · May not capture every detail
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            {!summaryLoading && summaryData && (
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="w-full py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 };

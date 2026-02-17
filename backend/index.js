@@ -6,9 +6,11 @@ import cors from "cors";
 
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 import employeeRoutes from "./routes/employee.routes.js";
 import helperRoutes from "./routes/helper.routes.js";
 import chatRouter from "./routes/chat.routes.js";
+import fileRoutes from "./routes/file.routes.js";
 import directChatRouter from "./routes/directChat.routes.js";
 import callRoutes from "./routes/call.routes.js";
 import meetingRoutes from "./routes/meeting.routes.js";
@@ -16,8 +18,8 @@ import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
 import Meeting from "./models/Meeting.js";
-import { verifyToken } from "./middlewares/auth.middleware.js";
 
+import { verifyToken } from "./middlewares/auth.middleware.js";
 // Load environment variables
 
 // const app = express();
@@ -80,13 +82,14 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/files", fileRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/helper", helperRoutes);
 app.use("/api/chat", chatRouter);
 app.use("/api/direct_chat", directChatRouter);
 app.use("/api/call", callRoutes);
 app.use("/api/meetings", meetingRoutes);
-
+app.use("/api/ai", aiRoutes);
 // Admin dashboard stats
 app.get("/api/admin/stats", verifyToken, async (req, res) => {
   try {
