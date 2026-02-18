@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Users,
@@ -9,18 +9,22 @@ import {
   Menu,
   X,
   User,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Hexagon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
 import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 export default function AdminDashboard() {
@@ -29,6 +33,23 @@ export default function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const adminData = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("adminData") || localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }, []);
+
+  const adminName = adminData.first_name
+    ? `${adminData.first_name} ${adminData.last_name || ""}`
+    : "Admin";
+  const adminInitials = adminName
+    .split(" ")
+    .map((n) => n?.[0] || "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   useEffect(() => {
     if (searchParams.get("joinCode")) {
@@ -50,9 +71,10 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { id: "employees", icon: Users, label: "Employee Management" },
+    { id: "employees", icon: Users, label: "Employees" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
+    { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
   ];
 
@@ -66,6 +88,8 @@ export default function AdminDashboard() {
         return <ChatInterface />;
       case "meetings":
         return <MeetingModule />;
+      case "analytics":
+        return <AnalyticsDashboard />;
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":
@@ -78,125 +102,192 @@ export default function AdminDashboard() {
   return (
     <GlobalCallProvider>
       <div className="h-screen bg-background flex overflow-hidden">
-        {/* Sidebar - Desktop */}
-      <aside
-        className={cn(
-          "hidden lg:flex flex-col bg-card border-r border-border transition-all duration-200",
-          sidebarCollapsed ? "w-16" : "w-60"
-        )}
-      >
-        <div className="h-14 flex items-center px-4 border-b border-border gap-3">
-          <div className="size-8 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
-            <span className="text-primary-foreground font-semibold text-xs">EP</span>
-          </div>
-          {!sidebarCollapsed && (
-            <span className="text-sm font-semibold truncate">Admin Portal</span>
+        {/* ─── Sidebar - Desktop ─── */}
+        <aside
+          className={cn(
+            "hidden lg:flex flex-col border-r border-border/60 transition-all duration-300 ease-in-out relative",
+            "bg-gradient-to-b from-zinc-950 via-zinc-950/95 to-zinc-900/90",
+            sidebarCollapsed ? "w-[68px]" : "w-64"
           )}
-        </div>
-
-        <nav className="flex-1 p-2 space-y-0.5">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-            return (
-              <Button
-                key={item.id}
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3",
-                  sidebarCollapsed && "justify-center px-0"
-                )}
-                onClick={() => handleNavigation(item.id)}
-                title={sidebarCollapsed ? item.label : undefined}
-              >
-                <Icon className="size-4 flex-shrink-0" />
-                {!sidebarCollapsed && <span>{item.label}</span>}
-              </Button>
-            );
-          })}
-        </nav>
-
-        <Separator />
-        <div className="p-2 space-y-0.5">
-          <Button
-            variant="ghost"
-            className={cn("w-full justify-start gap-3", sidebarCollapsed && "justify-center px-0")}
-            onClick={() => handleNavigation("profile")}
-            title="View Profile"
-          >
-            <Avatar className="size-8">
-              <AvatarFallback className="bg-muted text-muted-foreground text-xs">AD</AvatarFallback>
-            </Avatar>
+        >
+          {/* Brand Header */}
+          <div className="h-16 flex items-center px-4 gap-3 border-b border-white/[0.06]">
+            <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20">
+              <Hexagon className="size-4 text-white" />
+            </div>
             {!sidebarCollapsed && (
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-medium truncate">Admin</p>
-                <p className="text-xs text-muted-foreground truncate">View profile</p>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold tracking-tight truncate">
+                  Enterprise
+                </span>
+                <span className="text-[10px] text-zinc-500 font-medium -mt-0.5">
+                  Admin Portal
+                </span>
               </div>
             )}
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-              sidebarCollapsed && "justify-center px-0"
-            )}
-            onClick={handleLogout}
-            title="Logout"
-          >
-            <LogOut className="size-4 flex-shrink-0" />
-            {!sidebarCollapsed && <span>Logout</span>}
-          </Button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar - Mobile */}
-        <header className="lg:hidden h-14 bg-card border-b border-border flex items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="size-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-semibold text-xs">EP</span>
-            </div>
-            <span className="text-sm font-semibold">Admin</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
-              <LogOut className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-4 space-y-1">
+            <p
+              className={cn(
+                "text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2",
+                sidebarCollapsed ? "text-center" : "px-3"
+              )}
             >
-              {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            </Button>
-          </div>
-        </header>
-
-        {mobileMenuOpen && (
-          <div className="lg:hidden bg-card border-b border-border p-2 space-y-0.5">
+              {sidebarCollapsed ? "•" : "Menu"}
+            </p>
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
               return (
-                <Button
+                <button
                   key={item.id}
-                  variant={isActive ? "secondary" : "ghost"}
-                  className="w-full justify-start gap-3"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                    sidebarCollapsed && "justify-center px-0",
+                    isActive
+                      ? "bg-gradient-to-r from-indigo-500/15 to-violet-500/10 text-indigo-400 shadow-sm shadow-indigo-500/5"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                  )}
                   onClick={() => handleNavigation(item.id)}
+                  title={sidebarCollapsed ? item.label : undefined}
                 >
-                  <Icon className="size-4" />
-                  <span>{item.label}</span>
-                </Button>
+                  <div
+                    className={cn(
+                      "flex items-center justify-center flex-shrink-0",
+                      isActive && "drop-shadow-[0_0_6px_rgba(99,102,241,0.4)]"
+                    )}
+                  >
+                    <Icon className="size-[18px]" />
+                  </div>
+                  {!sidebarCollapsed && <span>{item.label}</span>}
+                  {isActive && !sidebarCollapsed && (
+                    <div className="ml-auto size-1.5 rounded-full bg-indigo-400" />
+                  )}
+                </button>
               );
             })}
-          </div>
-        )}
+          </nav>
 
-        <main className="flex-1 flex flex-col min-h-0 overflow-auto">{renderPageContent()}</main>
+          {/* Collapse Toggle */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-20 size-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors z-10"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="size-3 text-zinc-400" />
+            ) : (
+              <ChevronLeft className="size-3 text-zinc-400" />
+            )}
+          </button>
+
+          {/* User Footer */}
+          <div className="border-t border-white/[0.06] p-3 space-y-1">
+            <button
+              className={cn(
+                "w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/[0.04] transition-colors",
+                sidebarCollapsed && "justify-center px-0"
+              )}
+              onClick={() => handleNavigation("profile")}
+              title="View Profile"
+            >
+              <Avatar className="size-8 ring-2 ring-zinc-800">
+                <AvatarImage src={adminData.profile_picture} />
+                <AvatarFallback className="bg-gradient-to-br from-indigo-500/20 to-violet-500/20 text-indigo-300 text-[10px] font-semibold">
+                  {adminInitials}
+                </AvatarFallback>
+              </Avatar>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium text-zinc-200 truncate">
+                    {adminName}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 truncate">
+                    {adminData.email || "Administrator"}
+                  </p>
+                </div>
+              )}
+            </button>
+            <button
+              className={cn(
+                "w-full flex items-center gap-3 px-2 py-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/[0.06] transition-colors text-sm",
+                sidebarCollapsed && "justify-center px-0"
+              )}
+              onClick={handleLogout}
+              title="Logout"
+            >
+              <LogOut className="size-4 flex-shrink-0" />
+              {!sidebarCollapsed && <span>Logout</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* ─── Main content ─── */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar - Mobile */}
+          <header className="lg:hidden h-14 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4">
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                <Hexagon className="size-3.5 text-white" />
+              </div>
+              <span className="text-sm font-semibold">Enterprise</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="text-zinc-500 hover:text-red-400 size-9"
+              >
+                <LogOut className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="size-5" />
+                ) : (
+                  <Menu className="size-5" />
+                )}
+              </Button>
+            </div>
+          </header>
+
+          {mobileMenuOpen && (
+            <div className="lg:hidden bg-zinc-950 border-b border-white/[0.06] p-2 space-y-0.5">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentPage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                      isActive
+                        ? "bg-indigo-500/15 text-indigo-400"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                    )}
+                    onClick={() => handleNavigation(item.id)}
+                  >
+                    <Icon className="size-4" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <main className="flex-1 flex flex-col min-h-0 overflow-auto bg-zinc-950/50">
+            {renderPageContent()}
+          </main>
+        </div>
       </div>
-    </div>
     </GlobalCallProvider>
   );
 }

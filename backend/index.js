@@ -14,6 +14,7 @@ import fileRoutes from "./routes/file.routes.js";
 import directChatRouter from "./routes/directChat.routes.js";
 import callRoutes from "./routes/call.routes.js";
 import meetingRoutes from "./routes/meeting.routes.js";
+import analyticsRoutes from "./routes/analytics.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
@@ -90,6 +91,7 @@ app.use("/api/direct_chat", directChatRouter);
 app.use("/api/call", callRoutes);
 app.use("/api/meetings", meetingRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/analytics", analyticsRoutes);
 // Admin dashboard stats
 app.get("/api/admin/stats", verifyToken, async (req, res) => {
   try {
