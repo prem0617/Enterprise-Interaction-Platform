@@ -54,8 +54,12 @@ const StartChatModal = ({
               {searchResults.map((user) => (
                 <div key={user._id} className="flex items-center justify-between p-3 hover:bg-zinc-800/50 rounded-lg transition">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center">
-                      <span className="text-indigo-400 font-medium text-xs">{user.first_name?.[0]}{user.last_name?.[0]}</span>
+                    <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center overflow-hidden">
+                      {user.profile_picture ? (
+                        <img src={user.profile_picture} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-indigo-400 font-medium text-xs">{user.first_name?.[0]}{user.last_name?.[0]}</span>
+                      )}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-white">{user.full_name}</p>

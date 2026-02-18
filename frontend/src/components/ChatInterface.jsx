@@ -715,6 +715,7 @@ const ChatInterface = () => {
             last_name: user.last_name,
             full_name: user.full_name,
             email: user.email,
+            profile_picture: user.profile_picture || null,
           },
           unread_count: 0,
         };
@@ -1279,6 +1280,7 @@ const ChatInterface = () => {
           chat.other_user?.last_name?.[0] || ""
         }`,
         isGroup: false,
+        profile_picture: chat.other_user?.profile_picture || null,
       };
     return {
       name: chat.name || "Group Chat",
@@ -1287,6 +1289,7 @@ const ChatInterface = () => {
       }`,
       initials: chat.name?.[0] || "G",
       isGroup: true,
+      profile_picture: null,
     };
   };
 
@@ -1394,12 +1397,18 @@ const ChatInterface = () => {
                 >
                   <div className="relative">
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0 ${
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0 overflow-hidden ${
                         displayInfo.isGroup ? "bg-muted" : "bg-primary"
                       }`}
                     >
                       {displayInfo.isGroup ? (
                         <Users className="w-4 h-4" />
+                      ) : displayInfo.profile_picture ? (
+                        <img
+                          src={displayInfo.profile_picture}
+                          alt={displayInfo.name}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         displayInfo.initials
                       )}
@@ -1484,7 +1493,7 @@ const ChatInterface = () => {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs overflow-hidden ${
                     selectedChat.channel_type === "group"
                       ? "bg-muted"
                       : "bg-primary"
@@ -1492,6 +1501,12 @@ const ChatInterface = () => {
                 >
                   {selectedChat.channel_type === "group" ? (
                     <Users className="w-4 h-4" />
+                  ) : selectedChat.other_user?.profile_picture ? (
+                    <img
+                      src={selectedChat.other_user.profile_picture}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <>
                       {selectedChat.other_user?.first_name?.[0]}

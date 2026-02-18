@@ -28,7 +28,7 @@ export const searchUsers = async (req, res) => {
         { email: { $regex: query, $options: "i" } },
       ],
     })
-      .select("first_name last_name email user_type country")
+      .select("first_name last_name email user_type country profile_picture")
       .limit(parseInt(limit));
 
     // Get employee details if user is employee
@@ -57,6 +57,7 @@ export const searchUsers = async (req, res) => {
           email: user.email,
           user_type: user.user_type,
           country: user.country,
+          profile_picture: user.profile_picture,
           employee_info: employeeInfo,
           has_existing_chat: !!existingChat,
           existing_chat_id: existingChat?._id || null,
@@ -82,7 +83,7 @@ export const getUserById = async (req, res) => {
     const currentUserId = req.userId;
 
     const user = await User.findById(userId).select(
-      "first_name last_name email user_type country status"
+      "first_name last_name email user_type country status profile_picture"
     );
 
     if (!user) {
@@ -120,6 +121,7 @@ export const getUserById = async (req, res) => {
         email: user.email,
         user_type: user.user_type,
         country: user.country,
+        profile_picture: user.profile_picture,
         employee_info: employeeInfo,
       },
       has_existing_chat: !!existingChat,
@@ -168,9 +170,9 @@ export const startDirectChat = async (req, res) => {
 
       const members = await ChannelMember.find({
         channel_id: existingChat._id,
-      }).populate("user_id", "first_name last_name email user_type");
+      }).populate("user_id", "first_name last_name email user_type profile_picture");
 
-      return res.json({
+    return res.json({
         message: "Direct chat already exists",
         is_new: false,
         channel: populatedChat,
@@ -229,6 +231,7 @@ export const startDirectChat = async (req, res) => {
           full_name: `${currentUser.first_name} ${currentUser.last_name}`,
           email: currentUser.email,
           user_type: currentUser.user_type,
+          profile_picture: currentUser.profile_picture,
         },
         unread_count: 0,
       });
@@ -265,7 +268,7 @@ export const getDirectChats = async (req, res) => {
       directChannels.map(async (channel) => {
         const members = await ChannelMember.find({
           channel_id: channel._id,
-        }).populate("user_id", "first_name last_name email user_type status");
+        }).populate("user_id", "first_name last_name email user_type status profile_picture");
 
         const otherMember = members.find(
           (m) => m.user_id._id.toString() !== currentUserId
@@ -300,6 +303,7 @@ export const getDirectChats = async (req, res) => {
                 email: otherMember.user_id.email,
                 user_type: otherMember.user_id.user_type,
                 status: otherMember.user_id.status,
+                profile_picture: otherMember.user_id.profile_picture,
               }
             : null,
           last_message: lastMessage,
@@ -381,7 +385,7 @@ export const getRecentContacts = async (req, res) => {
       channel_id: { $in: directChannelIds },
       user_id: { $ne: currentUserId },
     })
-      .populate("user_id", "first_name last_name email user_type")
+      .populate("user_id", "first_name last_name email user_type profile_picture")
       .limit(parseInt(limit));
 
     // Remove duplicates and format
@@ -399,6 +403,7 @@ export const getRecentContacts = async (req, res) => {
           full_name: `${member.user_id.first_name} ${member.user_id.last_name}`,
           email: member.user_id.email,
           user_type: member.user_id.user_type,
+          profile_picture: member.user_id.profile_picture,
         });
       }
     }
