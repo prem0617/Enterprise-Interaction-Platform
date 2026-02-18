@@ -13,11 +13,13 @@ import {
   ChevronDown,
   CalendarCheck,
   Hexagon,
+  Ticket,
 } from "lucide-react";
 import EmployeeHome from "@/components/EmployeeHome";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import AttendanceModule from "./AttendanceModule";
+import EmployeeTicketView from "@/components/EmployeeTicketView";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -56,6 +58,7 @@ export default function EmployeeDashboard() {
     { id: "files", icon: FileText, label: "Files" },
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
     { id: "meetings", icon: Video, label: "Meetings" },
+    { id: "tickets", icon: Ticket, label: "Tickets" },
   ];
 
   return (
@@ -205,6 +208,11 @@ export default function EmployeeDashboard() {
 
         {activeTab === "attendance" && <AttendanceModule />}
         {activeTab === "meetings" && <MeetingModule />}
+        {activeTab === "tickets" && (
+          <div className="flex-1 p-4 overflow-hidden">
+            <EmployeeTicketView />
+          </div>
+        )}
       </main>
       </div>
     </GlobalCallProvider>

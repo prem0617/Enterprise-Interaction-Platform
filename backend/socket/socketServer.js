@@ -578,6 +578,38 @@ io.on("connection", async (socket) => {
     });
   });
 
+  // ---------- Ticket chat ----------
+  socket.on("ticket-join", (data) => {
+    const { ticketId } = data || {};
+    if (!ticketId || !socket.userId) return;
+    const room = `ticket:${ticketId}`;
+    socket.join(room);
+    console.log(`[TICKET] user ${socket.userId} joined ${room}`);
+  });
+
+  socket.on("ticket-leave", (data) => {
+    const { ticketId } = data || {};
+    if (!ticketId || !socket.userId) return;
+    const room = `ticket:${ticketId}`;
+    socket.leave(room);
+    console.log(`[TICKET] user ${socket.userId} left ${room}`);
+  });
+
+  socket.on("ticket-message", (data) => {
+    const { ticketId, message } = data || {};
+    if (!ticketId || !socket.userId || !message) return;
+    const room = `ticket:${ticketId}`;
+    // Broadcast to all in the ticket room (including sender for confirmation)
+    io.to(room).emit("ticket-new-message", { ticketId, message });
+  });
+
+  socket.on("ticket-typing", (data) => {
+    const { ticketId, userName } = data || {};
+    if (!ticketId || !socket.userId) return;
+    const room = `ticket:${ticketId}`;
+    socket.to(room).emit("ticket-typing", { ticketId, userId: socket.userId, userName });
+  });
+
   socket.on("disconnect", () => {
     console.log(
       `Socket disconnected: ${socket.id} (userId=${normalizedUserId})`

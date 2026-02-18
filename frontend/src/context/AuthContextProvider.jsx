@@ -18,6 +18,7 @@ export default function AuthContextProvider({ children }) {
   useEffect(() => {
     const employeeData = localStorage.getItem("user");
     const adminData = localStorage.getItem("adminData");
+    const customerData = localStorage.getItem("customerData");
 
     // If both exist somehow (stale data), keep only the one whose
     // user_type matches. If we can't tell, clear the stale one.
@@ -37,6 +38,12 @@ export default function AuthContextProvider({ children }) {
       } catch {
         localStorage.removeItem("user");
         localStorage.removeItem("adminData");
+      }
+    } else if (customerData) {
+      try {
+        setUser(JSON.parse(customerData));
+      } catch {
+        localStorage.removeItem("customerData");
       }
     } else if (adminData) {
       try {

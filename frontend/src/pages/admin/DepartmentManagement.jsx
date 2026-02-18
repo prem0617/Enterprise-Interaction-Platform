@@ -55,85 +55,138 @@ const initialForm = {
 };
 
 // ─── Org Tree Node ───
-function OrgTreeNode({ node, depth = 0 }) {
+function OrgTreeNode({ node, depth = 0, isLast = false }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
   const headUser = node.head_id?.user_id;
+  const color = node.color || "#6366f1";
+  const memberCount = node.members?.length || 0;
 
   return (
-    <div className={depth > 0 ? "ml-6 border-l border-zinc-800 pl-4" : ""}>
+    <div className="relative">
+      {/* ─── Connector lines (for child nodes) ─── */}
+      {depth > 0 && (
+        <>
+          {/* Vertical line from parent down */}
+          <div
+            className="absolute left-0 top-0 w-px bg-zinc-700/50"
+            style={{
+              left: -20,
+              height: isLast ? 28 : "100%",
+            }}
+          />
+          {/* Horizontal branch to node */}
+          <div
+            className="absolute bg-zinc-700/50"
+            style={{
+              left: -20,
+              top: 28,
+              width: 20,
+              height: 1,
+            }}
+          />
+        </>
+      )}
+
+      {/* ─── Node card ─── */}
       <div
-        className="group flex items-start gap-3 py-3 px-3 rounded-xl hover:bg-white/[0.02] transition-colors cursor-pointer"
+        className="group relative flex items-start gap-3 py-2.5 px-3.5 rounded-xl border border-transparent hover:border-zinc-800 hover:bg-zinc-800/30 transition-all cursor-pointer mb-1"
         onClick={() => hasChildren && setExpanded(!expanded)}
       >
-        {/* Expand/collapse or dot */}
-        <div className="mt-1 flex-shrink-0 w-5 flex items-center justify-center">
-          {hasChildren ? (
-            expanded ? (
-              <ChevronDown className="size-4 text-zinc-500" />
+        {/* Color accent + expand toggle */}
+        <div className="flex flex-col items-center gap-1 pt-0.5 flex-shrink-0">
+          <div
+            className="size-8 rounded-lg flex items-center justify-center shadow-sm"
+            style={{ backgroundColor: `${color}18`, border: `1px solid ${color}30` }}
+          >
+            {hasChildren ? (
+              expanded ? (
+                <ChevronDown className="size-3.5" style={{ color }} />
+              ) : (
+                <ChevronRight className="size-3.5" style={{ color }} />
+              )
             ) : (
-              <ChevronRight className="size-4 text-zinc-500" />
-            )
-          ) : (
+              <Building2 className="size-3.5" style={{ color }} />
+            )}
+          </div>
+          {/* Vertical stem down to children */}
+          {hasChildren && expanded && (
             <div
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: node.color || "#6366f1" }}
+              className="w-px flex-1 min-h-[8px] bg-zinc-700/50"
             />
           )}
         </div>
 
         {/* Dept info */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pt-0.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <div
-              className="size-3 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: node.color || "#6366f1" }}
-            />
-            <span className="text-sm font-semibold text-zinc-200">
+            <span className="text-sm font-semibold text-zinc-200 leading-tight">
               {node.name}
             </span>
-            <span className="text-[10px] font-mono text-zinc-600 bg-zinc-800/80 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: `${color}12`, color: `${color}cc` }}>
               {node.code}
             </span>
-            {node.members && node.members.length > 0 && (
-              <span className="text-[10px] text-zinc-500">
-                {node.members.length} member{node.members.length !== 1 ? "s" : ""}
-              </span>
+            {!node.is_active && (
+              <Badge variant="secondary" className="text-[9px] bg-zinc-800 text-zinc-500 border-zinc-700 py-0">
+                Inactive
+              </Badge>
             )}
           </div>
 
-          {/* Head */}
-          {headUser && (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <Crown className="size-3 text-amber-500/70" />
-              <span className="text-xs text-zinc-400">
-                {headUser.first_name} {headUser.last_name}
-              </span>
-              <span className="text-[10px] text-zinc-600">— Head</span>
-            </div>
-          )}
-
-          {/* Members preview */}
-          {node.members && node.members.length > 0 && (
-            <div className="flex items-center gap-1 mt-2">
-              <div className="flex -space-x-1.5">
-                {node.members.slice(0, 5).map((m) => {
-                  const initials =
-                    (m.user_id?.first_name?.[0] || "") +
-                    (m.user_id?.last_name?.[0] || "");
-                  return (
-                    <Avatar key={m._id} className="size-5 ring-1 ring-zinc-900">
-                      <AvatarImage src={m.user_id?.profile_picture} />
-                      <AvatarFallback className="text-[8px] bg-zinc-700 text-zinc-300">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                  );
-                })}
+          {/* Head + member count row */}
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            {headUser ? (
+              <div className="flex items-center gap-1.5">
+                <Avatar className="size-5 ring-1 ring-zinc-800">
+                  <AvatarImage src={headUser.profile_picture} />
+                  <AvatarFallback className="text-[8px] bg-zinc-700 text-zinc-300">
+                    {headUser.first_name?.[0]}{headUser.last_name?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs text-zinc-400">
+                  {headUser.first_name} {headUser.last_name}
+                </span>
+                <Crown className="size-3 text-amber-500/60" />
               </div>
-              {node.members.length > 5 && (
-                <span className="text-[10px] text-zinc-500 ml-1">
-                  +{node.members.length - 5} more
+            ) : (
+              <span className="text-[10px] text-zinc-600 italic">No head</span>
+            )}
+
+            {memberCount > 0 && (
+              <div className="flex items-center gap-1">
+                <Users className="size-3 text-zinc-600" />
+                <span className="text-[10px] text-zinc-500 font-medium">
+                  {memberCount}
+                </span>
+              </div>
+            )}
+
+            {hasChildren && (
+              <div className="flex items-center gap-1">
+                <GitBranchPlus className="size-3 text-zinc-600" />
+                <span className="text-[10px] text-zinc-500 font-medium">
+                  {node.children.length} sub
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Members avatars */}
+          {memberCount > 0 && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="flex -space-x-1.5">
+                {node.members.slice(0, 6).map((m) => (
+                  <Avatar key={m._id} className="size-5 ring-1 ring-zinc-900">
+                    <AvatarImage src={m.user_id?.profile_picture} />
+                    <AvatarFallback className="text-[7px] bg-zinc-700/80 text-zinc-400">
+                      {m.user_id?.first_name?.[0]}{m.user_id?.last_name?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+              {memberCount > 6 && (
+                <span className="text-[10px] text-zinc-600">
+                  +{memberCount - 6}
                 </span>
               )}
             </div>
@@ -141,11 +194,16 @@ function OrgTreeNode({ node, depth = 0 }) {
         </div>
       </div>
 
-      {/* Children */}
+      {/* ─── Children ─── */}
       {hasChildren && expanded && (
-        <div className="mt-0.5">
-          {node.children.map((child) => (
-            <OrgTreeNode key={child._id} node={child} depth={depth + 1} />
+        <div className="relative ml-[18px] pl-[22px]">
+          {node.children.map((child, idx) => (
+            <OrgTreeNode
+              key={child._id}
+              node={child}
+              depth={depth + 1}
+              isLast={idx === node.children.length - 1}
+            />
           ))}
         </div>
       )}
@@ -682,9 +740,9 @@ export default function DepartmentManagement() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-0.5">
-                {orgTree.map((node) => (
-                  <OrgTreeNode key={node._id} node={node} />
+              <div className="space-y-1">
+                {orgTree.map((node, idx) => (
+                  <OrgTreeNode key={node._id} node={node} isLast={idx === orgTree.length - 1} />
                 ))}
               </div>
             )}

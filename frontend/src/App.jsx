@@ -8,11 +8,15 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import EmployeeProfilePage from "./pages/employee/ProfilePage";
 import ChangePasswordPage from "./pages/employee/ChangePasswordPage";
+import CustomerLogin from "./pages/customer/CustomerLogin";
+import CustomerRegister from "./pages/customer/CustomerRegister";
+import CustomerDashboard from "./pages/customer/CustomerDashboard";
 
 import AuthContextProvider from "./context/AuthContextProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
+import CustomerProtectedRoute from "./components/CustomerProtectedRoute";
 
 import { Toaster } from "@/components/ui/sonner";
 
@@ -35,6 +39,24 @@ function App() {
           element={
             <PublicRoute>
               <AdminLoginPage />
+            </PublicRoute>
+          }
+        />
+
+        {/* CUSTOMER PUBLIC ROUTES */}
+        <Route
+          path="/customer/login"
+          element={
+            <PublicRoute>
+              <CustomerLogin />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/customer/register"
+          element={
+            <PublicRoute>
+              <CustomerRegister />
             </PublicRoute>
           }
         />
@@ -85,6 +107,16 @@ function App() {
             <AdminProtectedRoute>
               <AdminDashboard />
             </AdminProtectedRoute>
+          }
+        />
+
+        {/* CUSTOMER PROTECTED */}
+        <Route
+          path="/customer/dashboard"
+          element={
+            <CustomerProtectedRoute>
+              <CustomerDashboard />
+            </CustomerProtectedRoute>
           }
         />
       </Routes>

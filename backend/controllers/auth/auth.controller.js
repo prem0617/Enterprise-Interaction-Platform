@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import { Customer } from "../../models/Customer.js";
 import { sendEmail } from "../../utils/emailService.js";
 import { cloudinary } from "../../config/cloudinary.js";
 
@@ -532,6 +533,123 @@ export const removeProfilePicture = async (req, res) => {
     });
   } catch (error) {
     console.error("Remove profile picture error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Customer Registration
+export const customerRegister = async (req, res) => {
+  try {
+    const {
+      email,
+      password,
+      first_name,
+      last_name,
+      phone,
+      country,
+      customer_type,
+    } = req.body;
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    const user = new User({
+      email: email.toLowerCase(),
+      password_hash,
+      user_type: "customer",
+      status: "active",
+      first_name,
+      last_name,
+      phone,
+      country,
+    });
+    await user.save();
+
+    const customer = new Customer({
+      user_id: user._id,
+      customer_type: customer_type || "individual",
+      onboarding_status: "completed",
+    });
+    await customer.save();
+
+    const token = jwt.sign(
+      { id: user._id, user_type: user.user_type },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      message: "Customer account created successfully",
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        user_type: user.user_type,
+        profile_picture: user.profile_picture,
+        customer_id: customer._id,
+      },
+    });
+  } catch (error) {
+    console.error("Customer register error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Customer Login
+export const customerLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      user_type: "customer",
+    });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    if (user.status !== "active") {
+      return res.status(403).json({ error: "Account is not active" });
+    }
+
+    user.last_login = new Date();
+    await user.save();
+
+    const customer = await Customer.findOne({ user_id: user._id });
+
+    const token = jwt.sign(
+      { id: user._id, user_type: user.user_type },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        user_type: user.user_type,
+        profile_picture: user.profile_picture,
+        customer_id: customer?._id,
+      },
+    });
+  } catch (error) {
+    console.error("Customer login error:", error);
     res.status(500).json({ error: error.message });
   }
 };

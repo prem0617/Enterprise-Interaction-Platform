@@ -311,15 +311,60 @@ export const createEmployee = async (req, res) => {
 // Get All Employees
 export const getAllEmployees = async (req, res) => {
   try {
-    const { department, position, employee_type, is_active } = req.query;
+    const { department, position, employee_type, is_active, page, limit, search } = req.query;
 
     // Build filter
     const filter = {};
-    if (department) filter.department = department;
+    if (department && department !== "all") filter.department = department;
     if (position) filter.position = position;
     if (employee_type) filter.employee_type = employee_type;
     if (is_active !== undefined) filter.is_active = is_active === "true";
 
+    // If search is provided, we need to find matching user IDs first
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      const matchingUsers = await User.find({
+        $or: [
+          { first_name: searchRegex },
+          { last_name: searchRegex },
+          { email: searchRegex },
+        ],
+      }).select("_id");
+      const userIds = matchingUsers.map((u) => u._id);
+      filter.user_id = { $in: userIds };
+    }
+
+    // Server-side pagination (optional — if page param is provided)
+    if (page) {
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 10));
+      const skip = (pageNum - 1) * pageSize;
+
+      const [employees, total] = await Promise.all([
+        Employee.find(filter)
+          .populate({ path: "user_id", select: "-password_hash" })
+          .populate({
+            path: "team_lead_id",
+            populate: { path: "user_id", select: "first_name last_name email" },
+          })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(pageSize),
+        Employee.countDocuments(filter),
+      ]);
+
+      return res.json({
+        employees,
+        pagination: {
+          page: pageNum,
+          limit: pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      });
+    }
+
+    // No pagination — return all (backward compatible)
     const employees = await Employee.find(filter)
       .populate({
         path: "user_id",

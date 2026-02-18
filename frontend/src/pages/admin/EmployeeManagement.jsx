@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,10 @@ import {
   X,
   AlertCircle,
   Info,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +123,7 @@ export default function EmployeeManagement() {
   const [teamLeads, setTeamLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [viewMode, setViewMode] = useState("list"); // "list" | "create"
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -129,6 +134,12 @@ export default function EmployeeManagement() {
   const [passwordResetMode, setPasswordResetMode] = useState("temp"); // "temp" | "direct"
   const [directPassword, setDirectPassword] = useState("");
   const [passwordResetLoading, setPasswordResetLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [fetching, setFetching] = useState(false);
+  const searchTimerRef = useRef(null);
 
   const positionsRequiringTeamLead = ["senior", "mid", "junior"];
   const shouldShowPosition = formData.employee_type === "internal_team";
@@ -141,35 +152,63 @@ export default function EmployeeManagement() {
     formData.position &&
     positionsRequiringTeamLead.includes(formData.position);
 
-  const departments = [
-    ...new Set(employees.map((emp) => emp.department).filter(Boolean)),
-  ];
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  };
 
-  const filteredEmployees = employees.filter((employee) => {
-    const fullName =
-      `${employee.user_id?.first_name} ${employee.user_id?.last_name}`.toLowerCase();
-    const email = employee.user_id?.email?.toLowerCase() || "";
-    const matchesSearch =
-      fullName?.includes(searchTerm?.toLowerCase()) ||
-      email?.includes(searchTerm?.toLowerCase());
-    const matchesDepartment =
-      filterDepartment === "all" || employee?.department === filterDepartment;
-    return matchesSearch && matchesDepartment;
-  });
+  // Debounce search input
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [searchTerm]);
 
-  const fetchEmployees = async () => {
+  // Reset page on department filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterDepartment]);
+
+  // Fetch employees with server-side pagination
+  const fetchEmployees = useCallback(async () => {
+    setFetching(true);
     try {
-      const { data } = await axios.get(`${BACKEND_URL}/employees/`, {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      if (filterDepartment && filterDepartment !== "all") params.append("department", filterDepartment);
+
+      const { data } = await axios.get(`${BACKEND_URL}/employees/?${params.toString()}`, {
         headers: getAuthHeaders(),
       });
       setEmployees(data.employees || []);
+      if (data.pagination) {
+        setTotalEmployees(data.pagination.total);
+        setTotalPages(data.pagination.totalPages);
+      } else {
+        setTotalEmployees(data.employees?.length || 0);
+        setTotalPages(1);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to load employees");
     } finally {
       setLoading(false);
+      setFetching(false);
     }
-  };
+  }, [currentPage, itemsPerPage, debouncedSearch, filterDepartment]);
 
   const fetchTeamLeads = async () => {
     try {
@@ -184,6 +223,9 @@ export default function EmployeeManagement() {
 
   useEffect(() => {
     fetchEmployees();
+  }, [fetchEmployees]);
+
+  useEffect(() => {
     fetchTeamLeads();
   }, []);
 
@@ -412,7 +454,7 @@ export default function EmployeeManagement() {
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="secondary">
-            {filteredEmployees.length} employees
+            {totalEmployees} employee{totalEmployees !== 1 ? "s" : ""}
           </Badge>
           <Button
             onClick={() => {
@@ -656,9 +698,9 @@ export default function EmployeeManagement() {
                   className={selectClasses}
                 >
                   <option value="all">All Departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
+                  {DEPARTMENTS.map((dept) => (
+                    <option key={dept.value} value={dept.value}>
+                      {dept.label}
                     </option>
                   ))}
                 </select>
@@ -667,7 +709,7 @@ export default function EmployeeManagement() {
           </Card>
 
           {/* Table */}
-          {filteredEmployees.length === 0 ? (
+          {employees.length === 0 && !fetching ? (
             <Card className="p-12 text-center">
               <Users className="mx-auto size-10 text-muted-foreground mb-3" />
               <h3 className="text-sm font-medium mb-1">No employees found</h3>
@@ -707,7 +749,7 @@ export default function EmployeeManagement() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800">
-                      {filteredEmployees.map((employee) => {
+                      {employees.map((employee) => {
                         const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                         const teamLeadName = employee.team_lead_id
                           ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
@@ -800,7 +842,7 @@ export default function EmployeeManagement() {
 
                 {/* Mobile Cards */}
                 <div className="lg:hidden divide-y divide-border">
-                  {filteredEmployees.map((employee) => {
+                  {employees.map((employee) => {
                     const fullName = `${employee.user_id?.first_name} ${employee.user_id?.last_name}`;
                     const teamLeadName = employee.team_lead_id
                       ? `${employee.team_lead_id.user_id?.first_name} ${employee.team_lead_id.user_id?.last_name}`
@@ -878,6 +920,108 @@ export default function EmployeeManagement() {
                   })}
                 </div>
               </div>
+
+              {/* ─── Pagination ─── */}
+              {totalEmployees > 0 && (
+                <div className="px-5 py-3.5 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span>
+                      {fetching ? (
+                        <span className="text-zinc-500">Loading...</span>
+                      ) : (
+                        <>
+                          Showing{" "}
+                          <span className="font-medium text-zinc-300">
+                            {(currentPage - 1) * itemsPerPage + 1}
+                          </span>
+                          –
+                          <span className="font-medium text-zinc-300">
+                            {Math.min(currentPage * itemsPerPage, totalEmployees)}
+                          </span>
+                          {" "}of{" "}
+                          <span className="font-medium text-zinc-300">
+                            {totalEmployees}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                    <div className="hidden sm:flex items-center gap-1.5">
+                      <span className="text-zinc-600">|</span>
+                      <span>Rows</span>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="h-7 rounded-md border border-zinc-700 bg-zinc-800/60 px-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                      >
+                        {[5, 10, 20, 50].map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="size-8 rounded-lg flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="First page"
+                    >
+                      <ChevronsLeft className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="size-8 rounded-lg flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="Previous page"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+
+                    {getPageNumbers()[0] > 1 && (
+                      <span className="size-8 flex items-center justify-center text-zinc-600 text-xs">...</span>
+                    )}
+
+                    {getPageNumbers().map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`size-8 rounded-lg flex items-center justify-center text-xs font-medium transition-all ${
+                          page === currentPage
+                            ? "bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30"
+                            : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+                      <span className="size-8 flex items-center justify-center text-zinc-600 text-xs">...</span>
+                    )}
+
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="size-8 rounded-lg flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="Next page"
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="size-8 rounded-lg flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="Last page"
+                    >
+                      <ChevronsRight className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
         </>

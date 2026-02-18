@@ -15,6 +15,7 @@ import {
   Hexagon,
   CalendarCheck,
   Building2,
+  Ticket,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
@@ -24,6 +25,7 @@ import AnalyticsDashboard from "./AnalyticsDashboard";
 import AttendanceDashboard from "./AttendanceDashboard";
 import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
+import TicketManagement from "./TicketManagement";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
@@ -80,6 +82,7 @@ export default function AdminDashboard() {
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
+    { id: "tickets", icon: Ticket, label: "Tickets" },
     { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
   ];
@@ -98,6 +101,8 @@ export default function AdminDashboard() {
         return <MeetingModule />;
       case "attendance":
         return <AttendanceDashboard />;
+      case "tickets":
+        return <TicketManagement />;
       case "analytics":
         return <AnalyticsDashboard />;
       case "profile":

@@ -3,6 +3,8 @@ import {
   adminSignup,
   adminLogin,
   employeeLogin,
+  customerRegister,
+  customerLogin,
   changePassword,
   requestPasswordReset,
   resetPassword,
@@ -22,6 +24,10 @@ router.post("/admin/login", adminLogin);
 
 // Employee routes
 router.post("/employee/login", employeeLogin);
+
+// Customer routes
+router.post("/customer/register", customerRegister);
+router.post("/customer/login", customerLogin);
 
 // Protected routes
 router.get("/profile", verifyToken, getProfile);
