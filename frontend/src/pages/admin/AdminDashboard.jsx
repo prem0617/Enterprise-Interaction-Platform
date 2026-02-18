@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Hexagon,
   CalendarCheck,
+  Building2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
@@ -21,6 +22,7 @@ import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import AttendanceDashboard from "./AttendanceDashboard";
+import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
@@ -74,6 +76,7 @@ export default function AdminDashboard() {
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { id: "employees", icon: Users, label: "Employees" },
+    { id: "departments", icon: Building2, label: "Departments" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
@@ -87,6 +90,8 @@ export default function AdminDashboard() {
         return <Dashboard />;
       case "employees":
         return <EmployeeManagement />;
+      case "departments":
+        return <DepartmentManagement />;
       case "messages":
         return <ChatInterface />;
       case "meetings":

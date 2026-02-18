@@ -17,6 +17,7 @@ import meetingRoutes from "./routes/meeting.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import leaveRoutes from "./routes/leave.routes.js";
+import departmentRoutes from "./routes/department.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
@@ -96,6 +97,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leave", leaveRoutes);
+app.use("/api/departments", departmentRoutes);
 // Admin dashboard stats
 app.get("/api/admin/stats", verifyToken, async (req, res) => {
   try {
