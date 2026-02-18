@@ -4,6 +4,7 @@ import crypto from "crypto";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
 import { sendEmail } from "../../utils/emailService.js";
+import { cloudinary } from "../../config/cloudinary.js";
 
 // Admin Signup
 export const adminSignup = async (req, res) => {
@@ -73,6 +74,7 @@ export const adminSignup = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         user_type: user.user_type,
+        profile_picture: user.profile_picture,
       },
     });
   } catch (error) {
@@ -128,6 +130,7 @@ export const adminLogin = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         user_type: user.user_type,
+        profile_picture: user.profile_picture,
       },
     });
   } catch (error) {
@@ -185,6 +188,7 @@ export const employeeLogin = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         user_type: user.user_type,
+        profile_picture: user.profile_picture,
         employee: {
           id: employee._id,
           department: employee.department,
@@ -395,6 +399,7 @@ export const getProfile = async (req, res) => {
         user_type: user.user_type,
         status: user.status,
         last_login: user.last_login,
+        profile_picture: user.profile_picture,
         created_at: user.created_at,
         updated_at: user.updated_at,
       },
@@ -445,10 +450,88 @@ export const updateProfile = async (req, res) => {
         timezone: user.timezone,
         user_type: user.user_type,
         status: user.status,
+        profile_picture: user.profile_picture,
       },
     });
   } catch (error) {
     console.error("Update profile error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Upload / Update Profile Picture
+export const uploadProfilePicture = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // If user already has a profile picture, delete the old one from Cloudinary
+    if (user.profile_picture) {
+      try {
+        // Extract public_id from the URL
+        const urlParts = user.profile_picture.split("/");
+        const folderAndFile = urlParts.slice(-2).join("/"); // e.g. "profile-pictures/12345-name"
+        const publicId = folderAndFile.split(".")[0]; // remove extension if present
+        await cloudinary.uploader.destroy(publicId);
+      } catch (err) {
+        console.error("Error deleting old profile picture:", err);
+        // Continue even if deletion fails
+      }
+    }
+
+    // The file is already uploaded to Cloudinary via multer-storage-cloudinary
+    user.profile_picture = req.file.path;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile picture updated successfully",
+      profile_picture: user.profile_picture,
+    });
+  } catch (error) {
+    console.error("Upload profile picture error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Remove Profile Picture
+export const removeProfilePicture = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.profile_picture) {
+      try {
+        const urlParts = user.profile_picture.split("/");
+        const folderAndFile = urlParts.slice(-2).join("/");
+        const publicId = folderAndFile.split(".")[0];
+        await cloudinary.uploader.destroy(publicId);
+      } catch (err) {
+        console.error("Error deleting profile picture:", err);
+      }
+    }
+
+    user.profile_picture = null;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile picture removed successfully",
+    });
+  } catch (error) {
+    console.error("Remove profile picture error:", error);
     res.status(500).json({ error: error.message });
   }
 };

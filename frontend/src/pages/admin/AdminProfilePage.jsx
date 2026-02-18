@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   User,
@@ -14,6 +14,8 @@ import {
   Loader2,
   Building,
   X,
+  Camera,
+  Trash2,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
@@ -23,14 +25,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import ImageCropModal from "@/components/ImageCropModal";
 
 const AdminProfilePage = ({ onNavigate }) => {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
   const [profileData, setProfileData] = useState(null);
   const [employeeData, setEmployeeData] = useState(null);
   const [formData, setFormData] = useState({
@@ -39,6 +43,9 @@ const AdminProfilePage = ({ onNavigate }) => {
     phone: "",
     timezone: "",
   });
+  const fileInputRef = useRef(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [selectedImageSrc, setSelectedImageSrc] = useState(null);
 
   useEffect(() => {
     fetchProfile();
@@ -125,6 +132,98 @@ const AdminProfilePage = ({ onNavigate }) => {
     }`.toUpperCase();
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be less than 10MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImageSrc(reader.result);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCroppedUpload = async (blob) => {
+    setCropModalOpen(false);
+    setSelectedImageSrc(null);
+    setUploadingPicture(true);
+    try {
+      const token = localStorage.getItem("token");
+      const fd = new FormData();
+      fd.append("profile_picture", blob, "profile.jpg");
+
+      const response = await axios.put(
+        `${BACKEND_URL}/auth/profile/picture`,
+        fd,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setProfileData((prev) => ({
+          ...prev,
+          profile_picture: response.data.profile_picture,
+        }));
+        const adminData = JSON.parse(
+          localStorage.getItem("adminData") || "{}"
+        );
+        adminData.profile_picture = response.data.profile_picture;
+        localStorage.setItem("adminData", JSON.stringify(adminData));
+        toast.success("Profile picture updated");
+      }
+    } catch (error) {
+      console.error("Error uploading profile picture:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to upload profile picture"
+      );
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemovePicture = async () => {
+    setUploadingPicture(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.delete(
+        `${BACKEND_URL}/auth/profile/picture`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.data.success) {
+        setProfileData((prev) => ({ ...prev, profile_picture: null }));
+        const adminData = JSON.parse(
+          localStorage.getItem("adminData") || "{}"
+        );
+        delete adminData.profile_picture;
+        localStorage.setItem("adminData", JSON.stringify(adminData));
+        toast.success("Profile picture removed");
+      }
+    } catch (error) {
+      console.error("Error removing profile picture:", error);
+      toast.error("Failed to remove profile picture");
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen p-6 lg:p-8 max-w-3xl mx-auto bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800">
@@ -172,11 +271,46 @@ const AdminProfilePage = ({ onNavigate }) => {
             <CardHeader className="pb-4 border-b border-zinc-800 bg-zinc-900/80 rounded-t-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <Avatar className="size-16">
-                    <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                      {getInitials()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative group">
+                    <Avatar className="size-16">
+                      <AvatarImage
+                        src={profileData?.profile_picture}
+                        alt="Profile"
+                      />
+                      <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
+                        {getInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      {uploadingPicture ? (
+                        <Loader2 className="size-5 text-white animate-spin" />
+                      ) : (
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="p-1 cursor-pointer"
+                          title="Change profile picture"
+                        >
+                          <Camera className="size-5 text-white" />
+                        </button>
+                      )}
+                    </div>
+                    {profileData?.profile_picture && !uploadingPicture && (
+                      <button
+                        onClick={handleRemovePicture}
+                        className="absolute -bottom-1 -right-1 p-1 bg-red-600 hover:bg-red-700 rounded-full transition-colors"
+                        title="Remove profile picture"
+                      >
+                        <Trash2 className="size-3 text-white" />
+                      </button>
+                    )}
+                  </div>
                   <div>
                     <CardTitle className="text-lg">
                       {profileData?.first_name} {profileData?.last_name}
@@ -337,6 +471,16 @@ const AdminProfilePage = ({ onNavigate }) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ImageCropModal
+        open={cropModalOpen}
+        onClose={() => {
+          setCropModalOpen(false);
+          setSelectedImageSrc(null);
+        }}
+        imageSrc={selectedImageSrc}
+        onCropComplete={handleCroppedUpload}
+      />
     </div>
   );
 };

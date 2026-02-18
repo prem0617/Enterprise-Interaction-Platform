@@ -97,3 +97,33 @@ export const uploadMeetingRecording = multer({
 });
 
 export { cloudinary };
+
+// Profile picture storage — images only, stored in "profile-pictures" folder
+const profilePictureStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "profile-pictures",
+    resource_type: "image",
+    allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+    transformation: [
+      { width: 400, height: 400, crop: "fill", gravity: "face" },
+      { quality: "auto", fetch_format: "auto" },
+    ],
+  },
+});
+
+const profilePictureFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image files are allowed for profile pictures"), false);
+  }
+};
+
+export const uploadProfilePic = multer({
+  storage: profilePictureStorage,
+  fileFilter: profilePictureFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+});

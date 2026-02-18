@@ -45,6 +45,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "UTC",
     },
+    profile_picture: {
+      type: String,
+      default: null,
+    },
     company_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",

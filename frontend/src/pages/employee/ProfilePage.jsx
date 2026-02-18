@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   User,
@@ -12,13 +12,19 @@ import {
   ArrowLeft,
   Key,
   Clock,
+  Camera,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
+import { toast } from "sonner";
+import ImageCropModal from "@/components/ImageCropModal";
 
 const EmployeeProfilePage = () => {
   const [editing, setEditing] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -26,6 +32,9 @@ const EmployeeProfilePage = () => {
     timezone: "",
     countryCode: "",
   });
+  const fileInputRef = useRef(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [selectedImageSrc, setSelectedImageSrc] = useState(null);
   console.log(userData);
   const user = JSON.parse(localStorage.getItem("user"));
 
@@ -68,6 +77,100 @@ const EmployeeProfilePage = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be less than 10MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImageSrc(reader.result);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCroppedUpload = async (blob) => {
+    setCropModalOpen(false);
+    setSelectedImageSrc(null);
+    setUploadingPicture(true);
+    try {
+      const token = localStorage.getItem("token");
+      const fd = new FormData();
+      fd.append("profile_picture", blob, "profile.jpg");
+
+      const response = await axios.put(
+        `${BACKEND_URL}/auth/profile/picture`,
+        fd,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setUserData((prev) => ({
+          ...prev,
+          user_id: {
+            ...prev.user_id,
+            profile_picture: response.data.profile_picture,
+          },
+        }));
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        storedUser.profile_picture = response.data.profile_picture;
+        localStorage.setItem("user", JSON.stringify(storedUser));
+        toast.success("Profile picture updated");
+      }
+    } catch (error) {
+      console.error("Error uploading profile picture:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to upload profile picture"
+      );
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemovePicture = async () => {
+    setUploadingPicture(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.delete(
+        `${BACKEND_URL}/auth/profile/picture`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.data.success) {
+        setUserData((prev) => ({
+          ...prev,
+          user_id: { ...prev.user_id, profile_picture: null },
+        }));
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        delete storedUser.profile_picture;
+        localStorage.setItem("user", JSON.stringify(storedUser));
+        toast.success("Profile picture removed");
+      }
+    } catch (error) {
+      console.error("Error removing profile picture:", error);
+      toast.error("Failed to remove profile picture");
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
   const handleSave = async () => {
     setEditing(false);
   };
@@ -101,13 +204,52 @@ const EmployeeProfilePage = () => {
           <div className="px-6 py-5 border-b border-zinc-700/30">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center">
-                  <span className="text-indigo-400 font-semibold text-lg">
-                    {userData?.user_id?.first_name
-                      ?.split(" ")
-                      .map((n) => n[0])
-                      .join("") || "U"}
-                  </span>
+                <div className="relative group">
+                  <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center bg-indigo-500/20">
+                    {userData?.user_id?.profile_picture ? (
+                      <img
+                        src={userData.user_id.profile_picture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-indigo-400 font-semibold text-lg">
+                        {userData?.user_id?.first_name
+                          ?.split(" ")
+                          .map((n) => n[0])
+                          .join("") || "U"}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                    {uploadingPicture ? (
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
+                    ) : (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-1 cursor-pointer"
+                        title="Change profile picture"
+                      >
+                        <Camera className="w-5 h-5 text-white" />
+                      </button>
+                    )}
+                  </div>
+                  {userData?.user_id?.profile_picture && !uploadingPicture && (
+                    <button
+                      onClick={handleRemovePicture}
+                      className="absolute -bottom-1 -right-1 p-1 bg-red-600 hover:bg-red-700 rounded-full transition-colors"
+                      title="Remove profile picture"
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-white">
@@ -233,6 +375,16 @@ const EmployeeProfilePage = () => {
           </div>
         )}
       </div>
+
+      <ImageCropModal
+        open={cropModalOpen}
+        onClose={() => {
+          setCropModalOpen(false);
+          setSelectedImageSrc(null);
+        }}
+        imageSrc={selectedImageSrc}
+        onCropComplete={handleCroppedUpload}
+      />
     </div>
   );
 };
