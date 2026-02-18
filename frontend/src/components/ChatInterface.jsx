@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Search,
   Send,
@@ -645,12 +645,9 @@ const ChatInterface = () => {
         {},
         axiosConfig
       );
-      await fetchDirectChats();
-      await getUserChannel();
+      // Socket events handle chat list updates automatically
     } catch (error) {
       console.error("Error marking messages as seen:", error);
-      // Optionally: Rollback the optimistic update on error
-      // For seen messages, we typically don't rollback as it's not critical
     }
   };
 
@@ -812,8 +809,7 @@ const ChatInterface = () => {
           return [...prev, newMsg];
         });
         setSendingMessage(false);
-        await fetchDirectChats();
-        await getUserChannel();
+        // Socket events handle chat list updates automatically
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1003,20 +999,20 @@ const ChatInterface = () => {
               });
               window.open(fileUrl, "_blank");
             }}
-            className="flex items-center gap-2 p-2 bg-muted rounded cursor-pointer hover:bg-muted/80 transition-colors"
+            className="flex items-center gap-2 p-2 bg-zinc-800/60 rounded cursor-pointer hover:bg-zinc-800 transition-colors"
           >
-            <FileText className="w-4 h-4 flex-shrink-0" />
+            <FileText className="w-4 h-4 flex-shrink-0 text-indigo-400" />
             <div className="flex-1 min-w-0">
-              <span className="text-sm block truncate">
+              <span className="text-sm block truncate text-zinc-200">
                 {message.file_name || "Download File"}
               </span>
               {message.file_size && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-zinc-500">
                   {formatFileSize(message.file_size)}
                 </span>
               )}
             </div>
-            <Download className="w-4 h-4 ml-auto flex-shrink-0" />
+            <Download className="w-4 h-4 ml-auto flex-shrink-0 text-zinc-400" />
           </div>
         )}
       </div>
@@ -1192,6 +1188,11 @@ const ChatInterface = () => {
 
     socket.emit("request-online-users");
 
+    // Periodically refresh online status for reliability
+    const onlineInterval = setInterval(() => {
+      if (socket?.connected) socket.emit("request-online-users");
+    }, 30000);
+
     return () => {
       socket.off("direct_chat_created", handleNewChat);
       socket.off("new_message", appendMessage);
@@ -1201,6 +1202,7 @@ const ChatInterface = () => {
       socket.off("channel_name_changed", handleChannelNameUpdate);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_cleared", handleConversationCleared);
+      clearInterval(onlineInterval);
     };
   }, [socket]);
 
@@ -1240,7 +1242,7 @@ const ChatInterface = () => {
       return bTime - aTime;
     });
 
-  const getAllChats = () => {
+  const displayedChats = useMemo(() => {
     const allChats = [...directChats, ...userChannel].filter(Boolean);
     const uniqueChats = allChats.filter(
       (chat, index, self) =>
@@ -1266,10 +1268,8 @@ const ChatInterface = () => {
         return (chat.name?.toLowerCase() || "").includes(query);
       });
     }
-    return sortChatsByLastMessage(filteredByTab);
-  };
-
-  const displayedChats = getAllChats().filter((chat) => chat && chat._id);
+    return sortChatsByLastMessage(filteredByTab).filter((chat) => chat && chat._id);
+  }, [directChats, userChannel, activeTab, chatSearchQuery]);
 
   const getChatDisplayInfo = (chat = {}) => {
     if (chat.channel_type === "direct")
@@ -1300,16 +1300,19 @@ const ChatInterface = () => {
     messages.find((m) => m._id === parentMessageId);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] bg-zinc-950 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-80 bg-card border-r border-border flex flex-col">
-        <div className="p-3 border-b border-border">
+      <div className="w-80 bg-zinc-950 border-r border-zinc-800/60 flex flex-col">
+        <div className="p-3 border-b border-zinc-800/60">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-foreground">Messages</h2>
+            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <MessageCircle className="size-4 text-indigo-400" />
+              Messages
+            </h2>
             <div className="flex gap-1.5">
               <Button
                 size="sm"
-                className="h-7 px-2.5 text-xs"
+                className="h-7 px-2.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
                 onClick={() => setShowSearchModal(true)}
               >
                 New Chat
@@ -1317,7 +1320,7 @@ const ChatInterface = () => {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2.5 text-xs"
+                className="h-7 px-2.5 text-xs bg-zinc-900/60 border-zinc-700 hover:bg-zinc-800"
                 onClick={() => setShowGroupModal(true)}
               >
                 Group
@@ -1326,15 +1329,15 @@ const ChatInterface = () => {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0.5 mb-2.5 p-0.5 bg-muted rounded-lg">
+          <div className="flex gap-0.5 mb-2.5 p-0.5 bg-zinc-900 rounded-lg border border-zinc-800/60">
             {["all", "direct", "groups"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${
                   activeTab === tab
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-indigo-500/15 text-indigo-300 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1344,34 +1347,34 @@ const ChatInterface = () => {
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
             <Input
               type="text"
               value={chatSearchQuery}
               onChange={(e) => setChatSearchQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="pl-8 h-8 text-xs"
+              className="pl-8 h-8 text-xs bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
             />
           </div>
         </div>
 
         {/* Chat List */}
         <div
-          className="flex-1 overflow-y-auto pb-4 pt-1 bg-card"
+          className="flex-1 overflow-y-auto pb-4 pt-1 bg-zinc-950"
           style={{ overscrollBehavior: "contain" }}
         >
           {directMessageLoading ? (
             <div className="flex flex-col items-center justify-center h-full">
-              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin mb-2" />
-              <p className="text-xs text-muted-foreground">Loading...</p>
+              <Loader2 className="w-5 h-5 text-zinc-600 animate-spin mb-2" />
+              <p className="text-xs text-zinc-500">Loading chats...</p>
             </div>
           ) : displayedChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-              <MessageCircle className="w-8 h-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground font-medium">
+              <MessageCircle className="w-8 h-8 text-zinc-700 mb-2" />
+              <p className="text-sm text-zinc-400 font-medium">
                 {chatSearchQuery ? "No results" : "No conversations"}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-zinc-600 mt-0.5">
                 {chatSearchQuery
                   ? "Try different keywords"
                   : "Start a new chat"}
@@ -1383,22 +1386,23 @@ const ChatInterface = () => {
               const userOnline =
                 chat.channel_type === "direct" &&
                 isUserOnline(chat.other_user?._id);
+              const isActive = selectedChat?._id === chat._id;
               return (
                 <div
                   key={
                     chat._id ?? `${chat.channel_type}-${chat.name ?? "chat"}`
                   }
                   onClick={() => selectChat(chat)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-border ${
-                    selectedChat?._id === chat._id
-                      ? "bg-primary/10 border-l-2 border-l-primary"
-                      : "hover:bg-muted/50"
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all border-b border-zinc-800/40 ${
+                    isActive
+                      ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
+                      : "hover:bg-zinc-900/80"
                   }`}
                 >
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0 overflow-hidden ${
-                        displayInfo.isGroup ? "bg-muted" : "bg-primary"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${
+                        displayInfo.isGroup ? "bg-zinc-800 text-zinc-400" : "bg-indigo-500/20 text-indigo-300"
                       }`}
                     >
                       {displayInfo.isGroup ? (
@@ -1414,7 +1418,9 @@ const ChatInterface = () => {
                       )}
                     </div>
                     {!displayInfo.isGroup && userOnline && (
-                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-card" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950">
+                        <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-40" />
+                      </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1422,14 +1428,14 @@ const ChatInterface = () => {
                       <h3
                         className={`text-sm truncate ${
                           chat.unread_count > 0
-                            ? "font-semibold text-foreground"
-                            : "font-medium text-muted-foreground"
+                            ? "font-semibold text-zinc-100"
+                            : "font-medium text-zinc-300"
                         }`}
                       >
                         {displayInfo.name}
                       </h3>
                       {displayInfo.isGroup && (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded">
+                        <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
                           Group
                         </span>
                       )}
@@ -1442,8 +1448,8 @@ const ChatInterface = () => {
                       String(chat.other_user._id) ===
                         String(audioCall.remoteUser.id) && (
                         <div className="flex items-center gap-1 mt-0.5">
-                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          <span className="text-[10px] font-medium text-emerald-600">
+                          <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-medium text-emerald-400">
                             On call
                           </span>
                         </div>
@@ -1452,8 +1458,8 @@ const ChatInterface = () => {
                       chat._id &&
                       activeGroupCalls[chat._id] && (
                         <div className="flex items-center gap-1 mt-0.5">
-                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          <span className="text-[10px] font-medium text-emerald-600">
+                          <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-medium text-emerald-400">
                             Active call
                           </span>
                         </div>
@@ -1463,14 +1469,14 @@ const ChatInterface = () => {
                         <p
                           className={`text-xs truncate flex-1 ${
                             chat.unread_count > 0
-                              ? "text-foreground font-medium"
-                              : "text-muted-foreground"
+                              ? "text-zinc-200 font-medium"
+                              : "text-zinc-500"
                           }`}
                         >
-                          {chat.last_message.content}
+                          {chat.last_message.message_type === "file" ? "📎 File" : chat.last_message.content}
                         </p>
                         {chat.unread_count > 0 && (
-                          <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] rounded-full font-semibold min-w-[18px] text-center">
+                          <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] rounded-full font-semibold min-w-[18px] text-center">
                             {chat.unread_count > 99 ? "99+" : chat.unread_count}
                           </span>
                         )}
@@ -1486,17 +1492,17 @@ const ChatInterface = () => {
 
       {/* Chat Area */}
       {selectedChat ? (
-        <div className="flex-1 flex flex-col bg-card">
+        <div className="flex-1 flex flex-col bg-zinc-900/50">
           {/* Chat Header */}
-          {/* Chat Header */}
-          <div className="h-14 px-4 border-b border-border flex items-center justify-between flex-shrink-0">
+          <div className="relative">
+          <div className="h-14 px-4 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs overflow-hidden ${
+                  className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${
                     selectedChat.channel_type === "group"
-                      ? "bg-muted"
-                      : "bg-primary"
+                      ? "bg-zinc-800 text-zinc-400"
+                      : "bg-indigo-500/20 text-indigo-300"
                   }`}
                 >
                   {selectedChat.channel_type === "group" ? (
@@ -1516,25 +1522,27 @@ const ChatInterface = () => {
                 </div>
                 {selectedChat.channel_type === "direct" &&
                   isUserOnline(selectedChat.other_user?._id) && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-card" />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950">
+                      <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-40" />
+                    </div>
                   )}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3 className="text-sm font-semibold text-zinc-100">
                   {selectedChat.channel_type === "group"
                     ? selectedChat.name
                     : selectedChat.other_user?.full_name}
                 </h3>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs">
                   {selectedChat.channel_type === "group"
-                    ? `${selectedChat.member_count || 0} members${
+                    ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${
                         selectedChat.department
                           ? ` · ${selectedChat.department}`
                           : ""
-                      }`
+                      }`}</span>
                     : isUserOnline(selectedChat.other_user?._id)
-                    ? "Online"
-                    : "Offline"}
+                    ? <span className="text-emerald-400 flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />Active now</span>
+                    : <span className="text-zinc-500">Offline</span>}
                 </p>
               </div>
             </div>
@@ -1543,10 +1551,10 @@ const ChatInterface = () => {
               {/* Search Button */}
               <button
                 onClick={() => setShowMessageSearch(!showMessageSearch)}
-                className={`p-1.5 rounded-lg transition-colors ${
+                className={`p-1.5 rounded-lg transition-all ${
                   showMessageSearch
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                 }`}
                 title="Search messages"
               >
@@ -1554,7 +1562,7 @@ const ChatInterface = () => {
               </button>
               <button
                 onClick={fetchChatSummary}
-                className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
                 title="Summarize unseen messages"
               >
                 <Sparkles className="w-4 h-4" />
@@ -1624,7 +1632,7 @@ const ChatInterface = () => {
                         groupCall.groupCallState !== "idle" ||
                         !isUserOnline(selectedChat.other_user._id)
                       }
-                      className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                       title={
                         !isUserOnline(selectedChat.other_user._id)
                           ? "User is offline"
@@ -1725,7 +1733,7 @@ const ChatInterface = () => {
                         groupCall.groupCallState !== "idle" ||
                         !isUserOnline(selectedChat.other_user._id)
                       }
-                      className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                       title={
                         !isUserOnline(selectedChat.other_user._id)
                           ? "User is offline"
@@ -1760,7 +1768,7 @@ const ChatInterface = () => {
                       audioCall.callState !== "idle" ||
                       videoCall.callState !== "idle"
                     }
-                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                    className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                     title="Start video call"
                   >
                     <Video className="w-4 h-4" />
@@ -1780,14 +1788,14 @@ const ChatInterface = () => {
                           groupCall.groupCallState !== "idle" ||
                           audioCall.callState !== "idle"
                         }
-                        className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-40"
+                        className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                       >
                         <Phone className="w-4 h-4" />
                       </button>
                     )}
                   <button
                     onClick={openChannelSettings}
-                    className="p-1.5 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                    className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
                   >
                     <Settings className="w-4 h-4" />
                   </button>
@@ -1796,7 +1804,7 @@ const ChatInterface = () => {
               {selectedChat?.member_count > 2 && (
                 <button
                   onClick={() => leaveGroup(selectedChat._id)}
-                  className="p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                  className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
                 >
                   <Trash className="w-4 h-4" />
                 </button>
@@ -1811,45 +1819,48 @@ const ChatInterface = () => {
                     handleClearConversation();
                   }
                 }}
-                className="p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
                 title="Clear conversation"
               >
                 <Eraser className="w-4 h-4" />
               </button>
             </div>
           </div>
+          {/* Header accent line */}
+          <div className="h-[2px] bg-gradient-to-r from-indigo-600/60 via-purple-500/40 to-transparent" />
+          </div>
 
           {/* Message Search Bar */}
           {showMessageSearch && (
-            <div className="px-4 py-2 bg-muted/50 border-b border-border">
+            <div className="px-4 py-2 bg-zinc-900/80 border-b border-zinc-800/60">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                   <Input
                     type="text"
                     value={messageSearchQuery}
                     onChange={handleMessageSearchInput}
                     placeholder="Search in conversation..."
-                    className="pl-8 h-8 text-xs"
+                    className="pl-8 h-8 text-xs bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
                     autoFocus
                   />
                   {searchingMessages && (
-                    <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                    <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 animate-spin" />
                   )}
                 </div>
 
                 {searchedMessages.length > 0 && (
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    <span className="text-xs text-zinc-400 whitespace-nowrap">
                       {selectedSearchIndex + 1} of {searchedMessages.length}
                     </span>
                     <button
                       onClick={() => navigateSearchResults("prev")}
-                      className="p-1 hover:bg-muted rounded transition"
+                      className="p-1 hover:bg-zinc-800 rounded transition"
                       disabled={searchedMessages.length === 0}
                     >
                       <svg
-                        className="w-3.5 h-3.5 text-muted-foreground"
+                        className="w-3.5 h-3.5 text-zinc-400"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -1864,11 +1875,11 @@ const ChatInterface = () => {
                     </button>
                     <button
                       onClick={() => navigateSearchResults("next")}
-                      className="p-1 hover:bg-muted rounded transition"
+                      className="p-1 hover:bg-zinc-800 rounded transition"
                       disabled={searchedMessages.length === 0}
                     >
                       <svg
-                        className="w-3.5 h-3.5 text-muted-foreground"
+                        className="w-3.5 h-3.5 text-zinc-400"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -1886,9 +1897,9 @@ const ChatInterface = () => {
 
                 <button
                   onClick={clearMessageSearch}
-                  className="p-1 hover:bg-muted rounded transition"
+                  className="p-1 hover:bg-zinc-800 rounded transition"
                 >
-                  <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  <X className="w-3.5 h-3.5 text-zinc-400" />
                 </button>
               </div>
             </div>
@@ -1954,7 +1965,7 @@ const ChatInterface = () => {
 
           {/* Messages Area */}
           <div
-            className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-background"
+            className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-zinc-900/40"
             style={{ overscrollBehavior: "contain" }}
           >
             {removedFromChannelId &&
@@ -1964,21 +1975,23 @@ const ChatInterface = () => {
                 <p className="text-base font-medium text-amber-400">
                   You are removed from this group
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-zinc-500 mt-1">
                   You will no longer see this chat after you refresh.
                 </p>
               </div>
             ) : loadingMessages ? (
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+                <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
-                <Send className="w-8 h-8 text-muted-foreground mb-3" />
-                <p className="text-sm text-muted-foreground font-medium">
+                <div className="w-14 h-14 rounded-full bg-zinc-800/80 flex items-center justify-center mb-3">
+                  <Send className="w-6 h-6 text-zinc-500" />
+                </div>
+                <p className="text-sm text-zinc-300 font-medium">
                   Start the conversation
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-zinc-500 mt-0.5">
                   {selectedChat.channel_type === "group"
                     ? `Send a message to ${selectedChat.name}`
                     : `Send a message to ${selectedChat.other_user?.first_name}`}
@@ -2019,11 +2032,11 @@ const ChatInterface = () => {
                         <div
                           className={`px-3.5 py-2 rounded-xl text-sm transition-all ${
                             message.is_own
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted border border-border text-foreground"
+                              ? "bg-indigo-600 text-white"
+                              : "bg-zinc-800/80 border border-zinc-700/50 text-zinc-100"
                           } ${
                             isCurrentSearchResult
-                              ? "ring-2 ring-yellow-400 ring-offset-2"
+                              ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-zinc-900"
                               : isSearchResult
                               ? "ring-1 ring-yellow-400/50"
                               : ""
@@ -2041,7 +2054,7 @@ const ChatInterface = () => {
                               <p
                                 className={`text-[11px] font-medium ${
                                   message.is_own
-                                    ? "text-primary-foreground/70"
+                                    ? "text-white/70"
                                     : "text-indigo-400"
                                 }`}
                               >
@@ -2052,8 +2065,8 @@ const ChatInterface = () => {
                               <p
                                 className={`text-[11px] truncate ${
                                   message.is_own
-                                    ? "text-primary-foreground/60"
-                                    : "text-muted-foreground"
+                                    ? "text-white/60"
+                                    : "text-zinc-500"
                                 }`}
                               >
                                 {parentMessage.content}
@@ -2071,8 +2084,8 @@ const ChatInterface = () => {
                           <div
                             className={`flex items-center gap-1 justify-end mt-1 ${
                               message.is_own
-                                ? "text-primary-foreground/60"
-                                : "text-muted-foreground"
+                                ? "text-indigo-200/60"
+                                : "text-zinc-500"
                             }`}
                           >
                             <span className="text-[10px]">
@@ -2093,7 +2106,7 @@ const ChatInterface = () => {
                                     )}
                                 </button>
                               ) : (
-                                <Check className="w-3 h-3 text-primary-foreground/40" />
+                                <Check className="w-3 h-3 text-indigo-200/40" />
                               ))}
                           </div>
                         </div>
@@ -2109,26 +2122,26 @@ const ChatInterface = () => {
 
           {/* Reply Bar */}
           {replyingTo && (
-            <div className="px-4 py-2 bg-muted/50 border-t border-border flex items-center justify-between">
+            <div className="px-4 py-2 bg-zinc-900/80 border-t border-zinc-800/60 flex items-center justify-between">
               <div className="flex-1 flex items-start gap-2">
-                <Reply className="w-3.5 h-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <Reply className="w-3.5 h-3.5 text-indigo-400 mt-0.5 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground">
+                  <p className="text-xs font-medium text-zinc-200">
                     Replying to{" "}
                     {replyingTo.is_own
                       ? "yourself"
                       : replyingTo.sender?.first_name || "User"}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-xs text-zinc-500 truncate">
                     {replyingTo.content}
                   </p>
                 </div>
               </div>
               <button
                 onClick={cancelReply}
-                className="p-1 hover:bg-muted rounded transition"
+                className="p-1 hover:bg-zinc-800 rounded transition"
               >
-                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                <X className="w-3.5 h-3.5 text-zinc-500" />
               </button>
             </div>
           )}
@@ -2139,7 +2152,7 @@ const ChatInterface = () => {
             selectedChat?._id &&
             String(selectedChat._id) === String(removedFromChannelId)
           ) && (
-            <div className="px-4 pt-3 pb-1 border-t border-border bg-card">
+            <div className="px-4 pt-3 pb-1 border-t border-zinc-800/60 bg-zinc-950">
               {!socketConnected && (
                 <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
                   <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
@@ -2151,7 +2164,7 @@ const ChatInterface = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground"
+                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                   onClick={() => setShowFileUpload(true)}
                   disabled={!socketConnected}
                   title="Send file"
@@ -2171,7 +2184,7 @@ const ChatInterface = () => {
                       : "Type a message..."
                   }
                   disabled={sendingMessage || !socketConnected}
-                  className="flex-1"
+                  className="flex-1 bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
                 />
                 <Button
                   type="submit"
@@ -2179,6 +2192,7 @@ const ChatInterface = () => {
                   disabled={
                     !newMessage.trim() || sendingMessage || !socketConnected
                   }
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
                 >
                   {sendingMessage ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -2191,15 +2205,20 @@ const ChatInterface = () => {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-background">
-          <MessageCircle className="w-12 h-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-1">
+        <div className="flex-1 flex flex-col items-center justify-center bg-zinc-900/30">
+          <div className="w-16 h-16 rounded-full bg-zinc-800/80 flex items-center justify-center mb-4">
+            <MessageCircle className="w-8 h-8 text-zinc-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-200 mb-1">
             Select a conversation
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-zinc-500 mb-4">
             Choose a chat or start a new one
           </p>
-          <Button onClick={() => setShowSearchModal(true)}>
+          <Button 
+            onClick={() => setShowSearchModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white"
+          >
             Start New Chat
           </Button>
         </div>
@@ -2207,12 +2226,12 @@ const ChatInterface = () => {
 
       {/* Seen By Modal */}
       {showSeenByModal && selectedMessageSeenBy && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl border border-border shadow-xl max-w-sm w-full max-h-[70vh] flex flex-col">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800/80 shadow-xl max-w-sm w-full max-h-[70vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-zinc-800/60 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">
+                <Eye className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">
                   Seen by
                 </h3>
               </div>
@@ -2220,8 +2239,9 @@ const ChatInterface = () => {
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowSeenByModal(false)}
+                className="hover:bg-zinc-800"
               >
-                <X className="w-4 h-4 text-muted-foreground" />
+                <X className="w-4 h-4 text-zinc-400" />
               </Button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
@@ -2230,20 +2250,20 @@ const ChatInterface = () => {
                   {selectedMessageSeenBy.seen_by.map((seen, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50"
+                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-zinc-800/50"
                     >
-                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                        <span className="text-primary font-medium text-[10px]">
+                      <div className="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-indigo-300 font-medium text-[10px]">
                           {seen.user_id?.first_name?.[0] || "U"}
                           {seen.user_id?.last_name?.[0] || ""}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
+                        <p className="text-sm font-medium text-zinc-200 truncate">
                           {seen.user_id?.first_name || "Unknown"}{" "}
                           {seen.user_id?.last_name || ""}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[10px] text-zinc-500">
                           {new Date(seen.seen_at).toLocaleString("en-US", {
                             month: "short",
                             day: "numeric",
@@ -2258,8 +2278,8 @@ const ChatInterface = () => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Eye className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <Eye className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-sm text-zinc-500">
                     No one has seen this yet
                   </p>
                 </div>
@@ -2406,21 +2426,21 @@ const ChatInterface = () => {
       />
       {/* Chat Summary Modal */}
       {showSummaryModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl border border-border shadow-xl max-w-md w-full flex flex-col">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800/80 shadow-xl max-w-md w-full flex flex-col">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-zinc-800/60 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">
                   Unseen Messages Summary
                 </h3>
               </div>
               <button
                 onClick={() => setShowSummaryModal(false)}
-                className="p-1 hover:bg-muted rounded transition"
+                className="p-1 hover:bg-zinc-800 rounded transition"
               >
-                <X className="w-4 h-4 text-muted-foreground" />
+                <X className="w-4 h-4 text-zinc-400" />
               </button>
             </div>
 
@@ -2428,18 +2448,18 @@ const ChatInterface = () => {
             <div className="p-4">
               {summaryLoading ? (
                 <div className="flex flex-col items-center justify-center py-8 gap-3">
-                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  <p className="text-sm text-muted-foreground">
+                  <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                  <p className="text-sm text-zinc-500">
                     Generating summary...
                   </p>
                 </div>
               ) : summaryData?.summary === null ? (
                 <div className="flex flex-col items-center justify-center py-8 gap-2">
                   <CheckCheck className="w-8 h-8 text-emerald-500" />
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-sm font-medium text-zinc-200">
                     You're all caught up!
                   </p>
-                  <p className="text-xs text-muted-foreground text-center">
+                  <p className="text-xs text-zinc-500 text-center">
                     No unseen messages in this conversation.
                   </p>
                 </div>
@@ -2447,26 +2467,26 @@ const ChatInterface = () => {
                 <div className="space-y-3">
                   {/* Unseen count badge */}
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full">
+                    <span className="px-2 py-0.5 bg-indigo-500/15 text-indigo-300 text-xs font-medium rounded-full">
                       {summaryData.unseen_count} unseen{" "}
                       {summaryData.unseen_count === 1 ? "message" : "messages"}
                     </span>
                     {summaryData.channel?.name && (
-                      <span className="text-xs text-muted-foreground truncate">
+                      <span className="text-xs text-zinc-500 truncate">
                         in {summaryData.channel.name}
                       </span>
                     )}
                   </div>
 
                   {/* Summary text */}
-                  <div className="bg-muted/50 rounded-lg p-3 border border-border">
-                    <p className="text-sm text-foreground leading-relaxed">
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                    <p className="text-sm text-zinc-200 leading-relaxed">
                       {summaryData.summary}
                     </p>
                   </div>
 
                   {/* Footer note */}
-                  <p className="text-[11px] text-muted-foreground text-center">
+                  <p className="text-[11px] text-zinc-600 text-center">
                     Generated by AI · May not capture every detail
                   </p>
                 </div>
@@ -2478,7 +2498,7 @@ const ChatInterface = () => {
               <div className="px-4 pb-4">
                 <button
                   onClick={() => setShowSummaryModal(false)}
-                  className="w-full py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                  className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors"
                 >
                   Close
                 </button>

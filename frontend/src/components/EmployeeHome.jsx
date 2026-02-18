@@ -15,8 +15,15 @@ import {
   Zap,
   Shield,
   Headphones,
+  LogIn,
+  LogOut,
+  CalendarCheck,
+  Building2,
+  Laptop2,
+  Home as HomeIcon,
 } from "lucide-react";
 import { BACKEND_URL } from "../../config";
+import { toast } from "sonner";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -42,6 +49,55 @@ export default function EmployeeHome({ onNavigate }) {
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // ─── Attendance state ───
+  const token = localStorage.getItem("token");
+  const headers = { Authorization: `Bearer ${token}` };
+  const [todayAttendance, setTodayAttendance] = useState(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [selectedWorkType, setSelectedWorkType] = useState("office");
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
+
+  const fetchTodayAttendance = async () => {
+    try {
+      const res = await axios.get(`${BACKEND_URL}/attendance/today`, { headers });
+      setTodayAttendance(res.data.attendance);
+    } catch {
+      setTodayAttendance(null);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    setCheckingIn(true);
+    try {
+      const res = await axios.post(`${BACKEND_URL}/attendance/check-in`, { work_type: selectedWorkType }, { headers });
+      toast.success("Checked in successfully!");
+      setTodayAttendance(res.data.attendance);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Check-in failed");
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    setCheckingOut(true);
+    try {
+      const res = await axios.post(`${BACKEND_URL}/attendance/check-out`, {}, { headers });
+      toast.success(`Checked out! Total: ${res.data.attendance.total_hours}h`);
+      setTodayAttendance(res.data.attendance);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Check-out failed");
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
+  const hasCheckedIn = !!todayAttendance?.check_in;
+  const hasCheckedOut = !!todayAttendance?.check_out;
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -49,6 +105,7 @@ export default function EmployeeHome({ onNavigate }) {
 
   useEffect(() => {
     fetchUpcomingMeetings();
+    fetchTodayAttendance();
   }, []);
 
   const fetchUpcomingMeetings = async () => {
@@ -71,6 +128,15 @@ export default function EmployeeHome({ onNavigate }) {
   };
 
   const quickActions = [
+    {
+      id: "attendance",
+      icon: CalendarCheck,
+      label: "Attendance",
+      description: "Check in & manage leaves",
+      color: "from-indigo-500/20 to-indigo-600/10",
+      iconColor: "text-indigo-400",
+      borderColor: "border-indigo-500/20",
+    },
     {
       id: "messages",
       icon: MessageSquare,
@@ -183,6 +249,102 @@ export default function EmployeeHome({ onNavigate }) {
                 {department && (
                   <span className="px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 text-xs font-medium border border-zinc-700/50">
                     {department}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Check-In Widget */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`size-12 rounded-xl flex items-center justify-center ${
+                hasCheckedOut ? "bg-emerald-500/15" : hasCheckedIn ? "bg-amber-500/15" : "bg-indigo-500/15"
+              }`}>
+                {hasCheckedOut ? (
+                  <CheckCircle2 className="size-6 text-emerald-400" />
+                ) : hasCheckedIn ? (
+                  <Clock className="size-6 text-amber-400" />
+                ) : (
+                  <CalendarCheck className="size-6 text-indigo-400" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-200">
+                  {attendanceLoading
+                    ? "Loading..."
+                    : hasCheckedOut
+                    ? "Day Complete"
+                    : hasCheckedIn
+                    ? "You're clocked in"
+                    : "You haven't clocked in yet"}
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {hasCheckedIn && todayAttendance?.check_in
+                    ? `Checked in at ${new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}${todayAttendance.work_type === "wfh" ? " · Work from Home" : todayAttendance.work_type === "hybrid" ? " · Hybrid" : " · Office"}`
+                    : hasCheckedOut
+                    ? `${todayAttendance?.total_hours || 0}h logged today`
+                    : "Start your day by checking in"}
+                </p>
+              </div>
+            </div>
+
+            {!attendanceLoading && (
+              <div className="flex items-center gap-2">
+                {!hasCheckedIn && (
+                  <>
+                    {/* Work type selector */}
+                    <div className="flex rounded-lg border border-zinc-700 overflow-hidden">
+                      {[
+                        { value: "office", icon: Building2, tip: "Office" },
+                        { value: "wfh", icon: Laptop2, tip: "WFH" },
+                        { value: "hybrid", icon: HomeIcon, tip: "Hybrid" },
+                      ].map((wt) => {
+                        const WtIcon = wt.icon;
+                        return (
+                          <button
+                            key={wt.value}
+                            title={wt.tip}
+                            onClick={() => setSelectedWorkType(wt.value)}
+                            className={`px-3 py-2 transition-colors ${
+                              selectedWorkType === wt.value
+                                ? "bg-indigo-500/20 text-indigo-300"
+                                : "bg-zinc-800/60 text-zinc-500 hover:text-zinc-300"
+                            }`}
+                          >
+                            <WtIcon className="size-4" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={handleCheckIn}
+                      disabled={checkingIn}
+                      className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      <LogIn className="size-4" />
+                      {checkingIn ? "Checking In..." : "Check In"}
+                    </button>
+                  </>
+                )}
+
+                {hasCheckedIn && !hasCheckedOut && (
+                  <button
+                    onClick={handleCheckOut}
+                    disabled={checkingOut}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    <LogOut className="size-4" />
+                    {checkingOut ? "Checking Out..." : "Check Out"}
+                  </button>
+                )}
+
+                {hasCheckedOut && (
+                  <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-medium">
+                    <CheckCircle2 className="size-4" />
+                    {todayAttendance?.total_hours || 0}h logged
                   </span>
                 )}
               </div>
