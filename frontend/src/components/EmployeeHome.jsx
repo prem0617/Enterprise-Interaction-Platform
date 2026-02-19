@@ -115,7 +115,7 @@ export default function EmployeeHome({ onNavigate }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const now = new Date();
-      const upcoming = (res.data.meetings || [])
+      const upcoming = (res.data.data || [])
         .filter(
           (m) => m.status === "scheduled" && new Date(m.scheduled_at) > now
         )

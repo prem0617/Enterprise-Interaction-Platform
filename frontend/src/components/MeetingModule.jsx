@@ -528,7 +528,7 @@ const MeetingRoom = ({
                 {participantCount} participant
                 {participantCount !== 1 ? "s" : ""}
               </span>
-              {activeMeeting.isHost && activeMeeting.meeting_code && (
+              {activeMeeting.isHost && activeMeeting.meeting_code && activeMeeting.status === "active" && (
                 <>
                   <span>&bull;</span>
                   <span className="font-mono text-zinc-400">
@@ -944,7 +944,7 @@ const MeetingRoom = ({
   );
 };
 
-const MeetingModule = () => {
+const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
   const { socket, user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -979,6 +979,14 @@ const MeetingModule = () => {
   const [recordingsExpandedId, setRecordingsExpandedId] = useState(null);
   const [recordingsByMeeting, setRecordingsByMeeting] = useState({});
   const [loadingRecordingsId, setLoadingRecordingsId] = useState(null);
+  const [recordingModal, setRecordingModal] = useState(null); // { meetingId, meetingTitle }
+
+  // Tick every 15s so time-dependent UI (e.g. "Start meeting" button) updates without refresh
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
@@ -1106,6 +1114,15 @@ const MeetingModule = () => {
 
     const handleSync = ({ event, meeting }) => {
       if (!meeting) return;
+
+      // Only show meetings where the current user is host or participant
+      const uid = String(currentUserId);
+      const isMine =
+        String(meeting.host_id?._id || meeting.host_id) === uid ||
+        (meeting.participants || []).some(
+          (p) => String(p._id || p) === uid
+        );
+
       setMeetings((prev) => {
         if (event === "deleted") {
           return prev.filter((m) => m._id !== meeting._id);
@@ -1113,6 +1130,7 @@ const MeetingModule = () => {
         // Prevent duplicates — if the meeting already exists, update it
         const exists = prev.some((m) => m._id === meeting._id);
         if (event === "created") {
+          if (!isMine) return prev; // ignore meetings we're not part of
           return exists
             ? prev.map((m) => (m._id === meeting._id ? meeting : m))
             : [...prev, meeting];
@@ -1131,7 +1149,7 @@ const MeetingModule = () => {
 
     socket.on("meeting-sync", handleSync);
     return () => socket.off("meeting-sync", handleSync);
-  }, [socket]);
+  }, [socket, currentUserId]);
 
   // ---- Meeting reminders ----
   useEffect(() => {
@@ -1310,13 +1328,26 @@ const MeetingModule = () => {
           toast.error("This meeting has already ended");
           return;
         }
+        // If meeting isn't active yet and the current user is not the host, block join
+        const meetingHostId = String(meeting.host_id?._id || meeting.host_id);
+        const isMeetingHost = meetingHostId === String(currentUserId);
+        if (meeting.status !== "active" && !isMeetingHost) {
+          toast.error("The host has not started this meeting yet. Please wait for the host to start.");
+          setJoinCodeInput("");
+          setMeetings((prev) => {
+            const exists = prev.some((m) => m._id === meeting._id);
+            if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
+            return [...prev, meeting];
+          });
+          return;
+        }
         setJoinCodeInput("");
         setMeetings((prev) => {
           const exists = prev.some((m) => m._id === meeting._id);
           if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
           return [...prev, meeting];
         });
-        if (meeting.open_to_everyone === false) {
+        if (meeting._lobbyOnly || meeting.open_to_everyone === false) {
           setLobbyMeeting(meeting);
           socket.emit("meeting-join-request", {
             meetingId: meeting._id,
@@ -1341,7 +1372,8 @@ const MeetingModule = () => {
   // ---- Form helpers ----
   const openCreateForm = () => {
     const dateStr = toLocalDateString(selectedDate);
-    const timeStr = "09:00";
+    const nowTime = new Date();
+    const timeStr = `${String(nowTime.getHours()).padStart(2, "0")}:${String(nowTime.getMinutes()).padStart(2, "0")}`;
     setEditingMeeting(null);
     setForm({
       title: "",
@@ -1504,6 +1536,7 @@ const MeetingModule = () => {
         duration_minutes: Number(form.duration_minutes) || 30,
         location: form.location.trim() || undefined,
         participants: form.participants.map((p) => p._id),
+        open_to_everyone: false,
         reminders: (form.reminders || []).map((m) => ({
           minutes_before: Number(m),
         })),
@@ -1583,6 +1616,7 @@ const MeetingModule = () => {
           duration_minutes: 30,
           participants: [],
           open_to_everyone: openToEveryone,
+          is_instant: true,
         },
         axiosConfig
       );
@@ -1598,16 +1632,18 @@ const MeetingModule = () => {
         meetingId: String(meeting._id),
         name: currentUserName,
       });
+      const startedAt = new Date().toISOString();
       await axios.put(
         `${BACKEND_URL}/meetings/${meeting._id}`,
-        { status: "active", started_at: new Date().toISOString() },
+        { status: "active", started_at: startedAt },
         axiosConfig
       );
       setMeetings((prev) =>
         prev.map((m) =>
-          m._id === meeting._id ? { ...m, status: "active" } : m
+          m._id === meeting._id ? { ...m, status: "active", started_at: startedAt } : m
         )
       );
+      setActiveMeeting((prev) => ({ ...prev, status: "active", started_at: startedAt }));
       toast.success("Meeting started. Copy the link below to invite others.");
     } catch (err) {
       meetingCall.cleanup();
@@ -1704,14 +1740,16 @@ const MeetingModule = () => {
   const canEnterMeeting = (meeting) => {
     if (meeting.status === "cancelled" || meeting.status === "ended")
       return false;
-    // Active meetings can always be entered
+    // Active meetings: participants can join (host has already started)
     if (meeting.status === "active") return true;
-    // Scheduled meetings: allow entry 5 minutes before start, or if host
-    if (!meeting.scheduled_at) return false;
+    // Only the host can start a scheduled meeting, and only at or after the scheduled time
+    if (!isHost(meeting)) return false;
+    if (!meeting.scheduled_at) return true; // no scheduled time, host can start anytime
     const start = new Date(meeting.scheduled_at).getTime();
-    const now = Date.now();
-    const earlyJoinMs = 5 * 60 * 1000; // 5 minutes early
-    return now >= start - earlyJoinMs;
+    const fiveMinutesMs = 5 * 60 * 1000;
+    // Host can only start between scheduled time and 5 minutes after
+    // nowTick ensures this re-evaluates periodically without a page refresh
+    return nowTick >= start && nowTick < start + fiveMinutesMs;
   };
 
   // ---- Enter / Leave meeting room ----
@@ -1721,6 +1759,22 @@ const MeetingModule = () => {
       return;
     }
     const host = isHost(meeting);
+
+    // Participants cannot join until the host has started the meeting
+    if (!host && meeting.status !== "active") {
+      toast.error("The host has not started this meeting yet. Please wait for the host to start.");
+      return;
+    }
+
+    // Host cannot start before the scheduled time
+    if (host && meeting.status !== "active" && meeting.scheduled_at) {
+      const scheduledTime = new Date(meeting.scheduled_at).getTime();
+      if (Date.now() < scheduledTime) {
+        toast.error("Cannot start the meeting before its scheduled time.");
+        return;
+      }
+    }
+
     let stream;
     try {
       stream = await meetingCall.startMedia();
@@ -1786,6 +1840,22 @@ const MeetingModule = () => {
     if (activeMeeting.isHost) {
       if (!window.confirm("End this meeting for all participants?")) return;
     }
+
+    // Auto-stop recording if active and upload before cleanup
+    if (meetingCall.isRecording && activeMeeting.isHost) {
+      try {
+        toast.info("Stopping recording and uploading...");
+        const segments = await meetingCall.stopRecording();
+        if (segments.length > 0) {
+          await handleUploadRecordings(activeMeeting._id, segments);
+          toast.success("Recording uploaded successfully");
+        }
+      } catch (e) {
+        console.error("Failed to upload recording on leave:", e);
+        toast.error("Failed to upload recording");
+      }
+    }
+
     if (localMediaStream) {
       localMediaStream.getTracks().forEach((t) => t.stop());
       setLocalMediaStream(null);
@@ -1821,6 +1891,31 @@ const MeetingModule = () => {
     setChatMessages([]);
     setChatInput("");
   };
+
+  // Notify parent about active meeting state changes (includes call controls)
+  useEffect(() => {
+    if (onMeetingStateChange) {
+      if (activeMeeting) {
+        onMeetingStateChange({
+          ...activeMeeting,
+          isMuted: meetingCall.isMuted,
+          isVideoOff: meetingCall.isVideoOff,
+          toggleMute: meetingCall.toggleMute,
+          toggleVideo: meetingCall.toggleVideo,
+          leaveMeeting: handleLeaveMeeting,
+        });
+      } else {
+        onMeetingStateChange(null);
+      }
+    }
+  }, [
+    activeMeeting,
+    meetingCall.isMuted,
+    meetingCall.isVideoOff,
+    meetingCall.toggleMute,
+    meetingCall.toggleVideo,
+    onMeetingStateChange,
+  ]);
 
   // ---- Parse meeting code from input (raw code or full join URL) ----
   const parseMeetingCodeFromInput = (input) => {
@@ -1861,7 +1956,7 @@ const MeetingModule = () => {
           return prev.map((m) => (m._id === meeting._id ? meeting : m));
         return [...prev, meeting];
       });
-      if (meeting.open_to_everyone === false) {
+      if (meeting._lobbyOnly || meeting.open_to_everyone === false) {
         setLobbyMeeting(meeting);
         socket.emit("meeting-join-request", {
           meetingId: meeting._id,
@@ -2024,55 +2119,69 @@ const MeetingModule = () => {
 
   // ======================== RENDER ========================
 
-  // ---- Guest waiting in lobby ----
-  if (lobbyMeeting) {
-    return (
-      <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4 bg-zinc-950 rounded-xl border border-zinc-800">
-        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
-          <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-white mb-2">Waiting to join</h2>
-          <p className="text-sm text-zinc-400 mb-2">{lobbyMeeting.title}</p>
-          <p className="text-sm text-zinc-500 mb-6">The host will admit you shortly.</p>
-          <button
-            type="button"
-            onClick={() => setLobbyMeeting(null)}
-            className="px-4 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 text-sm font-medium"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Determine which view to show
+  const showLobby = !!lobbyMeeting;
+  const showMeetingRoom = !!activeMeeting && !showLobby;
+  const showMainView = !showLobby && !showMeetingRoom;
 
-  // ---- Active meeting room ----
-  if (activeMeeting) {
-    return (
-      <MeetingRoom
-        activeMeeting={activeMeeting}
-        roomParticipants={roomParticipants}
-        currentUserId={currentUserId}
-        currentUserName={currentUserName}
-        meetingCall={meetingCall}
-        displayLocalStream={displayLocalStream}
-        localVideoRef={localVideoRef}
-        videoRefs={videoRefs}
-        chatMessages={chatMessages}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        handleSendChat={handleSendChat}
-        chatContainerRef={chatContainerRef}
-        copyMeetingLink={copyMeetingLink}
-        handleLeaveMeeting={handleLeaveMeeting}
-        onUploadRecordings={handleUploadRecordings}
-        lobbyRequests={lobbyRequests}
-        onAdmitToLobby={handleAdmitToLobby}
-      />
-    );
-  }
-
-  // ---- Main view (calendar + meeting list) ----
   return (
+    <div
+      style={isVisible ? { display: 'contents' } : {
+        position: 'fixed',
+        left: '-9999px',
+        top: '-9999px',
+        width: '1px',
+        height: '1px',
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}
+      aria-hidden={!isVisible}
+    >
+      {/* ---- Guest waiting in lobby ---- */}
+      {showLobby && (
+        <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4 bg-zinc-950 rounded-xl border border-zinc-800">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
+            <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-white mb-2">Waiting to join</h2>
+            <p className="text-sm text-zinc-400 mb-2">{lobbyMeeting.title}</p>
+            <p className="text-sm text-zinc-500 mb-6">The host will admit you shortly.</p>
+            <button
+              type="button"
+              onClick={() => setLobbyMeeting(null)}
+              className="px-4 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 text-sm font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Active meeting room (always mounted when active, hidden via parent) ---- */}
+      {activeMeeting && (
+        <MeetingRoom
+            activeMeeting={activeMeeting}
+            roomParticipants={roomParticipants}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName}
+            meetingCall={meetingCall}
+            displayLocalStream={displayLocalStream}
+            localVideoRef={localVideoRef}
+            videoRefs={videoRefs}
+            chatMessages={chatMessages}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            handleSendChat={handleSendChat}
+            chatContainerRef={chatContainerRef}
+            copyMeetingLink={copyMeetingLink}
+            handleLeaveMeeting={handleLeaveMeeting}
+            onUploadRecordings={handleUploadRecordings}
+            lobbyRequests={lobbyRequests}
+            onAdmitToLobby={handleAdmitToLobby}
+          />
+        )}
+
+      {/* ---- Main view (calendar + meeting list) ---- */}
+      {showMainView && (
     <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden px-4 sm:px-6 lg:px-8 py-6">
       {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
       {showInstantMeetingDialog && (
@@ -2405,7 +2514,7 @@ const MeetingModule = () => {
                           </span>
                         )}
                         <div className="flex gap-1">
-                          {m.meeting_code && isHost(m) && (
+                          {m.meeting_code && isHost(m) && m.status === "active" && (
                             <button
                               type="button"
                               onClick={() => copyMeetingLink(m)}
@@ -2454,6 +2563,26 @@ const MeetingModule = () => {
                               {isHost(m) ? "Start meeting" : "Join meeting"}
                             </button>
                           )}
+                          {/* Show waiting message for participants when host hasn't started yet */}
+                          {!canEnterMeeting(m) &&
+                            isParticipant(m) &&
+                            !isHost(m) &&
+                            m.status === "scheduled" && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Waiting for host
+                              </span>
+                            )}
+                          {/* Show message when 5-minute start window has expired */}
+                          {!canEnterMeeting(m) &&
+                            m.status === "scheduled" &&
+                            m.scheduled_at &&
+                            Date.now() >= new Date(m.scheduled_at).getTime() + 5 * 60 * 1000 && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Auto-cancelled (not started in time)
+                              </span>
+                            )}
                         </div>
                       </div>
                     </div>
@@ -2468,43 +2597,20 @@ const MeetingModule = () => {
                       <div className="mt-2">
                         <button
                           type="button"
-                          onClick={() => toggleRecordings(m._id)}
+                          onClick={() => {
+                            setRecordingModal({ meetingId: m._id, meetingTitle: m.title });
+                            fetchMeetingRecordings(m._id);
+                          }}
                           disabled={loadingRecordingsId === m._id}
                           className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
                         >
                           {loadingRecordingsId === m._id ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
-                            <Circle className="w-3 h-3" />
+                            <Video className="w-3 h-3" />
                           )}
-                          {recordingsExpandedId === m._id ? "Hide recordings" : "View recordings"}
+                          View recordings
                         </button>
-                        {recordingsExpandedId === m._id && (
-                          <div className="mt-2 pt-2 border-t border-zinc-700/50 space-y-2">
-                            {loadingRecordingsId === m._id ? (
-                              <p className="text-[11px] text-zinc-500">Loading...</p>
-                            ) : (recordingsByMeeting[m._id] || []).length === 0 ? (
-                              <p className="text-[11px] text-zinc-500">No recordings for this meeting.</p>
-                            ) : (
-                              (recordingsByMeeting[m._id] || []).map((rec) => (
-                                <div key={rec._id} className="rounded-lg bg-zinc-900/80 p-2">
-                                  <p className="text-[11px] text-zinc-300 mb-1">
-                                    {rec.participant_name || rec.participant_id} • {rec.type}
-                                    {rec.duration_seconds != null && ` • ${Math.round(rec.duration_seconds)}s`}
-                                  </p>
-                                  <video
-                                    src={rec.cloudinary_url}
-                                    controls
-                                    className="w-full max-h-48 rounded border border-zinc-700/60 bg-black"
-                                    preload="metadata"
-                                  >
-                                    Your browser does not support video playback.
-                                  </video>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -2531,6 +2637,81 @@ const MeetingModule = () => {
           )}
         </div>
       </div>
+
+      {/* Recording Playback Modal */}
+      {recordingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setRecordingModal(null); }}
+        >
+          <div className="bg-zinc-900 rounded-xl border border-zinc-700/60 shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-700/50">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Meeting Recordings</h2>
+                <p className="text-[11px] text-zinc-400 mt-0.5">{recordingModal.meetingTitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordingModal(null)}
+                className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {loadingRecordingsId === recordingModal.meetingId ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                  <span className="ml-2 text-sm text-zinc-400">Loading recordings...</span>
+                </div>
+              ) : (recordingsByMeeting[recordingModal.meetingId] || []).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+                  <Video className="w-10 h-10 mb-2 opacity-40" />
+                  <p className="text-sm">No recordings available for this meeting.</p>
+                </div>
+              ) : (
+                (recordingsByMeeting[recordingModal.meetingId] || []).map((rec) => (
+                  <div key={rec._id} className="rounded-lg bg-zinc-800/80 border border-zinc-700/50 overflow-hidden">
+                    <div className="px-4 py-2 border-b border-zinc-700/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Video className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs font-medium text-zinc-200">
+                          {rec.participant_name || "Meeting Recording"}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-900">
+                          {rec.type}
+                        </span>
+                      </div>
+                      {rec.duration_seconds != null && (
+                        <span className="text-[11px] text-zinc-400">
+                          {Math.floor(rec.duration_seconds / 60)}:{String(Math.round(rec.duration_seconds % 60)).padStart(2, "0")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-black">
+                      <video
+                        src={rec.cloudinary_url}
+                        controls
+                        className="w-full max-h-[50vh]"
+                        preload="metadata"
+                        controlsList="nodownload"
+                      >
+                        Your browser does not support video playback.
+                      </video>
+                    </div>
+                    {rec.started_at && (
+                      <div className="px-4 py-1.5 text-[10px] text-zinc-500">
+                        Recorded: {new Date(rec.started_at).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Meeting Form Modal */}
       {showForm && (
@@ -2803,6 +2984,8 @@ const MeetingModule = () => {
             </form>
           </div>
         </div>
+      )}
+    </div>
       )}
     </div>
   );

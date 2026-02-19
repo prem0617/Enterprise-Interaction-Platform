@@ -45,15 +45,16 @@ export const uploadRecording = async (req, res) => {
     const ended = new Date(ended_at);
     const durationSeconds = Math.max(0, Math.round((ended - started) / 1000));
 
-    const publicId = `meeting-recordings/${meetingId}/${type}-${participant_id}-${Date.now()}.webm`;
+    const publicId = `meeting-recordings/${meetingId}/${type}-${participant_id}-${Date.now()}`;
 
-    // Use "raw" so Cloudinary stores the file as-is; MediaRecorder WebM codecs can be rejected as "video"
+    // Use "video" resource type so Cloudinary can serve it as a playable video
     const result = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          resource_type: "raw",
+          resource_type: "video",
           folder: "meeting-recordings",
           public_id: publicId,
+          format: "webm",
         },
         (err, result) => {
           if (err) reject(err);

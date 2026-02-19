@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Home,
@@ -18,6 +18,7 @@ import {
 import EmployeeHome from "@/components/EmployeeHome";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import AttendanceModule from "./AttendanceModule";
 import EmployeeTicketView from "@/components/EmployeeTicketView";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
@@ -37,6 +38,11 @@ export default function EmployeeDashboard() {
   const [activeTab, setActiveTab] = useState("home");
   const [searchParams] = useSearchParams();
   const userData = JSON.parse(localStorage.getItem("user"));
+  const [activeMeetingInfo, setActiveMeetingInfo] = useState(null);
+
+  const handleMeetingStateChange = useCallback((meeting) => {
+    setActiveMeetingInfo(meeting);
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("joinCode")) {
@@ -175,6 +181,21 @@ export default function EmployeeDashboard() {
       </nav>
 
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-zinc-950">
+        {/* Floating meeting bar — shown when in a meeting but on a different tab */}
+        {activeMeetingInfo && activeTab !== "meetings" && (
+          <FloatingMeetingBar
+            meetingTitle={activeMeetingInfo.title || "Untitled Meeting"}
+            isHost={!!activeMeetingInfo.isHost}
+            isMuted={!!activeMeetingInfo.isMuted}
+            isVideoOff={!!activeMeetingInfo.isVideoOff}
+            onToggleMute={activeMeetingInfo.toggleMute}
+            onToggleVideo={activeMeetingInfo.toggleVideo}
+            onLeaveMeeting={activeMeetingInfo.leaveMeeting}
+            onReturnToMeeting={() => setActiveTab("meetings")}
+            startedAt={activeMeetingInfo.started_at || activeMeetingInfo.scheduled_at}
+          />
+        )}
+
         {activeTab === "home" && <EmployeeHome onNavigate={setActiveTab} />}
         {activeTab === "messages" && <ChatInterface />}
 
@@ -207,7 +228,13 @@ export default function EmployeeDashboard() {
         )}
 
         {activeTab === "attendance" && <AttendanceModule />}
-        {activeTab === "meetings" && <MeetingModule />}
+
+        {/* MeetingModule is ALWAYS mounted — hidden via CSS when not on the meetings tab */}
+        <MeetingModule
+          isVisible={activeTab === "meetings"}
+          onMeetingStateChange={handleMeetingStateChange}
+        />
+
         {activeTab === "tickets" && (
           <div className="flex-1 p-4 overflow-hidden">
             <EmployeeTicketView />

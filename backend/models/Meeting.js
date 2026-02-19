@@ -60,6 +60,10 @@ const meetingSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    is_instant: {
+      type: Boolean,
+      default: false,
+    },
     country_restriction: {
       type: String,
       enum: ["germany", "india", "usa"],

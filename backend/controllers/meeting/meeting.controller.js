@@ -62,6 +62,7 @@ export const createMeeting = async (req, res) => {
       join_link,
       reminders,
       open_to_everyone,
+      is_instant: req.body.is_instant || false,
     });
 
     await meeting.save();
@@ -89,11 +90,28 @@ export const getMyMeetings = async (req, res) => {
     const userId = String(req.userId);
     const { from, to, status } = req.query;
 
-    // Auto-end meetings that are past their scheduled time + duration
+    // Auto-cancel scheduled meetings if 5 minutes have passed after the scheduled time
+    // and the host hasn't started them yet
     const now = new Date();
+    const fiveMinutesMs = 5 * 60 * 1000;
     await Meeting.updateMany(
       {
         status: "scheduled",
+        scheduled_at: { $ne: null },
+        $expr: {
+          $lt: [
+            { $add: ["$scheduled_at", fiveMinutesMs] },
+            now,
+          ],
+        },
+      },
+      { $set: { status: "cancelled" } }
+    );
+
+    // Auto-end active meetings that are past their scheduled time + duration
+    await Meeting.updateMany(
+      {
+        status: "active",
         scheduled_at: { $ne: null },
         $expr: {
           $lt: [
@@ -161,11 +179,32 @@ export const getMeetingByCode = async (req, res) => {
     const alreadyParticipant = meeting.participants.some(
       (p) => String(p) === userId
     );
-    // Only auto-add when open to everyone, or when host/admitted
+
+    // For scheduled (not yet active) meetings, only existing participants and host can access
+    if (meeting.status === "scheduled" && !isHost && !alreadyParticipant) {
+      return res.status(403).json({
+        error: "Only added participants can join this meeting.",
+      });
+    }
+
+    // For active/instant meetings, auto-add when open to everyone
     if (!isHost && !alreadyParticipant && meeting.status !== "ended") {
       if (meeting.open_to_everyone !== false) {
         meeting.participants.push(userId);
         await meeting.save();
+      } else if (meeting.is_instant) {
+        // Instant meeting with open_to_everyone=false: return meeting data
+        // without adding participant so the frontend can show the lobby
+        const populated = await Meeting.findById(meeting._id)
+          .populate("host_id", "first_name last_name email")
+          .populate("participants", "first_name last_name email")
+          .lean();
+        return res.json({ data: { ...populated, _lobbyOnly: true } });
+      } else {
+        // Scheduled meeting — block non-participants entirely
+        return res.status(403).json({
+          error: "Only added participants can join this meeting.",
+        });
       }
     }
 
@@ -223,6 +262,21 @@ export const updateMeeting = async (req, res) => {
 
     if (String(meeting.host_id) !== userId) {
       return res.status(403).json({ error: "Only the host can update this meeting" });
+    }
+
+    // Prevent starting a meeting before its scheduled time
+    if (
+      req.body.status === "active" &&
+      meeting.status !== "active" &&
+      meeting.scheduled_at
+    ) {
+      const now = new Date();
+      const scheduledTime = new Date(meeting.scheduled_at);
+      if (now < scheduledTime) {
+        return res.status(400).json({
+          error: `Cannot start meeting before its scheduled time (${scheduledTime.toLocaleString()})`,
+        });
+      }
     }
 
     const updatableFields = [
@@ -327,9 +381,32 @@ export const joinMeetingById = async (req, res) => {
       (p) => String(p) === userId
     );
 
+    // Non-host participants cannot join until the host has started the meeting
+    if (!isHost && meeting.status !== "active") {
+      return res.status(403).json({
+        error: "The host has not started this meeting yet. Please wait for the host to start.",
+      });
+    }
+
+    // For active meetings, auto-add if open_to_everyone; otherwise block non-participants
     if (!isHost && !alreadyParticipant) {
-      meeting.participants.push(userId);
-      await meeting.save();
+      if (meeting.open_to_everyone !== false) {
+        meeting.participants.push(userId);
+        await meeting.save();
+      } else if (meeting.is_instant) {
+        // Instant meeting with open_to_everyone=false: return meeting data
+        // without adding participant so the frontend can show the lobby
+        const populated = await Meeting.findById(meeting._id)
+          .populate("host_id", "first_name last_name email")
+          .populate("participants", "first_name last_name email")
+          .lean();
+        return res.json({ data: { ...populated, _lobbyOnly: true } });
+      } else {
+        // Scheduled meeting — block non-participants entirely
+        return res.status(403).json({
+          error: "Only added participants can join this meeting.",
+        });
+      }
     }
 
     const populated = await Meeting.findById(meeting._id)

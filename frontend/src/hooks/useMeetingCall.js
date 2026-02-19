@@ -39,7 +39,6 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   const iceCandidateBufferRef = useRef({});
   const remoteStreamsRef = useRef({});
   const remoteScreenStreamsRef = useRef({});
-  const recordingRecordersRef = useRef([]);
   const socketRef = useRef(socket);
   const meetingIdRef = useRef(meetingId);
 
@@ -614,89 +613,225 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     });
   }, [meetingId, roomParticipants, currentUserIdStr]);
 
-  // ---- Meeting recording (host only; call from UI) ----
+  // ---- Composite meeting recording (all participants in one video + mixed audio) ----
+  const canvasRef = useRef(null);
+  const canvasStreamRef = useRef(null);
+  const compositeRecorderRef = useRef(null);
+  const compositeChunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(null);
+  const recordingAnimFrameRef = useRef(null);
+
   const startRecording = useCallback((participants) => {
-    if (recordingRecordersRef.current.length > 0) return;
-    const startedAt = new Date();
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-      ? "video/webm;codecs=vp9,opus"
-      : "video/webm";
-    const recorders = [];
+    if (compositeRecorderRef.current) return;
 
-    const addRecorder = (stream, participantId, participantName, type) => {
-      if (!stream || stream.getTracks().length === 0) return;
-      try {
-        const recorder = new MediaRecorder(stream, { mimeType });
-        recorders.push({
-          recorder,
-          participantId,
-          participantName: participantName || "Unknown",
-          type,
-          startedAt: new Date(startedAt),
-        });
-      } catch (e) {
-        console.warn("[MEETING_CALL] MediaRecorder create failed:", e);
+    const CANVAS_W = 1280;
+    const CANVAS_H = 720;
+
+    // Create an offscreen canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+    canvasRef.current = canvas;
+    const ctx = canvas.getContext("2d");
+
+    // Hidden video elements for drawing frames
+    const videoElements = {};
+
+    const getOrCreateVideo = (stream, id) => {
+      if (videoElements[id] && videoElements[id].srcObject === stream) return videoElements[id];
+      const vid = document.createElement("video");
+      vid.srcObject = stream;
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.play().catch(() => {});
+      videoElements[id] = vid;
+      return vid;
+    };
+
+    // Draw loop
+    const draw = () => {
+      // Gather all streams: local + remotes
+      const streams = [];
+      if (localStreamRef.current) {
+        streams.push({ id: currentUserIdStr, stream: localStreamRef.current });
       }
+      const remoteIds = Object.keys(remoteStreamsRef.current);
+      for (const uid of remoteIds) {
+        const s = remoteStreamsRef.current[uid];
+        if (s && s.getVideoTracks().length > 0) {
+          streams.push({ id: uid, stream: s });
+        }
+      }
+
+      // Clear canvas
+      ctx.fillStyle = "#18181b";
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+      const count = streams.length || 1;
+      const cols = count <= 1 ? 1 : count <= 4 ? 2 : count <= 9 ? 3 : 4;
+      const rows = Math.ceil(count / cols);
+      const cellW = CANVAS_W / cols;
+      const cellH = CANVAS_H / rows;
+      const padding = 4;
+
+      streams.forEach((entry, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = col * cellW + padding;
+        const y = row * cellH + padding;
+        const w = cellW - padding * 2;
+        const h = cellH - padding * 2;
+
+        // Rounded rect background
+        ctx.fillStyle = "#27272a";
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 8);
+        ctx.fill();
+
+        const vid = getOrCreateVideo(entry.stream, entry.id);
+        if (vid.readyState >= 2 && vid.videoWidth > 0) {
+          // Maintain aspect ratio (cover)
+          const vw = vid.videoWidth;
+          const vh = vid.videoHeight;
+          const scale = Math.max(w / vw, h / vh);
+          const sw = w / scale;
+          const sh = h / scale;
+          const sx = (vw - sw) / 2;
+          const sy = (vh - sh) / 2;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(x, y, w, h, 8);
+          ctx.clip();
+          ctx.drawImage(vid, sx, sy, sw, sh, x, y, w, h);
+          ctx.restore();
+        }
+
+        // Name label
+        const participantsList = participants || [];
+        const p = participantsList.find((pp) => String(pp.userId) === String(entry.id));
+        const name = p?.name || (entry.id === currentUserIdStr ? "You" : "Participant");
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(x, y + h - 22, Math.min(ctx.measureText(name).width + 16, w), 22);
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(name, x + 8, y + h - 7);
+      });
+
+      recordingAnimFrameRef.current = requestAnimationFrame(draw);
     };
 
-    const participantsList = participants || [];
-    const getName = (userId) => {
-      const p = participantsList.find((x) => String(x.userId) === String(userId));
-      return p?.name || "Participant";
-    };
+    draw();
+
+    // Create canvas stream (video from canvas + mixed audio from all streams)
+    const canvasStream = canvas.captureStream(24); // 24fps
+    canvasStreamRef.current = canvasStream;
+
+    // Mix all audio tracks into one
+    const audioCtx = new AudioContext();
+    const destination = audioCtx.createMediaStreamDestination();
 
     if (localStreamRef.current) {
-      addRecorder(localStreamRef.current, currentUserIdStr, getName(currentUserIdStr), "video");
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const source = audioCtx.createMediaStreamSource(new MediaStream(audioTracks));
+        source.connect(destination);
+      }
     }
-    Object.keys(remoteStreamsRef.current).forEach((uid) => {
-      const stream = remoteStreamsRef.current[uid];
-      if (stream) addRecorder(stream, uid, getName(uid), "video");
-    });
-    Object.keys(remoteScreenStreamsRef.current).forEach((uid) => {
-      const stream = remoteScreenStreamsRef.current[uid];
-      if (stream) addRecorder(stream, uid, `${getName(uid)} (screen)`, "screen");
-    });
+    for (const uid of Object.keys(remoteStreamsRef.current)) {
+      const s = remoteStreamsRef.current[uid];
+      if (s) {
+        const audioTracks = s.getAudioTracks();
+        if (audioTracks.length > 0) {
+          const source = audioCtx.createMediaStreamSource(new MediaStream(audioTracks));
+          source.connect(destination);
+        }
+      }
+    }
 
-    recorders.forEach(({ recorder }) => recorder.start(1000));
-    recordingRecordersRef.current = recorders;
+    // Combine canvas video + mixed audio
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...destination.stream.getAudioTracks(),
+    ]);
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+      ? "video/webm;codecs=vp9,opus"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+        ? "video/webm;codecs=vp8,opus"
+        : "video/webm";
+
+    compositeChunksRef.current = [];
+    const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 2500000 });
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) compositeChunksRef.current.push(e.data);
+    };
+    recorder.start(1000);
+    compositeRecorderRef.current = recorder;
+    recordingStartedAtRef.current = new Date();
+    // Store audioCtx for cleanup
+    compositeRecorderRef.current._audioCtx = audioCtx;
+    compositeRecorderRef.current._videoElements = videoElements;
     setIsRecording(true);
   }, [currentUserIdStr]);
 
   const stopRecording = useCallback(() => {
-    const list = recordingRecordersRef.current;
-    recordingRecordersRef.current = [];
     setIsRecording(false);
-    if (list.length === 0) return Promise.resolve([]);
+    if (recordingAnimFrameRef.current) {
+      cancelAnimationFrame(recordingAnimFrameRef.current);
+      recordingAnimFrameRef.current = null;
+    }
 
-    const endedAt = new Date();
-    return Promise.all(
-      list.map(
-        ({ recorder, participantId, participantName, type, startedAt }) =>
-          new Promise((resolve) => {
-            const chunks = [];
-            recorder.ondataavailable = (e) => {
-              if (e.data && e.data.size > 0) chunks.push(e.data);
-            };
-            recorder.onstop = () => {
-              const blob = chunks.length ? new Blob(chunks, { type: recorder.mimeType }) : null;
-              resolve(
-                blob
-                  ? {
-                      blob,
-                      participantId,
-                      participantName,
-                      type: type === "screen" ? "screen" : "video",
-                      startedAt,
-                      endedAt,
-                    }
-                  : null
-              );
-            };
-            recorder.stop();
-          })
-      )
-    ).then((results) => results.filter(Boolean));
-  }, []);
+    const recorder = compositeRecorderRef.current;
+    compositeRecorderRef.current = null;
+
+    if (!recorder || recorder.state === "inactive") {
+      return Promise.resolve([]);
+    }
+
+    const startedAt = recordingStartedAtRef.current || new Date();
+    recordingStartedAtRef.current = null;
+
+    return new Promise((resolve) => {
+      recorder.onstop = () => {
+        const chunks = compositeChunksRef.current;
+        compositeChunksRef.current = [];
+
+        // Cleanup
+        if (recorder._audioCtx) {
+          try { recorder._audioCtx.close(); } catch (_) {}
+        }
+        if (recorder._videoElements) {
+          Object.values(recorder._videoElements).forEach((v) => {
+            v.srcObject = null;
+          });
+        }
+        if (canvasStreamRef.current) {
+          canvasStreamRef.current.getTracks().forEach((t) => t.stop());
+          canvasStreamRef.current = null;
+        }
+        canvasRef.current = null;
+
+        if (chunks.length === 0) {
+          resolve([]);
+          return;
+        }
+
+        const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+        resolve([
+          {
+            blob,
+            participantId: currentUserIdStr || "composite",
+            participantName: "Meeting Recording",
+            type: "video",
+            startedAt,
+            endedAt: new Date(),
+          },
+        ]);
+      };
+      recorder.stop();
+    });
+  }, [currentUserIdStr]);
 
   return {
     localStream,

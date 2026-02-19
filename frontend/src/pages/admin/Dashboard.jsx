@@ -10,6 +10,7 @@ import {
   Clock,
   Briefcase,
   TrendingUp,
+  Calendar,
 } from "lucide-react";
 import axios from "axios";
 import { BACKEND_URL } from "../../../config";
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
   const [stats, setStats] = useState({ messagesToday: 0, activeMeetings: 0 });
+  const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const adminToken = localStorage.getItem("token");
 
   const activeEmployeesList = employees
@@ -83,6 +85,7 @@ export default function Dashboard() {
   useEffect(() => {
     loadEmployees();
     loadStats();
+    loadUpcomingMeetings();
   }, []);
 
   const loadEmployees = async () => {
@@ -106,6 +109,24 @@ export default function Dashboard() {
       setStats(res.data);
     } catch (error) {
       console.error("Error loading stats:", error);
+    }
+  };
+
+  const loadUpcomingMeetings = async () => {
+    try {
+      const res = await axios.get(`${BACKEND_URL}/meetings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const now = new Date();
+      const upcoming = (res.data.data || [])
+        .filter(
+          (m) => m.status === "scheduled" && new Date(m.scheduled_at) > now
+        )
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
+        .slice(0, 5);
+      setUpcomingMeetings(upcoming);
+    } catch {
+      // silently fail
     }
   };
 
@@ -389,6 +410,71 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Upcoming Meetings */}
+          <Card className="bg-zinc-900/80 border-zinc-800/80">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Calendar className="size-4 text-violet-400" />
+                Upcoming Meetings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {upcomingMeetings.length === 0 ? (
+                <div className="text-center py-8">
+                  <Video className="size-8 text-zinc-700 mx-auto mb-2" />
+                  <p className="text-sm text-zinc-500">No upcoming meetings</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {upcomingMeetings.map((m) => {
+                    const d = new Date(m.scheduled_at);
+                    const hostName = m.host_id?.first_name
+                      ? `${m.host_id.first_name} ${m.host_id.last_name || ""}`.trim()
+                      : "Unknown";
+                    return (
+                      <div
+                        key={m._id}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30 hover:bg-zinc-800 transition-colors"
+                      >
+                        <div className="size-9 rounded-lg bg-violet-500/10 flex items-center justify-center flex-shrink-0">
+                          <Video className="size-4 text-violet-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-zinc-200 truncate">
+                            {m.title}
+                          </p>
+                          <p className="text-[11px] text-zinc-500">
+                            {d.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            at{" "}
+                            {d.toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                            {m.duration_minutes
+                              ? ` · ${m.duration_minutes}min`
+                              : ""}
+                          </p>
+                          <p className="text-[10px] text-zinc-600 mt-0.5">
+                            Host: {hostName}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-emerald-500/20 text-emerald-400 flex-shrink-0"
+                        >
+                          Upcoming
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

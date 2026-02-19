@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Users,
@@ -28,6 +28,7 @@ import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import TicketManagement from "./TicketManagement";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,7 +38,12 @@ export default function AdminDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeMeetingInfo, setActiveMeetingInfo] = useState(null);
   const navigate = useNavigate();
+
+  const handleMeetingStateChange = useCallback((meeting) => {
+    setActiveMeetingInfo(meeting);
+  }, []);
   const [searchParams] = useSearchParams();
 
   const adminData = useMemo(() => {
@@ -97,8 +103,6 @@ export default function AdminDashboard() {
         return <DepartmentManagement />;
       case "messages":
         return <ChatInterface />;
-      case "meetings":
-        return <MeetingModule />;
       case "attendance":
         return <AttendanceDashboard />;
       case "tickets":
@@ -299,7 +303,28 @@ export default function AdminDashboard() {
           )}
 
           <main className="flex-1 flex flex-col min-h-0 overflow-auto bg-zinc-950/50">
-            {renderPageContent()}
+            {/* Floating meeting bar */}
+            {activeMeetingInfo && currentPage !== "meetings" && (
+              <FloatingMeetingBar
+                meetingTitle={activeMeetingInfo.title || "Untitled Meeting"}
+                isHost={!!activeMeetingInfo.isHost}
+                isMuted={!!activeMeetingInfo.isMuted}
+                isVideoOff={!!activeMeetingInfo.isVideoOff}
+                onToggleMute={activeMeetingInfo.toggleMute}
+                onToggleVideo={activeMeetingInfo.toggleVideo}
+                onLeaveMeeting={activeMeetingInfo.leaveMeeting}
+                onReturnToMeeting={() => handleNavigation("meetings")}
+                startedAt={activeMeetingInfo.started_at || activeMeetingInfo.scheduled_at}
+              />
+            )}
+
+            {currentPage !== "meetings" && renderPageContent()}
+
+            {/* MeetingModule is ALWAYS mounted — hidden via CSS when not on the meetings tab */}
+            <MeetingModule
+              isVisible={currentPage === "meetings"}
+              onMeetingStateChange={handleMeetingStateChange}
+            />
           </main>
         </div>
       </div>
