@@ -18,6 +18,7 @@ import {
   X,
   GitBranchPlus,
   Crown,
+  RefreshCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -216,6 +217,7 @@ export default function DepartmentManagement() {
   const [employees, setEmployees] = useState([]);
   const [orgTree, setOrgTree] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [treeLoading, setTreeLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("list"); // "list" | "tree"
@@ -281,6 +283,12 @@ export default function DepartmentManagement() {
     fetchDepartments();
     fetchEmployees();
   }, [fetchDepartments, fetchEmployees]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDepartments(), fetchEmployees()]);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     if (viewMode === "tree") fetchOrgTree();
@@ -454,6 +462,16 @@ export default function DepartmentManagement() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-1.5 text-xs h-8"
+          >
+            <RefreshCcw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
           {/* View toggle */}
           <div className="flex items-center bg-zinc-800/60 border border-zinc-700/60 rounded-lg p-0.5">
             <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import MeetingModule from "@/components/MeetingModule";
 import {
   Plus,
   Send,
@@ -14,6 +15,13 @@ import {
   ChevronLeft,
   HeadphonesIcon,
   User,
+  RefreshCcw,
+  Paperclip,
+  FileText,
+  Download,
+  Video,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BACKEND_URL } from "../../../config";
@@ -37,9 +45,62 @@ const priorityColors = {
   critical: "bg-red-100 text-red-700",
 };
 
+function isImageUrl(url) {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url) || url.includes("/image/upload/");
+}
+
+function MeetingCard({ meta, onJoin }) {
+  let data;
+  try { data = JSON.parse(meta); } catch { return null; }
+  const date = data.scheduled_at ? new Date(data.scheduled_at) : null;
+  return (
+    <div className="border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 rounded-xl p-3 max-w-[300px] w-full">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center flex-shrink-0">
+          <Video className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
+        </div>
+        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Support Meeting Scheduled</span>
+      </div>
+      <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-1">{data.title}</p>
+      {date && (
+        <p className="text-xs text-muted-foreground mb-1">
+          {date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+          {data.duration ? ` · ${data.duration} min` : ""}
+        </p>
+      )}
+      <div className="flex items-center gap-2 mt-2">
+        <code className="text-xs bg-white dark:bg-zinc-800 border px-2 py-0.5 rounded font-mono tracking-wider">
+          {data.code}
+        </code>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px] px-2"
+          onClick={() => {
+            navigator.clipboard.writeText(data.code);
+            toast.success("Meeting code copied!");
+          }}
+        >
+          Copy
+        </Button>
+        <Button
+          size="sm"
+          className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
+          onClick={() => onJoin?.(data.code)}
+        >
+          Join
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, socket } = useAuthContext();
+  const [showMeeting, setShowMeeting] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -48,13 +109,15 @@ export default function CustomerDashboard() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [ticketForm, setTicketForm] = useState({
     title: "",
     description: "",
-    priority: "medium",
     category: "",
   });
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -82,7 +145,6 @@ export default function CustomerDashboard() {
     fetchTickets();
   }, [fetchTickets]);
 
-  // Socket: join ticket room when selected
   useEffect(() => {
     if (!socket || !selectedTicket) return;
     socket.emit("ticket-join", { ticketId: selectedTicket._id });
@@ -91,7 +153,6 @@ export default function CustomerDashboard() {
     };
   }, [socket, selectedTicket?._id]);
 
-  // Socket: listen for new messages
   useEffect(() => {
     if (!socket) return;
     const handler = ({ ticketId, message }) => {
@@ -122,7 +183,7 @@ export default function CustomerDashboard() {
     try {
       const res = await axios.post(`${BACKEND_URL}/tickets`, ticketForm, { headers });
       toast.success("Ticket created successfully");
-      setTicketForm({ title: "", description: "", priority: "medium", category: "" });
+      setTicketForm({ title: "", description: "", category: "" });
       setShowCreateForm(false);
       fetchTickets();
       setSelectedTicket(res.data.ticket);
@@ -144,7 +205,6 @@ export default function CustomerDashboard() {
         { content: newMessage.trim() },
         { headers }
       );
-      // Emit via socket
       socket?.emit("ticket-message", {
         ticketId: selectedTicket._id,
         message: res.data.message,
@@ -161,6 +221,40 @@ export default function CustomerDashboard() {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTicket) return;
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(
+        `${BACKEND_URL}/tickets/${selectedTicket._id}/messages/upload`,
+        formData,
+        { headers: { ...headers, "Content-Type": "multipart/form-data" } }
+      );
+      socket?.emit("ticket-message", {
+        ticketId: selectedTicket._id,
+        message: res.data.message,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m._id === res.data.message._id)) return prev;
+        return [...prev, res.data.message];
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  useEffect(() => {
+    if (searchParams.get("joinCode")) {
+      setShowMeeting(true);
+    }
+  }, [searchParams]);
+
   const handleLogout = () => {
     localStorage.removeItem("customerData");
     localStorage.removeItem("token");
@@ -168,6 +262,30 @@ export default function CustomerDashboard() {
   };
 
   const userId = user?.id || user?._id;
+
+  const visibleTickets = showResolved
+    ? tickets
+    : tickets.filter((t) => t.status !== "resolved" && t.status !== "closed");
+
+  const resolvedCount = tickets.filter(
+    (t) => t.status === "resolved" || t.status === "closed"
+  ).length;
+
+  if (showMeeting) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        <div className="h-12 border-b flex items-center px-4 gap-3 bg-white dark:bg-zinc-950 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => { setShowMeeting(false); navigate("/customer/dashboard", { replace: true }); }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back to Support
+          </Button>
+          <span className="text-sm font-medium text-muted-foreground">Support Meeting</span>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <MeetingModule />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -190,22 +308,49 @@ export default function CustomerDashboard() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Ticket List */}
+        {/* Sidebar */}
         <div className="w-80 border-r flex flex-col bg-white dark:bg-zinc-950 flex-shrink-0">
           <div className="p-3 border-b flex items-center justify-between">
-            <h2 className="font-semibold text-sm">My Tickets</h2>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setShowCreateForm(true);
-                setSelectedTicket(null);
-              }}
-              className="gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-semibold text-sm">My Tickets</h2>
+              {resolvedCount > 0 && (
+                <button
+                  onClick={() => setShowResolved((v) => !v)}
+                  title={showResolved ? "Hide resolved" : `Show ${resolvedCount} resolved`}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showResolved ? (
+                    <EyeOff className="h-3 w-3" />
+                  ) : (
+                    <Eye className="h-3 w-3" />
+                  )}
+                  {!showResolved && resolvedCount}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={fetchTickets}
+                className="h-7 w-7 p-0"
+                title="Refresh tickets"
+              >
+                <RefreshCcw className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowCreateForm(true);
+                  setSelectedTicket(null);
+                }}
+                className="gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -213,16 +358,20 @@ export default function CustomerDashboard() {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : tickets.length === 0 ? (
+            ) : visibleTickets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                 <Ticket className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No tickets yet</p>
+                <p className="text-sm text-muted-foreground">
+                  {tickets.length === 0 ? "No tickets yet" : "No active tickets"}
+                </p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  Create your first support ticket
+                  {tickets.length === 0
+                    ? "Create your first support ticket"
+                    : "All tickets are resolved"}
                 </p>
               </div>
             ) : (
-              tickets.map((ticket) => (
+              visibleTickets.map((ticket) => (
                 <div
                   key={ticket._id}
                   onClick={() => handleSelectTicket(ticket)}
@@ -231,9 +380,7 @@ export default function CustomerDashboard() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-medium text-sm truncate flex-1">
-                      {ticket.title}
-                    </h3>
+                    <h3 className="font-medium text-sm truncate flex-1">{ticket.title}</h3>
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${
                         statusColors[ticket.status]
@@ -272,7 +419,6 @@ export default function CustomerDashboard() {
         {/* Main Content */}
         <div className="flex-1 flex flex-col">
           {showCreateForm ? (
-            /* Create Ticket Form */
             <div className="flex-1 flex items-start justify-center p-8 overflow-y-auto">
               <div className="w-full max-w-lg">
                 <h2 className="text-xl font-bold mb-6">Create Support Ticket</h2>
@@ -289,7 +435,6 @@ export default function CustomerDashboard() {
                       required
                     />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
                     <textarea
@@ -304,38 +449,17 @@ export default function CustomerDashboard() {
                       className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="priority">Priority</Label>
-                      <select
-                        id="priority"
-                        value={ticketForm.priority}
-                        onChange={(e) =>
-                          setTicketForm({ ...ticketForm, priority: e.target.value })
-                        }
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category</Label>
-                      <Input
-                        id="category"
-                        placeholder="e.g. Billing, Technical"
-                        value={ticketForm.category}
-                        onChange={(e) =>
-                          setTicketForm({ ...ticketForm, category: e.target.value })
-                        }
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Input
+                      id="category"
+                      placeholder="e.g. Billing, Technical"
+                      value={ticketForm.category}
+                      onChange={(e) =>
+                        setTicketForm({ ...ticketForm, category: e.target.value })
+                      }
+                    />
                   </div>
-
                   <div className="flex gap-3 pt-2">
                     <Button
                       type="button"
@@ -360,7 +484,6 @@ export default function CustomerDashboard() {
               </div>
             </div>
           ) : selectedTicket ? (
-            /* Ticket Chat View */
             <>
               {/* Ticket Header */}
               <div className="h-14 border-b flex items-center gap-3 px-4 flex-shrink-0 bg-white dark:bg-zinc-950">
@@ -373,9 +496,7 @@ export default function CustomerDashboard() {
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm truncate">
-                    {selectedTicket.title}
-                  </h3>
+                  <h3 className="font-semibold text-sm truncate">{selectedTicket.title}</h3>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">
                       {selectedTicket.ticket_number}
@@ -428,7 +549,82 @@ export default function CustomerDashboard() {
                       </div>
                     );
                   }
+
+                  if (msg.message_type === "meeting") {
+                    return (
+                      <div key={msg._id} className="flex justify-center my-2">
+                        <MeetingCard
+                          meta={msg.content}
+                          onJoin={(code) => navigate(`/customer/dashboard?joinCode=${encodeURIComponent(code)}`)}
+                        />
+                      </div>
+                    );
+                  }
+
                   const isMe = msg.sender_id?._id === userId || msg.sender_id === userId;
+
+                  if (msg.message_type === "file") {
+                    const isImage = isImageUrl(msg.file_url);
+                    return (
+                      <div
+                        key={msg._id}
+                        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-[70%] rounded-2xl overflow-hidden border ${
+                            isMe ? "border-blue-400" : "border-gray-200 dark:border-zinc-700"
+                          }`}
+                        >
+                          {!isMe && msg.sender_id?.first_name && (
+                            <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400 px-3 pt-2">
+                              {msg.sender_id.first_name} {msg.sender_id.last_name}
+                              {msg.sender_id.user_type === "employee" && " (Agent)"}
+                            </p>
+                          )}
+                          {isImage ? (
+                            <img
+                              src={msg.file_url}
+                              alt={msg.file_name}
+                              className="max-w-full max-h-48 object-cover cursor-pointer"
+                              onClick={() => window.open(msg.file_url, "_blank")}
+                            />
+                          ) : (
+                            <div
+                              className={`flex items-center gap-3 px-3 py-2 ${
+                                isMe
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-white dark:bg-zinc-800"
+                              }`}
+                            >
+                              <FileText className="h-5 w-5 flex-shrink-0" />
+                              <span className="text-sm truncate max-w-[160px]">
+                                {msg.file_name}
+                              </span>
+                              <a
+                                href={msg.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download={msg.file_name}
+                              >
+                                <Download className="h-4 w-4" />
+                              </a>
+                            </div>
+                          )}
+                          <p
+                            className={`text-[10px] px-3 pb-1.5 ${
+                              isMe ? "text-blue-200 bg-blue-600" : "text-muted-foreground bg-white dark:bg-zinc-800"
+                            }`}
+                          >
+                            {new Date(msg.created_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={msg._id}
@@ -474,6 +670,28 @@ export default function CustomerDashboard() {
                   onSubmit={handleSendMessage}
                   className="p-3 border-t flex gap-2 bg-white dark:bg-zinc-950"
                 >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                    onChange={handleFileUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 flex-shrink-0"
+                    disabled={uploadingFile}
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach file"
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="h-4 w-4" />
+                    )}
+                  </Button>
                   <Input
                     placeholder="Type your message..."
                     value={newMessage}
@@ -497,9 +715,7 @@ export default function CustomerDashboard() {
                 <div className="p-4 border-t bg-yellow-50 dark:bg-yellow-900/20 text-center">
                   <div className="flex items-center justify-center gap-2 text-yellow-700 dark:text-yellow-400">
                     <Clock className="h-4 w-4" />
-                    <p className="text-sm">
-                      Waiting for an agent to be assigned...
-                    </p>
+                    <p className="text-sm">Waiting for an agent to be assigned...</p>
                   </div>
                 </div>
               ) : (
@@ -512,13 +728,11 @@ export default function CustomerDashboard() {
               )}
             </>
           ) : (
-            /* Empty State */
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <MessageCircle className="h-16 w-16 text-muted-foreground/20 mb-4" />
               <h3 className="font-semibold text-lg">Welcome to Support</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Select a ticket to view the conversation, or create a new ticket
-                to get help.
+                Select a ticket to view the conversation, or create a new ticket to get help.
               </p>
               <Button
                 className="mt-6 bg-blue-600 hover:bg-blue-700 gap-2"

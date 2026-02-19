@@ -19,6 +19,7 @@ export default function JoinMeetingPage() {
     const token = localStorage.getItem("token");
     const adminData = localStorage.getItem("adminData");
     const userData = localStorage.getItem("user");
+    const customerData = localStorage.getItem("customerData");
 
     if (!token) {
       navigate(`/login?returnTo=/join/${code}`);
@@ -32,6 +33,8 @@ export default function JoinMeetingPage() {
       navigate(`/adminDashboard${joinParam}`, { replace: true });
     } else if (userData) {
       navigate(`/${joinParam}`, { replace: true });
+    } else if (customerData) {
+      navigate(`/customer/dashboard${joinParam}`, { replace: true });
     } else {
       navigate("/");
     }

@@ -18,8 +18,14 @@ const ticketMessageSchema = new Schema(
     },
     message_type: {
       type: String,
-      enum: ["text", "system"],
+      enum: ["text", "system", "file", "meeting"],
       default: "text",
+    },
+    file_url: {
+      type: String,
+    },
+    file_name: {
+      type: String,
     },
   },
   {

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  RefreshCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ export default function EmployeeManagement() {
   const [employees, setEmployees] = useState([]);
   const [teamLeads, setTeamLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("all");
@@ -224,6 +226,12 @@ export default function EmployeeManagement() {
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchEmployees();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     fetchTeamLeads();
@@ -453,6 +461,16 @@ export default function EmployeeManagement() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-1.5 text-xs h-8"
+          >
+            <RefreshCcw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
           <Badge variant="secondary">
             {totalEmployees} employee{totalEmployees !== 1 ? "s" : ""}
           </Badge>

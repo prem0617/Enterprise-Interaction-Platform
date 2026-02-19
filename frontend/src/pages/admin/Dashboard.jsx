@@ -11,6 +11,7 @@ import {
   Briefcase,
   TrendingUp,
   Calendar,
+  RefreshCcw,
 } from "lucide-react";
 import axios from "axios";
 import { BACKEND_URL } from "../../../config";
@@ -18,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 const DEPT_COLORS = {
   frontend: "from-blue-500/20 to-blue-600/5 text-blue-400 border-blue-500/20",
@@ -32,10 +34,17 @@ const DEPT_COLORS = {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [stats, setStats] = useState({ messagesToday: 0, activeMeetings: 0 });
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const adminToken = localStorage.getItem("token");
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadEmployees(), loadStats()]);
+    setRefreshing(false);
+  };
 
   const activeEmployeesList = employees
     .filter((employee) => employee.is_active)
@@ -200,14 +209,26 @@ export default function Dashboard() {
             Here&apos;s what&apos;s happening across your organization today.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="size-3.5" />
-          {new Date().toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          })}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="size-3.5" />
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-1.5 text-xs h-8"
+          >
+            <RefreshCcw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
       </div>
 

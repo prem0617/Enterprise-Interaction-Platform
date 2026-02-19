@@ -16,6 +16,12 @@ const supportTicketSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Employee",
     },
+    collaborators: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Employee",
+      },
+    ],
     title: {
       type: String,
       required: true,

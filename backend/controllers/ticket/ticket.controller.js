@@ -3,6 +3,7 @@ import { Customer } from "../../models/Customer.js";
 import { TicketMessage } from "../../models/TicketMessage.js";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import Meeting from "../../models/Meeting.js";
 
 // Generate unique ticket number
 function generateTicketNumber() {
@@ -15,7 +16,7 @@ function generateTicketNumber() {
 // Create a new ticket (customer)
 export const createTicket = async (req, res) => {
   try {
-    const { title, description, priority, category, country } = req.body;
+    const { title, description, category, country } = req.body;
     const userId = req.user._id;
 
     const customer = await Customer.findOne({ user_id: userId });
@@ -28,7 +29,7 @@ export const createTicket = async (req, res) => {
       customer_id: customer._id,
       title,
       description,
-      priority: priority || "medium",
+      priority: "medium",
       category,
       country: country || req.user.country,
       status: "pending",
@@ -208,10 +209,31 @@ export const updateTicketStatus = async (req, res) => {
   }
 };
 
-// Get internal_team employees for assignment (admin)
+// Update ticket priority (admin)
+export const updateTicketPriority = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { priority } = req.body;
+
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    ticket.priority = priority;
+    await ticket.save();
+
+    res.json({ message: "Ticket priority updated", ticket });
+  } catch (error) {
+    console.error("Update ticket priority error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get customer_support employees for ticket assignment (admin)
 export const getInternalEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find({ employee_type: "internal_team", is_active: true })
+    const employees = await Employee.find({ employee_type: "customer_support", is_active: true })
       .populate("user_id", "first_name last_name email");
 
     res.json({ employees });
@@ -221,7 +243,72 @@ export const getInternalEmployees = async (req, res) => {
   }
 };
 
-// Get tickets assigned to current employee
+// Get all active employees for collaborator selection (assigned agent)
+export const getAllEmployees = async (req, res) => {
+  try {
+    const employees = await Employee.find({ is_active: true })
+      .populate("user_id", "first_name last_name email");
+
+    res.json({ employees });
+  } catch (error) {
+    console.error("Get all employees error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Add a collaborator to a ticket (assigned customer_support agent only)
+export const addCollaborator = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { employee_id } = req.body;
+    const userId = req.user._id;
+
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    // Only the assigned agent can add collaborators
+    const requestingEmployee = await Employee.findOne({ user_id: userId });
+    if (
+      !requestingEmployee ||
+      ticket.assigned_agent_id?.toString() !== requestingEmployee._id.toString()
+    ) {
+      return res.status(403).json({ error: "Only the assigned agent can add collaborators" });
+    }
+
+    const collaborator = await Employee.findById(employee_id).populate(
+      "user_id",
+      "first_name last_name"
+    );
+    if (!collaborator) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    // Avoid duplicates
+    if (ticket.collaborators.some((c) => c.toString() === employee_id)) {
+      return res.status(400).json({ error: "Employee is already a collaborator" });
+    }
+
+    ticket.collaborators.push(employee_id);
+    await ticket.save();
+
+    const collabName = `${collaborator.user_id.first_name} ${collaborator.user_id.last_name}`;
+    await TicketMessage.create({
+      ticket_id: ticket._id,
+      sender_id: userId,
+      content: `${collabName} was added as a collaborator.`,
+      message_type: "system",
+    });
+
+    res.json({ message: "Collaborator added successfully", ticket });
+  } catch (error) {
+    console.error("Add collaborator error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get tickets assigned to or collaborated on by current employee
 export const getAssignedTickets = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -230,10 +317,23 @@ export const getAssignedTickets = async (req, res) => {
       return res.status(404).json({ error: "Employee profile not found" });
     }
 
-    const tickets = await SupportTicket.find({ assigned_agent_id: employee._id })
+    const tickets = await SupportTicket.find({
+      $or: [
+        { assigned_agent_id: employee._id },
+        { collaborators: employee._id },
+      ],
+    })
       .populate({
         path: "customer_id",
         populate: { path: "user_id", select: "first_name last_name email" },
+      })
+      .populate({
+        path: "assigned_agent_id",
+        populate: { path: "user_id", select: "first_name last_name" },
+      })
+      .populate({
+        path: "collaborators",
+        populate: { path: "user_id", select: "first_name last_name" },
       })
       .sort({ created_at: -1 });
 
@@ -262,9 +362,12 @@ export const sendTicketMessage = async (req, res) => {
     const isAdmin = req.user.user_type === "admin";
 
     const isCustomerOwner = customer && ticket.customer_id.toString() === customer._id.toString();
-    const isAssignedAgent = employee && ticket.assigned_agent_id?.toString() === employee._id.toString();
+    const isAssignedAgent =
+      employee && ticket.assigned_agent_id?.toString() === employee._id.toString();
+    const isCollaborator =
+      employee && ticket.collaborators.some((c) => c.toString() === employee._id.toString());
 
-    if (!isCustomerOwner && !isAssignedAgent && !isAdmin) {
+    if (!isCustomerOwner && !isAssignedAgent && !isCollaborator && !isAdmin) {
       return res.status(403).json({ error: "Not authorized to send messages in this ticket" });
     }
 
@@ -305,6 +408,120 @@ export const getTicketMessages = async (req, res) => {
     res.json({ messages });
   } catch (error) {
     console.error("Get ticket messages error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Upload file in ticket chat
+export const uploadTicketFile = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user._id;
+
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    const message = await TicketMessage.create({
+      ticket_id: ticketId,
+      sender_id: userId,
+      content: req.file.originalname,
+      file_url: req.file.path,
+      file_name: req.file.originalname,
+      message_type: "file",
+    });
+
+    const populated = await TicketMessage.findById(message._id).populate(
+      "sender_id",
+      "first_name last_name user_type profile_picture"
+    );
+
+    res.status(201).json({ message: populated });
+  } catch (error) {
+    console.error("Upload ticket file error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Schedule a support meeting from a ticket (assigned agent / collaborator / admin)
+export const scheduleMeetingFromTicket = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { title, scheduled_at, duration_minutes = 30 } = req.body;
+    const userId = req.user._id;
+
+    const ticket = await SupportTicket.findById(ticketId).populate({
+      path: "customer_id",
+      populate: { path: "user_id", select: "_id first_name last_name" },
+    });
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    const employee = await Employee.findOne({ user_id: userId });
+    const isAssigned =
+      employee && ticket.assigned_agent_id?.toString() === employee._id.toString();
+    const isCollab =
+      employee &&
+      ticket.collaborators.some((c) => c.toString() === employee._id.toString());
+    const isAdmin = req.user.user_type === "admin";
+
+    if (!isAssigned && !isCollab && !isAdmin) {
+      return res.status(403).json({ error: "Not authorized to schedule meetings" });
+    }
+
+    // Generate unique meeting code
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let meetingCode;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = Array.from({ length: 8 }, () =>
+        alphabet[Math.floor(Math.random() * alphabet.length)]
+      ).join("");
+      const existing = await Meeting.findOne({ meeting_code: candidate });
+      if (!existing) { meetingCode = candidate; break; }
+    }
+    if (!meetingCode) meetingCode = `MTG-${Date.now()}`;
+
+    const customerUserId = ticket.customer_id?.user_id?._id;
+    const participants = customerUserId ? [customerUserId] : [];
+
+    const meetingTitle = title || `Support: ${ticket.ticket_number}`;
+    const scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
+
+    const meeting = await Meeting.create({
+      meeting_code: meetingCode,
+      title: meetingTitle,
+      host_id: userId,
+      meeting_type: "support",
+      scheduled_at: scheduledDate,
+      duration_minutes,
+      participants,
+      recording_enabled: false,
+      open_to_everyone: false,
+    });
+
+    // Post meeting system message in ticket chat
+    const meetingMeta = JSON.stringify({
+      code: meetingCode,
+      title: meetingTitle,
+      scheduled_at: scheduledDate.toISOString(),
+      duration: duration_minutes,
+    });
+
+    const sysMsg = await TicketMessage.create({
+      ticket_id: ticketId,
+      sender_id: userId,
+      content: meetingMeta,
+      message_type: "meeting",
+    });
+
+    const populatedMsg = await TicketMessage.findById(sysMsg._id).populate(
+      "sender_id",
+      "first_name last_name user_type profile_picture"
+    );
+
+    res.status(201).json({ meeting, message: populatedMsg });
+  } catch (error) {
+    console.error("Schedule meeting from ticket error:", error);
     res.status(500).json({ error: error.message });
   }
 };

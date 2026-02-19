@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ExternalLink,
   X,
+  RefreshCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BACKEND_URL } from "../../../config";
@@ -34,6 +35,7 @@ export default function TicketManagement() {
   const [tickets, setTickets] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [assignModal, setAssignModal] = useState(null); // ticketId
@@ -92,6 +94,26 @@ export default function TicketManagement() {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchTickets(), fetchEmployees()]);
+    setRefreshing(false);
+  };
+
+  const handlePriorityChange = async (ticketId, newPriority) => {
+    try {
+      await axios.put(
+        `${BACKEND_URL}/tickets/${ticketId}/priority`,
+        { priority: newPriority },
+        { headers }
+      );
+      toast.success(`Ticket priority updated to ${newPriority}`);
+      fetchTickets();
+    } catch (err) {
+      toast.error("Failed to update priority");
+    }
+  };
+
   const handleStatusChange = async (ticketId, newStatus) => {
     try {
       await axios.put(
@@ -127,9 +149,21 @@ export default function TicketManagement() {
             Manage and assign customer support tickets
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Ticket className="h-4 w-4" />
-          {tickets.length} total tickets
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Ticket className="h-4 w-4" />
+            {tickets.length} total tickets
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-1.5 text-xs h-8"
+          >
+            <RefreshCcw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
       </div>
 
@@ -213,13 +247,20 @@ export default function TicketManagement() {
                       )}
                     </td>
                     <td className="p-3">
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      <select
+                        value={ticket.priority || "medium"}
+                        onChange={(e) =>
+                          handlePriorityChange(ticket._id, e.target.value)
+                        }
+                        className={`text-xs px-2 py-1 rounded-full font-medium border-0 cursor-pointer ${
                           priorityColors[ticket.priority]
                         }`}
                       >
-                        {ticket.priority}
-                      </span>
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="critical">critical</option>
+                      </select>
                     </td>
                     <td className="p-3">
                       <select
