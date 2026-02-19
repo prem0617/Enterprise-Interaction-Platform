@@ -53,15 +53,6 @@ const STATUS_COLORS = {
   ended: "#a1a1aa",
   cancelled: "#ef4444",
 };
-const DEPT_COLORS = {
-  frontend: "#6366f1",
-  backend: "#8b5cf6",
-  devops: "#06b6d4",
-  qa: "#f59e0b",
-  hr: "#ec4899",
-  finance: "#10b981",
-  customer_support: "#f97316",
-};
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -380,12 +371,7 @@ export default function AnalyticsDashboard() {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={departmentStats.map((d) => ({
-                  ...d,
-                  department:
-                    d.department.charAt(0).toUpperCase() +
-                    d.department.slice(1).replace("_", " "),
-                }))}
+                data={departmentStats}
                 barGap={4}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
@@ -614,7 +600,7 @@ export default function AnalyticsDashboard() {
                       </p>
                       <p className="text-[10px] text-muted-foreground truncate">
                         {u.department
-                          ? `${u.department} · ${u.position || ""}`
+                          ? `${u.department?.name || "—"} · ${u.position || ""}`
                           : u.email}
                       </p>
                     </div>
@@ -697,12 +683,12 @@ export default function AnalyticsDashboard() {
                             className="text-[10px]"
                             style={{
                               borderColor:
-                                DEPT_COLORS[emp.department] || "#52525b",
+                                emp.department?.color || "#52525b",
                               color:
-                                DEPT_COLORS[emp.department] || "#a1a1aa",
+                                emp.department?.color || "#a1a1aa",
                             }}
                           >
-                            {emp.department?.replace("_", " ")}
+                            {emp.department?.name || "—"}
                           </Badge>
                         </td>
                         <td className="py-2 px-2 text-center tabular-nums">

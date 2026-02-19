@@ -813,7 +813,7 @@ export default function EmployeeTicketView() {
                 {allEmployees.map((emp) => (
                   <option key={emp._id} value={emp._id}>
                     {emp.user_id?.first_name} {emp.user_id?.last_name} —{" "}
-                    {emp.department} (
+                    {emp.department?.name || "N/A"} (
                     {emp.employee_type === "customer_support"
                       ? "Support"
                       : emp.position || "N/A"}

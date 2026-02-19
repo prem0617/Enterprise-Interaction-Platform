@@ -1285,7 +1285,7 @@ const ChatInterface = () => {
     return {
       name: chat.name || "Group Chat",
       subtitle: `${chat.member_count || 0} members${
-        chat.department ? ` \u00B7 ${chat.department}` : ""
+        chat.department ? ` \u00B7 ${chat.department?.name || ""}` : ""
       }`,
       initials: chat.name?.[0] || "G",
       isGroup: true,
@@ -1537,7 +1537,7 @@ const ChatInterface = () => {
                   {selectedChat.channel_type === "group"
                     ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${
                         selectedChat.department
-                          ? ` · ${selectedChat.department}`
+                          ? ` · ${selectedChat.department?.name || ""}`
                           : ""
                       }`}</span>
                     : isUserOnline(selectedChat.other_user?._id)

@@ -16,6 +16,7 @@ import {
   CalendarCheck,
   Building2,
   Ticket,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
@@ -26,6 +27,7 @@ import AttendanceDashboard from "./AttendanceDashboard";
 import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import TicketManagement from "./TicketManagement";
+import RoleManagement from "./RoleManagement";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
@@ -89,6 +91,7 @@ export default function AdminDashboard() {
     { id: "meetings", icon: Video, label: "Meetings" },
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
     { id: "tickets", icon: Ticket, label: "Tickets" },
+    { id: "roles", icon: ShieldCheck, label: "Roles & Access" },
     { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
   ];
@@ -107,6 +110,8 @@ export default function AdminDashboard() {
         return <AttendanceDashboard />;
       case "tickets":
         return <TicketManagement />;
+      case "roles":
+        return <RoleManagement />;
       case "analytics":
         return <AnalyticsDashboard />;
       case "profile":

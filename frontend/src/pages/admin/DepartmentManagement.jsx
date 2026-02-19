@@ -53,6 +53,7 @@ const initialForm = {
   head_id: "",
   parent_department_id: "",
   color: "#6366f1",
+  type: "department",
 };
 
 // ─── Org Tree Node ───
@@ -62,6 +63,7 @@ function OrgTreeNode({ node, depth = 0, isLast = false }) {
   const headUser = node.head_id?.user_id;
   const color = node.color || "#6366f1";
   const memberCount = node.members?.length || 0;
+  const isTeam = node.type === "team";
 
   return (
     <div className="relative">
@@ -106,6 +108,8 @@ function OrgTreeNode({ node, depth = 0, isLast = false }) {
               ) : (
                 <ChevronRight className="size-3.5" style={{ color }} />
               )
+            ) : isTeam ? (
+              <Users className="size-3.5" style={{ color }} />
             ) : (
               <Building2 className="size-3.5" style={{ color }} />
             )}
@@ -127,6 +131,11 @@ function OrgTreeNode({ node, depth = 0, isLast = false }) {
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: `${color}12`, color: `${color}cc` }}>
               {node.code}
             </span>
+            {isTeam && (
+              <Badge variant="secondary" className="text-[9px] bg-cyan-500/10 text-cyan-400 border-cyan-500/20 py-0">
+                Team
+              </Badge>
+            )}
             {!node.is_active && (
               <Badge variant="secondary" className="text-[9px] bg-zinc-800 text-zinc-500 border-zinc-700 py-0">
                 Inactive
@@ -150,7 +159,9 @@ function OrgTreeNode({ node, depth = 0, isLast = false }) {
                 <Crown className="size-3 text-amber-500/60" />
               </div>
             ) : (
-              <span className="text-[10px] text-zinc-600 italic">No head</span>
+              <span className="text-[10px] text-zinc-600 italic">
+                No {isTeam ? "lead" : "head"}
+              </span>
             )}
 
             {memberCount > 0 && (
@@ -166,7 +177,7 @@ function OrgTreeNode({ node, depth = 0, isLast = false }) {
               <div className="flex items-center gap-1">
                 <GitBranchPlus className="size-3 text-zinc-600" />
                 <span className="text-[10px] text-zinc-500 font-medium">
-                  {node.children.length} sub
+                  {node.children.length} {node.children.length === 1 ? "team" : "teams"}
                 </span>
               </div>
             )}
@@ -311,8 +322,12 @@ export default function DepartmentManagement() {
     () => departments.reduce((sum, d) => sum + (d.employee_count || 0), 0),
     [departments]
   );
-  const activeDepts = useMemo(
-    () => departments.filter((d) => d.is_active).length,
+  const deptCount = useMemo(
+    () => departments.filter((d) => d.is_active && d.type !== "team").length,
+    [departments]
+  );
+  const teamCount = useMemo(
+    () => departments.filter((d) => d.is_active && d.type === "team").length,
     [departments]
   );
   const withHeads = useMemo(
@@ -320,10 +335,16 @@ export default function DepartmentManagement() {
     [departments]
   );
 
+  // Only departments (not teams) for the parent picker
+  const parentOptions = useMemo(
+    () => departments.filter((d) => d.type !== "team"),
+    [departments]
+  );
+
   // ─── CRUD ───
-  const openCreateDialog = () => {
+  const openCreateDialog = (type = "department") => {
     setEditingDept(null);
-    setFormData(initialForm);
+    setFormData({ ...initialForm, type });
     setFormError("");
     setDialogOpen(true);
   };
@@ -338,18 +359,26 @@ export default function DepartmentManagement() {
       parent_department_id:
         dept.parent_department_id?._id || dept.parent_department_id || "",
       color: dept.color || "#6366f1",
+      type: dept.type || "department",
     });
     setFormError("");
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
+    const isTeam = formData.type === "team";
+    const label = isTeam ? "Team" : "Department";
+
     if (!formData.name?.trim()) {
-      setFormError("Department name is required");
+      setFormError(`${label} name is required`);
       return;
     }
     if (!formData.code?.trim()) {
-      setFormError("Department code is required");
+      setFormError(`${label} code is required`);
+      return;
+    }
+    if (isTeam && !formData.parent_department_id) {
+      setFormError("Teams must belong to a parent department");
       return;
     }
 
@@ -363,6 +392,7 @@ export default function DepartmentManagement() {
         head_id: formData.head_id || null,
         parent_department_id: formData.parent_department_id || null,
         color: formData.color,
+        type: formData.type,
       };
 
       if (editingDept) {
@@ -371,12 +401,12 @@ export default function DepartmentManagement() {
           payload,
           { headers: getAuthHeaders() }
         );
-        toast.success("Department updated");
+        toast.success(`${label} updated`);
       } else {
         await axios.post(`${BACKEND_URL}/departments`, payload, {
           headers: getAuthHeaders(),
         });
-        toast.success("Department created");
+        toast.success(`${label} created`);
       }
 
       setDialogOpen(false);
@@ -398,12 +428,12 @@ export default function DepartmentManagement() {
       await axios.delete(`${BACKEND_URL}/departments/${deleteTarget._id}`, {
         headers: getAuthHeaders(),
       });
-      toast.success("Department deleted");
+      toast.success(`${deleteTarget.type === "team" ? "Team" : "Department"} deleted`);
       setDeleteTarget(null);
       fetchDepartments();
       if (viewMode === "tree") fetchOrgTree();
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to delete department");
+      toast.error(err.response?.data?.error || "Failed to delete");
     } finally {
       setDeleteLoading(false);
     }
@@ -421,7 +451,7 @@ export default function DepartmentManagement() {
       setDetailEmployees(data.employees || []);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to load department details");
+      toast.error("Failed to load details");
     } finally {
       setDetailLoading(false);
     }
@@ -434,12 +464,16 @@ export default function DepartmentManagement() {
   const selectClasses =
     "flex h-9 w-full items-center justify-between rounded-lg border border-zinc-700/80 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors";
 
+  const isFormTeam = formData.type === "team";
+  const formLabel = isFormTeam ? "Team" : "Department";
+
   if (loading) {
     return (
       <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
         <Skeleton className="h-7 w-56 mb-2" />
         <Skeleton className="h-4 w-72 mb-6" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <Skeleton className="h-24 rounded-xl" />
           <Skeleton className="h-24 rounded-xl" />
           <Skeleton className="h-24 rounded-xl" />
           <Skeleton className="h-24 rounded-xl" />
@@ -458,7 +492,7 @@ export default function DepartmentManagement() {
             Department Management
           </h1>
           <p className="text-sm text-zinc-500 mt-0.5">
-            Create departments, assign heads, and view organizational hierarchy
+            Manage departments and teams, assign heads, and view organizational hierarchy
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -498,7 +532,15 @@ export default function DepartmentManagement() {
             </button>
           </div>
           <Button
-            onClick={openCreateDialog}
+            onClick={() => openCreateDialog("team")}
+            variant="outline"
+            className="gap-1.5 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
+          >
+            <Users className="size-4" />
+            New Team
+          </Button>
+          <Button
+            onClick={() => openCreateDialog("department")}
             className="bg-indigo-600 hover:bg-indigo-500 text-white border-0 shadow-lg shadow-indigo-500/10"
           >
             <Plus className="size-4" />
@@ -508,7 +550,7 @@ export default function DepartmentManagement() {
       </div>
 
       {/* ─── Stats Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -516,11 +558,26 @@ export default function DepartmentManagement() {
                 Departments
               </p>
               <p className="text-2xl font-bold text-zinc-100 mt-1">
-                {activeDepts}
+                {deptCount}
               </p>
             </div>
             <div className="size-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
               <Building2 className="size-5 text-indigo-400" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Teams
+              </p>
+              <p className="text-2xl font-bold text-zinc-100 mt-1">
+                {teamCount}
+              </p>
+            </div>
+            <div className="size-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+              <Users className="size-5 text-cyan-400" />
             </div>
           </div>
         </div>
@@ -535,7 +592,7 @@ export default function DepartmentManagement() {
               </p>
             </div>
             <div className="size-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Users className="size-5 text-emerald-400" />
+              <UserCircle className="size-5 text-emerald-400" />
             </div>
           </div>
         </div>
@@ -548,7 +605,7 @@ export default function DepartmentManagement() {
               <p className="text-2xl font-bold text-zinc-100 mt-1">
                 {withHeads}
                 <span className="text-sm text-zinc-500 font-normal ml-1">
-                  / {activeDepts}
+                  / {deptCount + teamCount}
                 </span>
               </p>
             </div>
@@ -567,7 +624,7 @@ export default function DepartmentManagement() {
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
               <Input
-                placeholder="Search departments..."
+                placeholder="Search departments & teams..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 bg-zinc-900/60 border-zinc-800/80 text-zinc-200 placeholder:text-zinc-600"
@@ -580,7 +637,7 @@ export default function DepartmentManagement() {
             <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-12 text-center">
               <Building2 className="mx-auto size-10 text-zinc-700 mb-3" />
               <h3 className="text-sm font-medium text-zinc-300 mb-1">
-                {searchTerm ? "No departments match your search" : "No departments yet"}
+                {searchTerm ? "No results match your search" : "No departments yet"}
               </h3>
               <p className="text-sm text-zinc-600 mb-4">
                 {searchTerm
@@ -588,7 +645,7 @@ export default function DepartmentManagement() {
                   : "Create your first department to get started"}
               </p>
               {!searchTerm && (
-                <Button onClick={openCreateDialog} className="bg-indigo-600 hover:bg-indigo-500 text-white border-0">
+                <Button onClick={() => openCreateDialog("department")} className="bg-indigo-600 hover:bg-indigo-500 text-white border-0">
                   <Plus className="size-4" />
                   Create Department
                 </Button>
@@ -605,6 +662,7 @@ export default function DepartmentManagement() {
                   ? `${headUser.first_name?.[0] || ""}${headUser.last_name?.[0] || ""}`
                   : "";
                 const parentName = dept.parent_department_id?.name;
+                const isTeam = dept.type === "team";
 
                 return (
                   <div
@@ -628,15 +686,29 @@ export default function DepartmentManagement() {
                               backgroundColor: `${dept.color || "#6366f1"}15`,
                             }}
                           >
-                            <Building2
-                              className="size-4"
-                              style={{ color: dept.color || "#6366f1" }}
-                            />
+                            {isTeam ? (
+                              <Users
+                                className="size-4"
+                                style={{ color: dept.color || "#6366f1" }}
+                              />
+                            ) : (
+                              <Building2
+                                className="size-4"
+                                style={{ color: dept.color || "#6366f1" }}
+                              />
+                            )}
                           </div>
                           <div className="min-w-0">
-                            <h3 className="text-sm font-semibold text-zinc-200 truncate">
-                              {dept.name}
-                            </h3>
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="text-sm font-semibold text-zinc-200 truncate">
+                                {dept.name}
+                              </h3>
+                              {isTeam && (
+                                <Badge variant="secondary" className="text-[9px] bg-cyan-500/10 text-cyan-400 border-cyan-500/20 py-0 px-1.5 flex-shrink-0">
+                                  Team
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-[10px] font-mono text-zinc-600">
                               {dept.code}
                             </span>
@@ -689,13 +761,13 @@ export default function DepartmentManagement() {
                                   {headName}
                                 </p>
                                 <p className="text-[10px] text-zinc-600 mt-0.5">
-                                  Department Head
+                                  {isTeam ? "Team Lead" : "Department Head"}
                                 </p>
                               </div>
                             </>
                           ) : (
                             <span className="text-xs text-zinc-600 italic">
-                              No head assigned
+                              No {isTeam ? "lead" : "head"} assigned
                             </span>
                           )}
                         </div>
@@ -714,7 +786,7 @@ export default function DepartmentManagement() {
                           <div className="flex items-center gap-1.5">
                             <GitBranchPlus className="size-3 text-zinc-600" />
                             <span className="text-[10px] text-zinc-500">
-                              Parent: {parentName}
+                              {isTeam ? "Department" : "Parent"}: {parentName}
                             </span>
                           </div>
                         </div>
@@ -735,7 +807,7 @@ export default function DepartmentManagement() {
               Organizational Hierarchy
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Tree view of your company structure
+              Departments and their teams
             </p>
           </div>
 
@@ -754,7 +826,7 @@ export default function DepartmentManagement() {
                   No hierarchy data
                 </h3>
                 <p className="text-sm text-zinc-600">
-                  Create departments and set parent relationships to build the tree
+                  Create departments and add teams to build the org tree
                 </p>
               </div>
             ) : (
@@ -773,7 +845,7 @@ export default function DepartmentManagement() {
         <DialogContent className="sm:max-w-lg bg-zinc-900 border-zinc-800 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
-              {editingDept ? "Edit Department" : "Create Department"}
+              {editingDept ? `Edit ${formLabel}` : `Create ${formLabel}`}
             </DialogTitle>
           </DialogHeader>
 
@@ -785,9 +857,40 @@ export default function DepartmentManagement() {
               </div>
             )}
 
+            {/* Type toggle */}
+            <div>
+              <label className={labelClasses}>Type</label>
+              <div className="flex items-center bg-zinc-800/60 border border-zinc-700/60 rounded-lg p-0.5 w-fit">
+                <button
+                  type="button"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    !isFormTeam
+                      ? "bg-indigo-500/15 text-indigo-400 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-300"
+                  }`}
+                  onClick={() => setFormData((p) => ({ ...p, type: "department", parent_department_id: "" }))}
+                >
+                  <Building2 className="size-3.5" />
+                  Department
+                </button>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    isFormTeam
+                      ? "bg-cyan-500/15 text-cyan-400 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-300"
+                  }`}
+                  onClick={() => setFormData((p) => ({ ...p, type: "team" }))}
+                >
+                  <Users className="size-3.5" />
+                  Team
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClasses}>Name *</label>
+                <label className={labelClasses}>{formLabel} Name *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -795,7 +898,7 @@ export default function DepartmentManagement() {
                     setFormData((p) => ({ ...p, name: e.target.value }))
                   }
                   className={inputClasses}
-                  placeholder="Engineering"
+                  placeholder={isFormTeam ? "iOS Team" : "Mobile Development"}
                 />
               </div>
               <div>
@@ -810,7 +913,7 @@ export default function DepartmentManagement() {
                     }))
                   }
                   className={inputClasses}
-                  placeholder="ENG"
+                  placeholder={isFormTeam ? "IOS" : "MOBILEDEV"}
                   maxLength={10}
                 />
               </div>
@@ -824,12 +927,12 @@ export default function DepartmentManagement() {
                   setFormData((p) => ({ ...p, description: e.target.value }))
                 }
                 className={`${inputClasses} h-20 resize-none`}
-                placeholder="What does this department do?"
+                placeholder={isFormTeam ? "What does this team do?" : "What does this department do?"}
               />
             </div>
 
             <div>
-              <label className={labelClasses}>Department Head</label>
+              <label className={labelClasses}>{isFormTeam ? "Team Lead" : "Department Head"}</label>
               <select
                 value={formData.head_id}
                 onChange={(e) =>
@@ -837,7 +940,7 @@ export default function DepartmentManagement() {
                 }
                 className={selectClasses}
               >
-                <option value="">No head assigned</option>
+                <option value="">No {isFormTeam ? "lead" : "head"} assigned</option>
                 {employees.map((emp) => (
                   <option key={emp._id} value={emp._id}>
                     {emp.user_id?.first_name} {emp.user_id?.last_name}
@@ -848,7 +951,9 @@ export default function DepartmentManagement() {
             </div>
 
             <div>
-              <label className={labelClasses}>Parent Department</label>
+              <label className={labelClasses}>
+                Parent Department {isFormTeam && <span className="text-red-400">*</span>}
+              </label>
               <select
                 value={formData.parent_department_id}
                 onChange={(e) =>
@@ -859,8 +964,8 @@ export default function DepartmentManagement() {
                 }
                 className={selectClasses}
               >
-                <option value="">None (Root department)</option>
-                {departments
+                <option value="">{isFormTeam ? "Select parent department..." : "None (Root department)"}</option>
+                {parentOptions
                   .filter((d) => d._id !== editingDept?._id)
                   .map((d) => (
                     <option key={d._id} value={d._id}>
@@ -902,7 +1007,10 @@ export default function DepartmentManagement() {
             <Button
               onClick={handleSave}
               disabled={formLoading}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white border-0"
+              className={isFormTeam
+                ? "bg-cyan-600 hover:bg-cyan-500 text-white border-0"
+                : "bg-indigo-600 hover:bg-indigo-500 text-white border-0"
+              }
             >
               {formLoading ? (
                 <>
@@ -910,9 +1018,9 @@ export default function DepartmentManagement() {
                   Saving...
                 </>
               ) : editingDept ? (
-                "Update Department"
+                `Update ${formLabel}`
               ) : (
-                "Create Department"
+                `Create ${formLabel}`
               )}
             </Button>
           </DialogFooter>
@@ -926,7 +1034,9 @@ export default function DepartmentManagement() {
       >
         <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-zinc-100">
           <DialogHeader>
-            <DialogTitle className="text-zinc-100">Delete Department</DialogTitle>
+            <DialogTitle className="text-zinc-100">
+              Delete {deleteTarget?.type === "team" ? "Team" : "Department"}
+            </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-zinc-400">
             Are you sure you want to delete{" "}
@@ -981,15 +1091,27 @@ export default function DepartmentManagement() {
                   backgroundColor: `${detailDept?.color || "#6366f1"}20`,
                 }}
               >
-                <Building2
-                  className="size-3"
-                  style={{ color: detailDept?.color || "#6366f1" }}
-                />
+                {detailDept?.type === "team" ? (
+                  <Users
+                    className="size-3"
+                    style={{ color: detailDept?.color || "#6366f1" }}
+                  />
+                ) : (
+                  <Building2
+                    className="size-3"
+                    style={{ color: detailDept?.color || "#6366f1" }}
+                  />
+                )}
               </div>
               {detailDept?.name}
               <span className="text-xs font-mono text-zinc-600 font-normal">
                 {detailDept?.code}
               </span>
+              {detailDept?.type === "team" && (
+                <Badge variant="secondary" className="text-[9px] bg-cyan-500/10 text-cyan-400 border-cyan-500/20 py-0">
+                  Team
+                </Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -1013,7 +1135,7 @@ export default function DepartmentManagement() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-zinc-800/40 rounded-lg p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">
-                    Head
+                    {detailDept?.type === "team" ? "Lead" : "Head"}
                   </p>
                   {detailDept?.head_id?.user_id ? (
                     <div className="flex items-center gap-2">
@@ -1039,7 +1161,7 @@ export default function DepartmentManagement() {
                 </div>
                 <div className="bg-zinc-800/40 rounded-lg p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">
-                    Parent
+                    {detailDept?.type === "team" ? "Department" : "Parent"}
                   </p>
                   <span className="text-sm text-zinc-200">
                     {detailDept?.parent_department_id?.name || "Root"}
@@ -1051,7 +1173,7 @@ export default function DepartmentManagement() {
               {detailDept?.children && detailDept.children.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-zinc-400 mb-2">
-                    Sub-departments
+                    Teams
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {detailDept.children.map((child) => (
@@ -1074,7 +1196,7 @@ export default function DepartmentManagement() {
                 </p>
                 {detailEmployees.length === 0 ? (
                   <p className="text-sm text-zinc-600 italic py-4 text-center">
-                    No employees in this department
+                    No employees in this {detailDept?.type === "team" ? "team" : "department"}
                   </p>
                 ) : (
                   <div className="max-h-60 overflow-y-auto rounded-lg border border-zinc-800/60">

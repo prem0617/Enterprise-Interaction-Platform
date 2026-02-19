@@ -319,8 +319,7 @@ const AdminProfilePage = ({ onNavigate }) => {
               {employeeData?.department && (
                 <Badge className="bg-violet-500/15 text-violet-300 border-violet-500/20">
                   <Building className="size-3 mr-1" />
-                  {employeeData.department.charAt(0).toUpperCase() +
-                    employeeData.department.slice(1).replace("_", " ")}
+                  {employeeData.department?.name || "—"}
                 </Badge>
               )}
             </div>
@@ -435,12 +434,7 @@ const AdminProfilePage = ({ onNavigate }) => {
                   <ProfileField
                     icon={Building}
                     label="Department"
-                    value={
-                      employeeData.department
-                        ? employeeData.department.charAt(0).toUpperCase() +
-                          employeeData.department.slice(1).replace("_", " ")
-                        : "—"
-                    }
+                    value={employeeData.department?.name || "—"}
                     readOnly
                   />
                   <ProfileField

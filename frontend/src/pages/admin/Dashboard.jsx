@@ -21,16 +21,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-const DEPT_COLORS = {
-  frontend: "from-blue-500/20 to-blue-600/5 text-blue-400 border-blue-500/20",
-  backend: "from-violet-500/20 to-violet-600/5 text-violet-400 border-violet-500/20",
-  devops: "from-cyan-500/20 to-cyan-600/5 text-cyan-400 border-cyan-500/20",
-  qa: "from-amber-500/20 to-amber-600/5 text-amber-400 border-amber-500/20",
-  hr: "from-pink-500/20 to-pink-600/5 text-pink-400 border-pink-500/20",
-  finance: "from-emerald-500/20 to-emerald-600/5 text-emerald-400 border-emerald-500/20",
-  customer_support:
-    "from-orange-500/20 to-orange-600/5 text-orange-400 border-orange-500/20",
-};
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -66,7 +56,7 @@ export default function Dashboard() {
     employees
       .filter((e) => e.is_active)
       .forEach((e) => {
-        const d = e.department || "other";
+        const d = e.department?.name || "Other";
         counts[d] = (counts[d] || 0) + 1;
       });
     return Object.entries(counts)
@@ -295,9 +285,8 @@ export default function Dashboard() {
                     .split(" ")
                     .map((n) => n[0])
                     .join("");
-                  const deptStyle =
-                    DEPT_COLORS[employee.department] ||
-                    "from-zinc-500/20 to-zinc-600/5 text-zinc-400 border-zinc-500/20";
+                  const deptName = employee.department?.name || "—";
+                  const deptColor = employee.department?.color || "#71717a";
                   return (
                     <div
                       key={employee._id}
@@ -324,9 +313,10 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="outline"
-                          className={`text-[10px] bg-gradient-to-r ${deptStyle} border font-medium`}
+                          className="text-[10px] border font-medium"
+                          style={{ borderColor: `${deptColor}33`, color: deptColor }}
                         >
-                          {employee.department?.replace("_", " ")}
+                          {deptName}
                         </Badge>
                         <Badge
                           variant="outline"
@@ -369,8 +359,8 @@ export default function Dashboard() {
                   return (
                     <div key={dept}>
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm font-medium text-zinc-300 capitalize">
-                          {dept.replace("_", " ")}
+                        <span className="text-sm font-medium text-zinc-300">
+                          {dept}
                         </span>
                         <span className="text-xs text-zinc-500 tabular-nums">
                           {count} ({pct}%)
@@ -416,7 +406,7 @@ export default function Dashboard() {
                         </span>{" "}
                         joined{" "}
                         <span className="text-zinc-300 capitalize">
-                          {emp.department?.replace("_", " ")}
+                          {emp.department?.name || "—"}
                         </span>
                       </p>
                       <p className="text-[10px] text-zinc-600 mt-0.5 capitalize">

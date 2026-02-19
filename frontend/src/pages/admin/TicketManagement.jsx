@@ -364,7 +364,7 @@ export default function TicketManagement() {
                 {employees.map((emp) => (
                   <option key={emp._id} value={emp._id}>
                     {emp.user_id?.first_name} {emp.user_id?.last_name} —{" "}
-                    {emp.department} ({emp.position || "N/A"})
+                    {emp.department?.name || "N/A"} ({emp.position || "N/A"})
                   </option>
                 ))}
               </select>

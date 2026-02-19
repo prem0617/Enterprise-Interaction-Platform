@@ -44,7 +44,7 @@ function getFormattedDate() {
 export default function EmployeeHome({ onNavigate }) {
   const userData = JSON.parse(localStorage.getItem("user") || "{}");
   const firstName = userData?.first_name || "there";
-  const department = userData?.employee?.department || "";
+  const department = userData?.employee?.department?.name || userData?.employee?.department || "";
   const position = userData?.employee?.position || "";
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());

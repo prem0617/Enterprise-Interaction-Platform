@@ -31,7 +31,7 @@ const AllEmployees = () => {
     getAllEmployee();
   }, []);
 
-  const departments = [...new Set(employees.map((emp) => emp.department))];
+  const departments = [...new Map(employees.map((emp) => [emp.department?._id, emp.department]).filter(([id]) => id)).values()];
 
   const filteredEmployees = employees.filter((employee) => {
     const fullName =
@@ -41,7 +41,7 @@ const AllEmployees = () => {
       fullName?.includes(searchTerm?.toLowerCase()) ||
       email?.includes(searchTerm?.toLowerCase());
     const matchesDepartment =
-      filterDepartment === "all" || employee?.department === filterDepartment;
+      filterDepartment === "all" || employee?.department?._id === filterDepartment;
     const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "active" && employee?.is_active) ||
@@ -97,8 +97,8 @@ const AllEmployees = () => {
           >
             <option value="all">All Departments</option>
             {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
+              <option key={dept._id} value={dept._id}>
+                {dept.name}
               </option>
             ))}
           </select>
@@ -185,7 +185,7 @@ const AllEmployees = () => {
                       </td>
                       <td className="px-5 py-3">
                         <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300">
-                          {employee?.department}
+                          {employee?.department?.name || "—"}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-sm text-zinc-400">
@@ -259,7 +259,7 @@ const AllEmployees = () => {
                     <div>
                       <span className="text-zinc-500">Department</span>
                       <p className="font-medium text-zinc-300">
-                        {employee?.department}
+                        {employee?.department?.name || "—"}
                       </p>
                     </div>
                     <div>

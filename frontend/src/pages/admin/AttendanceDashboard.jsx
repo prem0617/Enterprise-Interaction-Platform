@@ -553,7 +553,7 @@ export default function AttendanceDashboard() {
                           </div>
                         </td>
                         <td className="py-2.5 px-3">
-                          <Badge variant="outline" className="text-[10px] capitalize">{emp.department?.replace("_", " ")}</Badge>
+                          <Badge variant="outline" className="text-[10px] capitalize">{emp.department?.name || "—"}</Badge>
                         </td>
                         {["sick", "casual", "earned"].map((t) => {
                           const b = emp.balances?.[t];

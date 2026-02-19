@@ -65,7 +65,7 @@ const StartChatModal = ({
                       <p className="text-sm font-medium text-white">{user.full_name}</p>
                       <p className="text-xs text-zinc-500">{user.email}</p>
                       {user.employee_info && (
-                        <p className="text-[10px] text-zinc-600">{user.employee_info.department} &middot; {user.employee_info.position}</p>
+                        <p className="text-[10px] text-zinc-600">{user.employee_info.department?.name || "—"} &middot; {user.employee_info.position}</p>
                       )}
                     </div>
                   </div>

@@ -60,7 +60,7 @@ const EmployeeProfilePage = () => {
       setFormData({
         fullName: userDataFromApi.full_name,
         email: userDataFromApi.user_id.email,
-        department: userDataFromApi.department,
+        department: userDataFromApi.department?.name || userDataFromApi.department || "",
         timezone: userDataFromApi.user_id.timezone,
         countryCode: userDataFromApi.user_id.country,
       });

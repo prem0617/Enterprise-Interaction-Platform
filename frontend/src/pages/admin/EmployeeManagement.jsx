@@ -61,14 +61,7 @@ const EMPLOYEE_TYPES = [
   { value: "customer_support", label: "Customer Support" },
 ];
 
-const DEPARTMENTS = [
-  { value: "frontend", label: "Frontend" },
-  { value: "backend", label: "Backend" },
-  { value: "devops", label: "DevOps" },
-  { value: "qa", label: "QA" },
-  { value: "hr", label: "HR" },
-  { value: "finance", label: "Finance" },
-];
+// Departments are now fetched dynamically from the API
 
 const COUNTRIES = [
   { value: "india", label: "India" },
@@ -79,10 +72,12 @@ const COUNTRIES = [
 const POSITIONS = [
   { value: "ceo", label: "CEO" },
   { value: "cto", label: "CTO" },
+  { value: "project_manager", label: "Project Manager" },
   { value: "team_lead", label: "Team Lead" },
-  { value: "senior", label: "Senior" },
-  { value: "mid", label: "Mid-Level" },
-  { value: "junior", label: "Junior" },
+  { value: "senior_engineer", label: "Senior Engineer" },
+  { value: "engineer", label: "Engineer" },
+  { value: "junior_engineer", label: "Junior Engineer" },
+  { value: "intern", label: "Intern" },
 ];
 
 const TIMEZONES = [
@@ -99,6 +94,17 @@ const TIMEZONES = [
   { value: "Asia/Tokyo", label: "Tokyo (JST)" },
   { value: "Australia/Sydney", label: "Sydney (AEDT)" },
 ];
+
+const POSITION_LABELS = {
+  ceo: "CEO",
+  cto: "CTO",
+  project_manager: "Project Manager",
+  team_lead: "Team Lead",
+  senior_engineer: "Senior Engineer",
+  engineer: "Engineer",
+  junior_engineer: "Junior Engineer",
+  intern: "Intern",
+};
 
 const getAuthHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -141,14 +147,15 @@ export default function EmployeeManagement() {
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [fetching, setFetching] = useState(false);
+  const [departments, setDepartments] = useState([]);
   const searchTimerRef = useRef(null);
 
-  const positionsRequiringTeamLead = ["senior", "mid", "junior"];
+  const positionsRequiringTeamLead = ["senior_engineer", "engineer", "junior_engineer", "intern"];
   const shouldShowPosition = formData.employee_type === "internal_team";
   const shouldShowDepartment =
     formData.employee_type === "internal_team" &&
     formData.position &&
-    ["team_lead", "senior", "mid", "junior"].includes(formData.position);
+    ["project_manager", "team_lead", "senior_engineer", "engineer", "junior_engineer", "intern"].includes(formData.position);
   const shouldShowTeamLead =
     formData.employee_type === "internal_team" &&
     formData.position &&
@@ -233,8 +240,20 @@ export default function EmployeeManagement() {
     setRefreshing(false);
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const { data } = await axios.get(`${BACKEND_URL}/departments`, {
+        headers: getAuthHeaders(),
+      });
+      setDepartments(data.departments || data || []);
+    } catch (err) {
+      console.error("Failed to load departments", err);
+    }
+  };
+
   useEffect(() => {
     fetchTeamLeads();
+    fetchDepartments();
   }, []);
 
   const handleFormChange = (e) => {
@@ -327,7 +346,7 @@ export default function EmployeeManagement() {
       country: emp.user_id?.country || "",
       timezone: emp.user_id?.timezone || "",
       employee_type: emp.employee_type || "internal_team",
-      department: emp.department || "",
+      department: emp.department?._id || emp.department || "",
       position: emp.position || "",
       team_lead_id: emp.team_lead_id?._id || "",
       hire_date: emp.hire_date
@@ -637,9 +656,9 @@ export default function EmployeeManagement() {
                   className={selectClasses}
                 >
                   <option value="">Select Department</option>
-                  {DEPARTMENTS.map((d) => (
-                    <option key={d.value} value={d.value}>
-                      {d.label}
+                  {departments.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.name}
                     </option>
                   ))}
                 </select>
@@ -716,9 +735,9 @@ export default function EmployeeManagement() {
                   className={selectClasses}
                 >
                   <option value="all">All Departments</option>
-                  {DEPARTMENTS.map((dept) => (
-                    <option key={dept.value} value={dept.value}>
-                      {dept.label}
+                  {departments.map((dept) => (
+                    <option key={dept._id} value={dept._id}>
+                      {dept.name}
                     </option>
                   ))}
                 </select>
@@ -800,11 +819,11 @@ export default function EmployeeManagement() {
                             </td>
                             <td className="px-5 py-3">
                               <span className="inline-flex px-2.5 py-0.5 rounded text-xs font-medium bg-zinc-700/60 text-zinc-300 border border-zinc-600/50">
-                                {employee?.department || "—"}
+                                {employee?.department?.name || "—"}
                               </span>
                             </td>
                             <td className="px-5 py-3 text-sm text-zinc-400">
-                              {employee?.position || "—"}
+                              {POSITION_LABELS[employee?.position] || employee?.position || "—"}
                             </td>
                             <td className="px-5 py-3 text-sm text-zinc-400">
                               {teamLeadName}
@@ -907,7 +926,7 @@ export default function EmployeeManagement() {
                           <div>
                             <span className="text-zinc-500">Department</span>
                             <p className="font-medium text-zinc-300">
-                              {employee?.department}
+                              {employee?.department?.name || "—"}
                             </p>
                           </div>
                           <div>
