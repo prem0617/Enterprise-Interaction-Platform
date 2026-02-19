@@ -1956,13 +1956,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
           return prev.map((m) => (m._id === meeting._id ? meeting : m));
         return [...prev, meeting];
       });
-<<<<<<< HEAD
-      if (meeting._lobbyOnly || meeting.open_to_everyone === false) {
-=======
       const isHost =
         String(meeting.host_id?._id || meeting.host_id) === String(currentUserId);
       if (meeting.open_to_everyone === false && !isHost) {
->>>>>>> a22162b (added customer meeting module)
         setLobbyMeeting(meeting);
         socket.emit("meeting-join-request", {
           meetingId: meeting._id,
