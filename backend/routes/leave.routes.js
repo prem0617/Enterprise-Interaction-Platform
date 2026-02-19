@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
+import { verifyToken, requirePermission } from "../middlewares/auth.middleware.js";
 import {
   getMyLeaveBalance,
   requestLeave,
@@ -19,10 +19,10 @@ router.post("/request", verifyToken, requestLeave);
 router.put("/cancel/:id", verifyToken, cancelLeave);
 router.get("/my-requests", verifyToken, getMyLeaveRequests);
 
-// ─── Admin routes ───
-router.get("/all-requests", verifyToken, isAdmin, getAllLeaveRequests);
-router.put("/update-status/:id", verifyToken, isAdmin, updateLeaveStatus);
-router.get("/all-balances", verifyToken, isAdmin, getAllLeaveBalances);
-router.put("/update-balance", verifyToken, isAdmin, updateLeaveBalance);
+// ─── Admin/HR routes ───
+router.get("/all-requests", verifyToken, requirePermission("leave:read_all"), getAllLeaveRequests);
+router.put("/update-status/:id", verifyToken, requirePermission("leave:approve"), updateLeaveStatus);
+router.get("/all-balances", verifyToken, requirePermission("leave:manage"), getAllLeaveBalances);
+router.put("/update-balance", verifyToken, requirePermission("leave:manage"), updateLeaveBalance);
 
 export default router;

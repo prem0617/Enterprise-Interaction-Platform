@@ -5,10 +5,16 @@ import User from "../../models/User.js";
 // ─── Create Department ───
 export const createDepartment = async (req, res) => {
   try {
-    const { name, code, description, head_id, parent_department_id, color } = req.body;
+    const { name, code, description, head_id, parent_department_id, color, type } = req.body;
+    const deptType = type === "team" ? "team" : "department";
 
     if (!name || !code) {
       return res.status(400).json({ error: "Name and code are required" });
+    }
+
+    // Teams must have a parent department
+    if (deptType === "team" && !parent_department_id) {
+      return res.status(400).json({ error: "Teams must belong to a parent department" });
     }
 
     const existing = await Department.findOne({
@@ -18,19 +24,22 @@ export const createDepartment = async (req, res) => {
       ],
     });
     if (existing) {
-      return res.status(409).json({ error: "Department with this name or code already exists" });
+      return res.status(409).json({ error: `${deptType === "team" ? "Team" : "Department"} with this name or code already exists` });
     }
 
-    // Validate parent exists
+    // Validate parent exists and is a department (not a team)
     if (parent_department_id) {
       const parent = await Department.findById(parent_department_id);
       if (!parent) return res.status(400).json({ error: "Parent department not found" });
+      if (parent.type === "team") {
+        return res.status(400).json({ error: "A team cannot be nested under another team. Choose a department as parent." });
+      }
     }
 
     // Validate head exists
     if (head_id) {
       const head = await Employee.findById(head_id);
-      if (!head) return res.status(400).json({ error: "Selected department head not found" });
+      if (!head) return res.status(400).json({ error: "Selected head not found" });
     }
 
     const department = await Department.create({
@@ -40,11 +49,12 @@ export const createDepartment = async (req, res) => {
       head_id: head_id || null,
       parent_department_id: parent_department_id || null,
       color: color || "#6366f1",
+      type: deptType,
     });
 
     const populated = await Department.findById(department._id)
       .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
-      .populate("parent_department_id", "name code");
+      .populate("parent_department_id", "name code type");
 
     res.status(201).json({ department: populated });
   } catch (error) {
@@ -67,12 +77,11 @@ export const getAllDepartments = async (req, res) => {
       { $group: { _id: "$department", count: { $sum: 1 } } },
     ]);
     const countMap = {};
-    employeeCounts.forEach((e) => { countMap[e._id] = e.count; });
+    employeeCounts.forEach((e) => { countMap[e._id?.toString()] = e.count; });
 
-    // Match departments to employee counts by code (lowercase)
     const enriched = departments.map((dept) => {
       const d = dept.toObject();
-      d.employee_count = countMap[dept.code.toLowerCase()] || countMap[dept.name.toLowerCase()] || 0;
+      d.employee_count = countMap[dept._id.toString()] || 0;
       return d;
     });
 
@@ -95,7 +104,7 @@ export const getDepartmentById = async (req, res) => {
 
     // Get all employees in this department
     const employees = await Employee.find({
-      department: { $regex: new RegExp(`^${department.code}$`, "i") },
+      department: department._id,
       is_active: true,
     }).populate("user_id", "first_name last_name email profile_picture");
 
@@ -109,24 +118,41 @@ export const getDepartmentById = async (req, res) => {
 // ─── Update Department ───
 export const updateDepartment = async (req, res) => {
   try {
-    const { name, code, description, head_id, parent_department_id, color, is_active } = req.body;
+    const { name, code, description, head_id, parent_department_id, color, is_active, type } = req.body;
 
     const department = await Department.findById(req.params.id);
     if (!department) return res.status(404).json({ error: "Department not found" });
 
+    // Resolve effective type
+    const effectiveType = type !== undefined ? (type === "team" ? "team" : "department") : department.type;
+
+    // Teams must have a parent
+    const effectiveParent = parent_department_id !== undefined ? parent_department_id : department.parent_department_id;
+    if (effectiveType === "team" && !effectiveParent) {
+      return res.status(400).json({ error: "Teams must belong to a parent department" });
+    }
+
     // Check name/code uniqueness if changed
     if (name && name !== department.name) {
       const dup = await Department.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") }, _id: { $ne: department._id } });
-      if (dup) return res.status(409).json({ error: "Department name already exists" });
+      if (dup) return res.status(409).json({ error: "Name already exists" });
     }
     if (code && code.toUpperCase() !== department.code) {
       const dup = await Department.findOne({ code: code.toUpperCase(), _id: { $ne: department._id } });
-      if (dup) return res.status(409).json({ error: "Department code already exists" });
+      if (dup) return res.status(409).json({ error: "Code already exists" });
     }
 
     // Prevent circular parent
     if (parent_department_id && String(parent_department_id) === String(department._id)) {
-      return res.status(400).json({ error: "A department cannot be its own parent" });
+      return res.status(400).json({ error: "Cannot be its own parent" });
+    }
+
+    // Validate parent is not a team
+    if (parent_department_id) {
+      const parent = await Department.findById(parent_department_id);
+      if (parent && parent.type === "team") {
+        return res.status(400).json({ error: "Cannot nest under a team. Choose a department as parent." });
+      }
     }
 
     if (name) department.name = name.trim();
@@ -136,12 +162,13 @@ export const updateDepartment = async (req, res) => {
     if (parent_department_id !== undefined) department.parent_department_id = parent_department_id || null;
     if (color) department.color = color;
     if (is_active !== undefined) department.is_active = is_active;
+    if (type !== undefined) department.type = effectiveType;
 
     await department.save();
 
     const populated = await Department.findById(department._id)
       .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
-      .populate("parent_department_id", "name code");
+      .populate("parent_department_id", "name code type");
 
     res.json({ department: populated });
   } catch (error) {
@@ -156,10 +183,10 @@ export const deleteDepartment = async (req, res) => {
     const department = await Department.findById(req.params.id);
     if (!department) return res.status(404).json({ error: "Department not found" });
 
-    // Check for child departments
+    // Check for child departments/teams
     const children = await Department.countDocuments({ parent_department_id: department._id });
     if (children > 0) {
-      return res.status(400).json({ error: "Cannot delete: department has sub-departments. Remove or reassign them first." });
+      return res.status(400).json({ error: "Cannot delete: has child teams. Remove or reassign them first." });
     }
 
     await Department.findByIdAndDelete(req.params.id);
@@ -193,12 +220,9 @@ export const getOrgTree = async (req, res) => {
 
     // Assign employees to departments
     employees.forEach((emp) => {
-      const deptCode = emp.department?.toLowerCase();
-      const dept = Object.values(deptMap).find(
-        (d) => d.code.toLowerCase() === deptCode || d.name.toLowerCase() === deptCode
-      );
-      if (dept) {
-        deptMap[dept._id.toString()].members.push(emp);
+      const deptId = emp.department?.toString();
+      if (deptId && deptMap[deptId]) {
+        deptMap[deptId].members.push(emp);
       }
     });
 

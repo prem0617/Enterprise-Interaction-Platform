@@ -3,10 +3,11 @@ import Employee from "../../models/Employee.js";
 export async function getTeamLead(req, res) {
   try {
     const teamLeads = await Employee.find({
-      position: "team_lead",
+      position: { $in: ["ceo", "cto", "project_manager", "team_lead"] },
     })
-      .populate("user_id", "email first_name last_name") // 👈 User details
-      .populate("team_lead_id"); // (optional, usually null for team leads)
+      .populate("user_id", "email first_name last_name")
+      .populate("department")
+      .populate("team_lead_id");
 
     return res.status(200).json({
       success: true,

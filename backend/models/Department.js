@@ -30,6 +30,11 @@ const departmentSchema = new mongoose.Schema(
       ref: "Department",
       default: null,
     },
+    type: {
+      type: String,
+      enum: ["department", "team"],
+      default: "department",
+    },
     color: {
       type: String,
       default: "#6366f1",

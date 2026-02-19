@@ -232,6 +232,8 @@ export const getDepartmentStats = async (req, res) => {
     const deptCounts = await Employee.aggregate([
       { $match: { is_active: true } },
       { $group: { _id: "$department", count: { $sum: 1 } } },
+      { $lookup: { from: "departments", localField: "_id", foreignField: "_id", as: "dept" } },
+      { $unwind: { path: "$dept", preserveNullAndEmptyArrays: true } },
       { $sort: { count: -1 } },
     ]);
 
@@ -280,7 +282,7 @@ export const getDepartmentStats = async (req, res) => {
         (m) => m.department === d._id
       ) || { meetings: 0 };
       return {
-        department: d._id,
+        department: d.dept?.name || String(d._id),
         employees: d.count,
         messagesThisWeek: msgData.messages,
         meetingsThisWeek: meetData.meetings,

@@ -12,6 +12,8 @@ import {
   updateProfile,
   uploadProfilePicture,
   removeProfilePicture,
+  verifyAdminAccess,
+  verifyEmployeeAccess,
 } from "../controllers/auth/auth.controller.js";
 import { verifyToken, isAdmin, isHR } from "../middlewares/auth.middleware.js";
 import { uploadProfilePic } from "../config/cloudinary.js";
@@ -28,6 +30,10 @@ router.post("/employee/login", employeeLogin);
 // Customer routes
 router.post("/customer/register", customerRegister);
 router.post("/customer/login", customerLogin);
+
+// Session verification
+router.get("/admin/verify", verifyToken, verifyAdminAccess);
+router.get("/employee/verify", verifyToken, verifyEmployeeAccess);
 
 // Protected routes
 router.get("/profile", verifyToken, getProfile);

@@ -11,7 +11,7 @@ import {
   admitToMeeting,
   deleteMeeting,
 } from "../controllers/meeting/meeting.controller.js";
-import { uploadRecording, listRecordings } from "../controllers/meeting/recording.controller.js";
+import { uploadRecording, listRecordings, generateMeetingNotes, retryTranscription } from "../controllers/meeting/recording.controller.js";
 import { uploadMeetingRecording } from "../config/cloudinary.js";
 
 const router = express.Router();
@@ -30,6 +30,8 @@ router.delete("/:id", verifyToken, cancelMeeting);
 // Recordings: list and upload (host only for upload)
 router.get("/:id/recordings", verifyToken, listRecordings);
 router.post("/:id/recordings", verifyToken, uploadMeetingRecording.single("recording"), uploadRecording);
+router.post("/:id/recordings/:recordingId/generate-notes", verifyToken, generateMeetingNotes);
+router.post("/:id/recordings/:recordingId/retry-transcription", verifyToken, retryTranscription);
 
 export default router;
 

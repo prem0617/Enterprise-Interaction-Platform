@@ -38,6 +38,16 @@ import {
   Filter,
   Radio,
   Circle,
+  FileText,
+  RefreshCcw,
+  Captions,
+  ScrollText,
+  Sparkles,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Cpu,
+  Cloud,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -941,6 +951,531 @@ const MeetingRoom = ({
       </div>
     </div>
     </>
+  );
+};
+
+// ---- Recording Playback Modal with Transcript & Meeting Notes ----
+const RecordingPlaybackModal = ({
+  recordingModal,
+  setRecordingModal,
+  loadingRecordingsId,
+  recordingsByMeeting,
+  axiosConfig,
+}) => {
+  const [selectedRecording, setSelectedRecording] = useState(null);
+  const [activeTab, setActiveTab] = useState("recording"); // "recording" | "transcript" | "notes"
+  const [generatingNotes, setGeneratingNotes] = useState(null);
+  const [retryingTranscription, setRetryingTranscription] = useState(null);
+  const [notesMap, setNotesMap] = useState({}); // recordingId -> { meeting_notes, transcript, transcript_segments }
+  const [currentCaption, setCurrentCaption] = useState("");
+  const [showCaptions, setShowCaptions] = useState(true);
+  const [polledRecordings, setPolledRecordings] = useState(null); // locally polled recordings
+  const videoRef = useRef(null);
+  const transcriptRef = useRef(null);
+
+  const baseRecordings = recordingsByMeeting[recordingModal.meetingId] || [];
+  const recordings = polledRecordings || baseRecordings;
+  const currentRec = selectedRecording
+    ? recordings.find((r) => r._id === selectedRecording._id) || selectedRecording
+    : recordings[0];
+
+  // Poll for transcription status updates every 5 seconds while any recording is pending/processing
+  useEffect(() => {
+    const hasPending = recordings.some(
+      (r) => r.transcription_status === "pending" || r.transcription_status === "processing"
+    );
+    if (!hasPending) return;
+
+    console.log("[RECORDING MODAL] Transcription pending/processing detected, starting poll...");
+
+    const pollInterval = setInterval(async () => {
+      try {
+        console.log("[RECORDING MODAL] Polling for transcription status...");
+        const { data } = await axios.get(
+          `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings`,
+          axiosConfig
+        );
+        const fetched = data.data || [];
+        setPolledRecordings(fetched);
+
+        const statusSummary = fetched.map((r) => `${r._id.slice(-6)}: ${r.transcription_status}`).join(", ");
+        console.log(`[RECORDING MODAL] Poll result: [${statusSummary}]`);
+
+        // Check if all transcriptions are done — stop polling
+        const stillPending = fetched.some(
+          (r) => r.transcription_status === "pending" || r.transcription_status === "processing"
+        );
+        if (!stillPending) {
+          console.log("[RECORDING MODAL] All transcriptions complete, stopping poll");
+          clearInterval(pollInterval);
+        }
+      } catch (err) {
+        console.warn("[RECORDING MODAL] Poll error:", err.message);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [recordings, recordingModal.meetingId, axiosConfig]);
+
+  // Handle video timeupdate for live captions
+  const handleTimeUpdate = useCallback(() => {
+    if (!videoRef.current || !currentRec?.transcript_segments?.length) {
+      setCurrentCaption("");
+      return;
+    }
+    const time = videoRef.current.currentTime;
+    const seg = currentRec.transcript_segments.find(
+      (s) => time >= s.start && time <= s.end
+    );
+    setCurrentCaption(seg?.text || "");
+
+    // Auto-scroll transcript to active segment
+    if (seg && transcriptRef.current && activeTab === "transcript") {
+      const el = transcriptRef.current.querySelector(`[data-seg-start="${seg.start}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [currentRec, activeTab]);
+
+  // Seek video to a timestamp when clicking a transcript segment
+  const seekTo = (time) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
+  const handleGenerateNotes = async (rec) => {
+    setGeneratingNotes(rec._id);
+    try {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings/${rec._id}/generate-notes`,
+        {},
+        axiosConfig
+      );
+      setNotesMap((prev) => ({ ...prev, [rec._id]: data.data }));
+      setActiveTab("notes");
+      toast.success("Meeting notes generated");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to generate meeting notes");
+    } finally {
+      setGeneratingNotes(null);
+    }
+  };
+
+  const handleRegenerateNotes = async (rec) => {
+    setGeneratingNotes(rec._id);
+    try {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings/${rec._id}/generate-notes?regenerate=true`,
+        {},
+        axiosConfig
+      );
+      setNotesMap((prev) => ({ ...prev, [rec._id]: data.data }));
+      toast.success("Meeting notes regenerated");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to regenerate notes");
+    } finally {
+      setGeneratingNotes(null);
+    }
+  };
+
+  const handleRetryTranscription = async (rec, mode = "local") => {
+    setRetryingTranscription({ id: rec._id, mode });
+    try {
+      await axios.post(
+        `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings/${rec._id}/retry-transcription?mode=${mode}`,
+        {},
+        axiosConfig
+      );
+      toast.success(`Transcription started (${mode === "local" ? "Local Whisper" : "OpenAI Cloud"}). This may take a minute.`);
+      // Immediately re-fetch recordings so polling picks up the "processing" status
+      try {
+        const { data } = await axios.get(
+          `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings`,
+          axiosConfig
+        );
+        setPolledRecordings(data.data || []);
+      } catch (_) { /* polling will catch up */ }
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to start transcription");
+    } finally {
+      setRetryingTranscription(null);
+    }
+  };
+
+  // Load notes if transcript is already available
+  useEffect(() => {
+    if (currentRec?.meeting_notes && !notesMap[currentRec._id]) {
+      setNotesMap((prev) => ({
+        ...prev,
+        [currentRec._id]: {
+          meeting_notes: currentRec.meeting_notes,
+          transcript: currentRec.transcript,
+          transcript_segments: currentRec.transcript_segments,
+        },
+      }));
+    }
+  }, [currentRec]);
+
+  const transcriptionReady = currentRec?.transcription_status === "completed" && currentRec?.transcript;
+  const transcriptionFailed = currentRec?.transcription_status === "failed";
+  const transcriptionPending = currentRec?.transcription_status === "pending" || currentRec?.transcription_status === "processing";
+  const transcriptionNotStarted = !currentRec?.transcription_status;
+  const notes = notesMap[currentRec?._id];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) setRecordingModal(null); }}
+    >
+      <div className="bg-zinc-900 rounded-xl border border-zinc-700/60 shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-700/50">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Meeting Recordings</h2>
+            <p className="text-[11px] text-zinc-400 mt-0.5">{recordingModal.meetingTitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRecordingModal(null)}
+            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {loadingRecordingsId === recordingModal.meetingId ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+              <span className="ml-2 text-sm text-zinc-400">Loading recordings...</span>
+            </div>
+          ) : recordings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+              <Video className="w-10 h-10 mb-2 opacity-40" />
+              <p className="text-sm">No recordings available for this meeting.</p>
+            </div>
+          ) : (
+            <>
+              {/* Recording selector (if multiple) */}
+              {recordings.length > 1 && (
+                <div className="flex gap-2 px-5 pt-3 pb-1 overflow-x-auto">
+                  {recordings.map((rec, idx) => (
+                    <button
+                      key={rec._id}
+                      onClick={() => { setSelectedRecording(rec); setActiveTab("recording"); setCurrentCaption(""); }}
+                      className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                        (currentRec?._id === rec._id)
+                          ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
+                          : "bg-zinc-800 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600"
+                      }`}
+                    >
+                      Recording {idx + 1}{rec.participant_name ? ` — ${rec.participant_name}` : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {currentRec && (
+                <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+                  {/* Left: Video + captions */}
+                  <div className="lg:w-3/5 flex flex-col">
+                    {/* Video info bar */}
+                    <div className="px-4 py-2 border-b border-zinc-700/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Video className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs font-medium text-zinc-200">
+                          {currentRec.participant_name || "Meeting Recording"}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-900">
+                          {currentRec.type}
+                        </span>
+                        {/* Transcription status badge */}
+                        {transcriptionReady && (
+                          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            Transcribed
+                          </span>
+                        )}
+                        {transcriptionPending && (
+                          <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            Transcribing...
+                          </span>
+                        )}
+                        {transcriptionFailed && (
+                          <span className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">
+                            Transcription failed
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {transcriptionReady && (
+                          <button
+                            onClick={() => setShowCaptions((p) => !p)}
+                            className={`p-1 rounded text-xs transition-colors ${showCaptions ? "bg-indigo-500/20 text-indigo-300" : "text-zinc-500 hover:text-zinc-300"}`}
+                            title={showCaptions ? "Hide captions" : "Show captions"}
+                          >
+                            <Captions className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {currentRec.duration_seconds != null && (
+                          <span className="text-[11px] text-zinc-400">
+                            {Math.floor(currentRec.duration_seconds / 60)}:{String(Math.round(currentRec.duration_seconds % 60)).padStart(2, "0")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Video player with caption overlay */}
+                    <div className="relative bg-black flex-1 min-h-0">
+                      <video
+                        ref={videoRef}
+                        src={currentRec.cloudinary_url}
+                        controls
+                        className="w-full h-full max-h-[50vh] object-contain"
+                        preload="metadata"
+                        controlsList="nodownload"
+                        onTimeUpdate={handleTimeUpdate}
+                      >
+                        Your browser does not support video playback.
+                      </video>
+                      {/* Live caption overlay */}
+                      {showCaptions && currentCaption && (
+                        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 max-w-[80%] pointer-events-none">
+                          <div className="bg-black/80 backdrop-blur-sm text-white text-sm px-4 py-2 rounded-lg text-center leading-relaxed">
+                            {currentCaption}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {currentRec.started_at && (
+                      <div className="px-4 py-1.5 text-[10px] text-zinc-500 border-t border-zinc-800/50">
+                        Recorded: {new Date(currentRec.started_at).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: Tabs for transcript & notes */}
+                  <div className="lg:w-2/5 border-t lg:border-t-0 lg:border-l border-zinc-700/50 flex flex-col min-h-0 max-h-[50vh] lg:max-h-none">
+                    {/* Tab bar */}
+                    <div className="flex border-b border-zinc-700/50 shrink-0">
+                      {[
+                        { id: "transcript", label: "Transcript", icon: ScrollText },
+                        { id: "notes", label: "Notes", icon: FileText },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors ${
+                            activeTab === tab.id
+                              ? "text-indigo-300 border-b-2 border-indigo-400"
+                              : "text-zinc-500 hover:text-zinc-300"
+                          }`}
+                        >
+                          <tab.icon className="w-3.5 h-3.5" />
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Tab content */}
+                    <div className="flex-1 overflow-y-auto" ref={transcriptRef}>
+                      {/* Transcript tab */}
+                      {activeTab === "transcript" && (
+                        <div className="p-4">
+                          {transcriptionReady ? (
+                            <div className="space-y-1">
+                              {currentRec.transcript_segments?.length > 0 ? (
+                                currentRec.transcript_segments.map((seg, i) => {
+                                  const isActive =
+                                    videoRef.current &&
+                                    videoRef.current.currentTime >= seg.start &&
+                                    videoRef.current.currentTime <= seg.end;
+                                  return (
+                                    <button
+                                      key={i}
+                                      data-seg-start={seg.start}
+                                      onClick={() => seekTo(seg.start)}
+                                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors group ${
+                                        isActive
+                                          ? "bg-indigo-500/15 text-indigo-200 border border-indigo-500/30"
+                                          : "text-zinc-300 hover:bg-zinc-800/60 border border-transparent"
+                                      }`}
+                                    >
+                                      <span className={`text-[10px] font-mono mr-2 ${isActive ? "text-indigo-400" : "text-zinc-600 group-hover:text-zinc-400"}`}>
+                                        {formatTime(seg.start)}
+                                      </span>
+                                      {seg.text}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                // Fallback: show the full transcript as plain text
+                                <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                                  {currentRec.transcript}
+                                </p>
+                              )}
+                            </div>
+                          ) : transcriptionFailed ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <AlertCircle className="w-8 h-8 text-red-400/60 mb-2" />
+                              <p className="text-xs text-zinc-400 mb-3">Transcription failed. Try again with a different method:</p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleRetryTranscription(currentRec, "local")}
+                                  disabled={!!retryingTranscription}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50"
+                                >
+                                  {retryingTranscription?.id === currentRec._id && retryingTranscription?.mode === "local" ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Cpu className="w-3 h-3" />
+                                  )}
+                                  Local Whisper
+                                </button>
+                                <button
+                                  onClick={() => handleRetryTranscription(currentRec, "online")}
+                                  disabled={!!retryingTranscription}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50"
+                                >
+                                  {retryingTranscription?.id === currentRec._id && retryingTranscription?.mode === "online" ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Cloud className="w-3 h-3" />
+                                  )}
+                                  OpenAI Cloud
+                                </button>
+                              </div>
+                            </div>
+                          ) : transcriptionNotStarted ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <ScrollText className="w-8 h-8 text-zinc-600 mb-2" />
+                              <p className="text-xs text-zinc-400 mb-1">No transcript available for this recording</p>
+                              <p className="text-[10px] text-zinc-600 mb-4">Choose a transcription method to generate the transcript</p>
+                              <div className="flex gap-3">
+                                <button
+                                  onClick={() => handleRetryTranscription(currentRec, "local")}
+                                  disabled={!!retryingTranscription}
+                                  className="flex flex-col items-center gap-2 px-5 py-3 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/25 disabled:opacity-50 transition-colors min-w-[130px]"
+                                >
+                                  {retryingTranscription?.id === currentRec._id && retryingTranscription?.mode === "local" ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <Cpu className="w-5 h-5" />
+                                  )}
+                                  <span>Local Whisper</span>
+                                  <span className="text-[10px] font-normal text-emerald-400/60">Free &middot; On-device</span>
+                                </button>
+                                <button
+                                  onClick={() => handleRetryTranscription(currentRec, "online")}
+                                  disabled={!!retryingTranscription}
+                                  className="flex flex-col items-center gap-2 px-5 py-3 rounded-lg text-xs font-medium bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border border-indigo-500/25 disabled:opacity-50 transition-colors min-w-[130px]"
+                                >
+                                  {retryingTranscription?.id === currentRec._id && retryingTranscription?.mode === "online" ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <Cloud className="w-5 h-5" />
+                                  )}
+                                  <span>OpenAI Cloud</span>
+                                  <span className="text-[10px] font-normal text-indigo-400/60">Paid &middot; API key</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <Loader2 className="w-6 h-6 animate-spin text-zinc-500 mb-2" />
+                              <p className="text-xs text-zinc-400">Transcription in progress...</p>
+                              <p className="text-[10px] text-zinc-600 mt-1">This may take a few minutes depending on recording length.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Notes tab */}
+                      {activeTab === "notes" && (
+                        <div className="p-4">
+                          {notes?.meeting_notes ? (
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                  AI-Generated Meeting Notes
+                                </h3>
+                                <button
+                                  onClick={() => handleRegenerateNotes(currentRec)}
+                                  disabled={generatingNotes === currentRec._id}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50"
+                                >
+                                  {generatingNotes === currentRec._id ? (
+                                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  ) : (
+                                    <RefreshCcw className="w-2.5 h-2.5" />
+                                  )}
+                                  Regenerate
+                                </button>
+                              </div>
+                              <div className="prose prose-invert prose-xs max-w-none text-xs text-zinc-300 leading-relaxed [&_h1]:text-sm [&_h1]:font-bold [&_h1]:text-zinc-100 [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-zinc-200 [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-zinc-200 [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:text-zinc-200 [&_ul]:space-y-0.5 [&_ol]:space-y-0.5 [&_li]:text-zinc-300">
+                                {notes.meeting_notes.split("\n").map((line, i) => {
+                                  // Simple markdown rendering for the notes
+                                  if (line.startsWith("# ")) return <h1 key={i}>{line.slice(2)}</h1>;
+                                  if (line.startsWith("## ")) return <h2 key={i}>{line.slice(3)}</h2>;
+                                  if (line.startsWith("### ")) return <h3 key={i}>{line.slice(4)}</h3>;
+                                  if (line.startsWith("**") && line.endsWith("**")) return <p key={i}><strong>{line.slice(2, -2)}</strong></p>;
+                                  if (line.startsWith("- ")) return <li key={i} className="ml-4 list-disc">{line.slice(2)}</li>;
+                                  if (/^\d+\.\s/.test(line)) return <li key={i} className="ml-4 list-decimal">{line.replace(/^\d+\.\s/, "")}</li>;
+                                  if (line.trim() === "") return <br key={i} />;
+                                  return <p key={i}>{line}</p>;
+                                })}
+                              </div>
+                            </div>
+                          ) : transcriptionReady ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <Sparkles className="w-8 h-8 text-amber-400/50 mb-2" />
+                              <p className="text-xs text-zinc-400 mb-1">Generate AI meeting notes from the transcript</p>
+                              <p className="text-[10px] text-zinc-600 mb-3">Includes summary, key points, action items, and follow-ups</p>
+                              <button
+                                onClick={() => handleGenerateNotes(currentRec)}
+                                disabled={generatingNotes === currentRec._id}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 disabled:opacity-50"
+                              >
+                                {generatingNotes === currentRec._id ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    Generating notes...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    Generate Meeting Notes
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <FileText className="w-8 h-8 text-zinc-600 mb-2" />
+                              <p className="text-xs text-zinc-400">Meeting notes will be available after transcription is complete.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -2642,77 +3177,13 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
 
       {/* Recording Playback Modal */}
       {recordingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setRecordingModal(null); }}
-        >
-          <div className="bg-zinc-900 rounded-xl border border-zinc-700/60 shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-700/50">
-              <div>
-                <h2 className="text-sm font-semibold text-white">Meeting Recordings</h2>
-                <p className="text-[11px] text-zinc-400 mt-0.5">{recordingModal.meetingTitle}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRecordingModal(null)}
-                className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {loadingRecordingsId === recordingModal.meetingId ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
-                  <span className="ml-2 text-sm text-zinc-400">Loading recordings...</span>
-                </div>
-              ) : (recordingsByMeeting[recordingModal.meetingId] || []).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
-                  <Video className="w-10 h-10 mb-2 opacity-40" />
-                  <p className="text-sm">No recordings available for this meeting.</p>
-                </div>
-              ) : (
-                (recordingsByMeeting[recordingModal.meetingId] || []).map((rec) => (
-                  <div key={rec._id} className="rounded-lg bg-zinc-800/80 border border-zinc-700/50 overflow-hidden">
-                    <div className="px-4 py-2 border-b border-zinc-700/40 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Video className="w-3.5 h-3.5 text-indigo-400" />
-                        <span className="text-xs font-medium text-zinc-200">
-                          {rec.participant_name || "Meeting Recording"}
-                        </span>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-900">
-                          {rec.type}
-                        </span>
-                      </div>
-                      {rec.duration_seconds != null && (
-                        <span className="text-[11px] text-zinc-400">
-                          {Math.floor(rec.duration_seconds / 60)}:{String(Math.round(rec.duration_seconds % 60)).padStart(2, "0")}
-                        </span>
-                      )}
-                    </div>
-                    <div className="bg-black">
-                      <video
-                        src={rec.cloudinary_url}
-                        controls
-                        className="w-full max-h-[50vh]"
-                        preload="metadata"
-                        controlsList="nodownload"
-                      >
-                        Your browser does not support video playback.
-                      </video>
-                    </div>
-                    {rec.started_at && (
-                      <div className="px-4 py-1.5 text-[10px] text-zinc-500">
-                        Recorded: {new Date(rec.started_at).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        <RecordingPlaybackModal
+          recordingModal={recordingModal}
+          setRecordingModal={setRecordingModal}
+          loadingRecordingsId={loadingRecordingsId}
+          recordingsByMeeting={recordingsByMeeting}
+          axiosConfig={axiosConfig}
+        />
       )}
 
       {/* Meeting Form Modal */}

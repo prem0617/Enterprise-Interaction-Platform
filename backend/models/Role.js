@@ -6,16 +6,18 @@ const roleSchema = new Schema(
       type: String,
       required: true,
       unique: true,
-      enum: [
-        "admin",
-        "hr",
-        "ceo",
-        "cto",
-        "team_lead",
-        "developer",
-        "support_agent",
-        "customer",
-      ],
+      trim: true,
+      lowercase: true,
+    },
+    display_name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    hierarchy_level: {
+      type: Number,
+      required: true,
+      default: 0,
     },
     permissions: {
       type: [String],
@@ -23,6 +25,10 @@ const roleSchema = new Schema(
     },
     description: {
       type: String,
+    },
+    is_system: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -32,5 +38,6 @@ const roleSchema = new Schema(
 
 // Indexes
 roleSchema.index({ name: 1 });
+roleSchema.index({ hierarchy_level: 1 });
 
 export default model("Role", roleSchema);

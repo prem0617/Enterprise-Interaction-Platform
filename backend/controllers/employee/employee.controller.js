@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import Department from "../../models/Department.js";
 import { sendEmail } from "../../utils/emailService.js";
 import { generateTempPassword } from "../../utils/passwordGenerator.js";
 
@@ -120,14 +121,16 @@ export const createEmployee = async (req, res) => {
     }
 
     // Define positions that require a team lead
-    const positionsRequiringTeamLead = ["senior", "mid", "junior"];
+    const positionsRequiringTeamLead = ["senior_engineer", "engineer", "junior_engineer", "intern"];
     const positionsRequiringDepartment = [
+      "project_manager",
       "team_lead",
-      "senior",
-      "mid",
-      "junior",
+      "senior_engineer",
+      "engineer",
+      "junior_engineer",
+      "intern",
     ];
-    const leadershipPositions = ["ceo", "cto", "team_lead"];
+    const leadershipPositions = ["ceo", "cto", "project_manager", "team_lead"];
 
     // Validation based on employee_type
     if (employee_type === "internal_team") {
@@ -166,7 +169,7 @@ export const createEmployee = async (req, res) => {
         }
 
         // Verify team lead has appropriate position
-        if (!["team_lead", "cto", "ceo"].includes(teamLead.position)) {
+        if (!leadershipPositions.includes(teamLead.position)) {
           return res.status(400).json({
             error: "Team lead must have a leadership position",
           });
@@ -240,9 +243,19 @@ export const createEmployee = async (req, res) => {
         employeeData.team_lead_id = team_lead_id;
       }
     } else if (employee_type === "customer_support") {
-      // For customer_support, we need to set a default department
-      // Since department is required in schema, set a default value
-      employeeData.department = "customer_support";
+      // For customer_support, find or use the Customer Support department
+      if (!department) {
+        const csDept = await Department.findOne({ code: "CS" });
+        if (csDept) {
+          employeeData.department = csDept._id;
+        } else {
+          return res.status(400).json({
+            error: "Customer Support department not found. Please run the migration script.",
+          });
+        }
+      } else {
+        employeeData.department = department;
+      }
     }
 
     const employee = new Employee(employeeData);
@@ -343,6 +356,7 @@ export const getAllEmployees = async (req, res) => {
       const [employees, total] = await Promise.all([
         Employee.find(filter)
           .populate({ path: "user_id", select: "-password_hash" })
+          .populate("department")
           .populate({
             path: "team_lead_id",
             populate: { path: "user_id", select: "first_name last_name email" },
@@ -370,6 +384,7 @@ export const getAllEmployees = async (req, res) => {
         path: "user_id",
         select: "-password_hash",
       })
+      .populate("department")
       .populate({
         path: "team_lead_id",
         populate: {
@@ -399,6 +414,7 @@ export const getEmployeeById = async (req, res) => {
         path: "user_id",
         select: "-password_hash",
       })
+      .populate("department")
       .populate({
         path: "team_lead_id",
         populate: {
@@ -468,6 +484,7 @@ export const updateEmployee = async (req, res) => {
         path: "user_id",
         select: "-password_hash",
       })
+      .populate("department")
       .populate({
         path: "team_lead_id",
         populate: {

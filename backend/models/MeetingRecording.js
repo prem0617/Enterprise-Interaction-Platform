@@ -41,6 +41,29 @@ const meetingRecordingSchema = new Schema(
       type: Number,
       min: 0,
     },
+    transcript: {
+      type: String,
+      default: null,
+    },
+    transcript_segments: {
+      type: [
+        {
+          start: Number,
+          end: Number,
+          text: String,
+        },
+      ],
+      default: [],
+    },
+    meeting_notes: {
+      type: String,
+      default: null,
+    },
+    transcription_status: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed"],
+      default: "pending",
+    },
   },
   { timestamps: true }
 );

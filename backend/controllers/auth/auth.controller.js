@@ -3,6 +3,9 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import Department from "../../models/Department.js";
+import Role from "../../models/Role.js";
+import { UserRole } from "../../models/UserRole.js";
 import { Customer } from "../../models/Customer.js";
 import { sendEmail } from "../../utils/emailService.js";
 import { cloudinary } from "../../config/cloudinary.js";
@@ -48,16 +51,40 @@ export const adminSignup = async (req, res) => {
     await user.save();
 
     // Create employee record for admin
+    // Find the Administration or HR department for the admin
+    let adminDept = await Department.findOne({ code: "ADM" });
+    if (!adminDept) {
+      adminDept = await Department.findOne({ code: "HR" });
+    }
+    if (!adminDept) {
+      // Create a default Administration department if none exists
+      adminDept = await Department.create({
+        name: "Administration",
+        code: "ADM",
+        color: "#6366f1",
+      });
+    }
+
     const employee = new Employee({
       user_id: user._id,
       employee_type: "internal_team",
-      department: "hr",
+      department: adminDept._id,
       position: "ceo",
       hire_date: new Date(),
       is_active: true,
     });
 
     await employee.save();
+
+    // Assign super_admin role
+    const superAdminRole = await Role.findOne({ name: "super_admin" });
+    if (superAdminRole) {
+      await UserRole.findOneAndUpdate(
+        { user_id: user._id, role_id: superAdminRole._id },
+        { user_id: user._id, role_id: superAdminRole._id, assigned_at: new Date() },
+        { upsert: true }
+      );
+    }
 
     // Generate token
     const token = jwt.sign(
@@ -88,18 +115,44 @@ export const adminSignup = async (req, res) => {
 export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log({ email, password });
-    // Find user
-    const user = await User.findOne({
+
+    // First try to find a native admin user
+    let user = await User.findOne({
       email: email.toLowerCase(),
-      // user_type: "admin",
+      user_type: "admin",
     });
-    console.log("USer not found");
+
+    let hasAdminRole = false;
+
     if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      // If no admin user found, check if an employee has an admin-level role (e.g. super_admin)
+      user = await User.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Check if this user has been assigned a super_admin or admin-level role
+      const adminRoles = await Role.find({
+        $or: [
+          { name: "super_admin" },
+          { name: "admin" },
+          { hierarchy_level: { $lte: 2 } },
+        ],
+      });
+      const adminRoleIds = adminRoles.map((r) => r._id);
+
+      const userAdminRole = await UserRole.findOne({
+        user_id: user._id,
+        role_id: { $in: adminRoleIds },
+      });
+
+      if (!userAdminRole) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      hasAdminRole = true;
     }
-    console.log("USer not found");
-    console.log({ user });
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
@@ -115,9 +168,9 @@ export const adminLogin = async (req, res) => {
     user.last_login = new Date();
     await user.save();
 
-    // Generate token
+    // Generate token — use "admin" as user_type so admin routes are accessible
     const token = jwt.sign(
-      { id: user._id, user_type: user.user_type },
+      { id: user._id, user_type: "admin" },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -130,7 +183,9 @@ export const adminLogin = async (req, res) => {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-        user_type: user.user_type,
+        user_type: "admin",
+        original_user_type: user.user_type,
+        has_admin_role: hasAdminRole,
         profile_picture: user.profile_picture,
       },
     });
@@ -171,7 +226,11 @@ export const employeeLogin = async (req, res) => {
     await user.save();
 
     // Get employee details
-    const employee = await Employee.findOne({ user_id: user._id });
+    const employee = await Employee.findOne({ user_id: user._id }).populate("department");
+
+    if (!employee || !employee.is_active) {
+      return res.status(403).json({ error: "Your employee account has been deactivated. Contact your administrator." });
+    }
 
     // Generate token
     const token = jwt.sign(
@@ -385,7 +444,7 @@ export const getProfile = async (req, res) => {
     }
 
     // If user is admin or employee, also fetch the employee record
-    const employee = await Employee.findOne({ user_id: userId });
+    const employee = await Employee.findOne({ user_id: userId }).populate("department");
 
     res.json({
       success: true,
@@ -651,5 +710,64 @@ export const customerLogin = async (req, res) => {
   } catch (error) {
     console.error("Customer login error:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Verify admin access — called by frontend to check if session is still valid
+export const verifyAdminAccess = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Native admins always have access
+    if (user.user_type === "admin") {
+      return res.json({ valid: true, user_type: "admin" });
+    }
+
+    // For non-admin users, check if they have an admin-level role assigned
+    const adminRoles = await Role.find({
+      $or: [
+        { name: "super_admin" },
+        { name: "admin" },
+        { hierarchy_level: { $lte: 2 } },
+      ],
+    });
+    const adminRoleIds = adminRoles.map((r) => r._id);
+
+    const userAdminRole = await UserRole.findOne({
+      user_id: user._id,
+      role_id: { $in: adminRoleIds },
+    });
+
+    if (!userAdminRole) {
+      return res.status(403).json({ valid: false, error: "Admin access revoked" });
+    }
+
+    return res.json({ valid: true, user_type: user.user_type, has_admin_role: true });
+  } catch (error) {
+    console.error("Verify admin access error:", error);
+    res.status(500).json({ valid: false, error: error.message });
+  }
+};
+
+// Verify employee access — called by frontend to check if session is still valid
+export const verifyEmployeeAccess = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Check user is active
+    if (user.status !== "active") {
+      return res.status(403).json({ valid: false, error: "Account is not active" });
+    }
+
+    // Check employee record exists and is active
+    const employee = await Employee.findOne({ user_id: user._id });
+    if (!employee || !employee.is_active) {
+      return res.status(403).json({ valid: false, error: "Employee access revoked" });
+    }
+
+    return res.json({ valid: true });
+  } catch (error) {
+    console.error("Verify employee access error:", error);
+    res.status(500).json({ valid: false, error: error.message });
   }
 };

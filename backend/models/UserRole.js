@@ -12,6 +12,10 @@ const userRoleSchema = new Schema(
       ref: "Role",
       required: true,
     },
+    assigned_by: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
     assigned_at: {
       type: Date,
       default: Date.now,

@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
+import { verifyToken, requirePermission } from "../middlewares/auth.middleware.js";
 import {
   checkIn,
   checkOut,
@@ -23,12 +23,12 @@ router.get("/today", verifyToken, getMyAttendanceToday);
 router.get("/history", verifyToken, getMyAttendanceHistory);
 router.get("/holidays", verifyToken, getHolidays);
 
-// ─── Admin routes ───
-router.get("/all", verifyToken, isAdmin, getAllAttendance);
-router.post("/mark", verifyToken, isAdmin, adminMarkAttendance);
-router.get("/summary", verifyToken, isAdmin, getAttendanceSummary);
-router.post("/holidays", verifyToken, isAdmin, createHoliday);
-router.put("/holidays/:id", verifyToken, isAdmin, updateHoliday);
-router.delete("/holidays/:id", verifyToken, isAdmin, deleteHoliday);
+// ─── Admin/HR routes ───
+router.get("/all", verifyToken, requirePermission("attendance:read_all"), getAllAttendance);
+router.post("/mark", verifyToken, requirePermission("attendance:manage"), adminMarkAttendance);
+router.get("/summary", verifyToken, requirePermission("attendance:read_all"), getAttendanceSummary);
+router.post("/holidays", verifyToken, requirePermission("attendance:manage"), createHoliday);
+router.put("/holidays/:id", verifyToken, requirePermission("attendance:manage"), updateHoliday);
+router.delete("/holidays/:id", verifyToken, requirePermission("attendance:manage"), deleteHoliday);
 
 export default router;
