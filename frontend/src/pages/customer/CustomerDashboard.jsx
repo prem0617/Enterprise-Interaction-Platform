@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import MeetingModule from "@/components/MeetingModule";
+import WhiteboardModule from "@/components/WhiteboardModule";
 import {
   Plus,
   Send,
@@ -22,6 +23,7 @@ import {
   Video,
   Eye,
   EyeOff,
+  PenLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BACKEND_URL } from "../../../config";
@@ -101,6 +103,7 @@ export default function CustomerDashboard() {
   const [searchParams] = useSearchParams();
   const { user, socket } = useAuthContext();
   const [showMeeting, setShowMeeting] = useState(false);
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -271,6 +274,22 @@ export default function CustomerDashboard() {
     (t) => t.status === "resolved" || t.status === "closed"
   ).length;
 
+  if (showWhiteboard) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        <div className="h-12 border-b flex items-center px-4 gap-3 bg-white dark:bg-zinc-950 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => { setShowWhiteboard(false); navigate("/customer/dashboard", { replace: true }); }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back to Support
+          </Button>
+          <span className="text-sm font-medium text-muted-foreground">Whiteboard</span>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <WhiteboardModule />
+        </div>
+      </div>
+    );
+  }
+
   if (showMeeting) {
     return (
       <div className="h-screen flex flex-col bg-background">
@@ -298,6 +317,14 @@ export default function CustomerDashboard() {
           <span className="font-semibold text-sm">Customer Support</span>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowWhiteboard(true)}
+            title="Whiteboard"
+          >
+            <PenLine className="h-4 w-4" />
+          </Button>
           <span className="text-sm text-muted-foreground">
             {user?.first_name} {user?.last_name}
           </span>

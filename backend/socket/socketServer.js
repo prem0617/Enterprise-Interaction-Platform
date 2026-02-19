@@ -20,6 +20,8 @@ const userCallStatus = {};
 const activeMeetings = {};
 // Lobby for meetings with open_to_everyone=false: meetingId -> [{ userId, name, socketId }]
 const meetingLobby = {};
+// Track active whiteboard sessions: whiteboardId -> { [userId]: { name, socketId } }
+const activeWhiteboards = {};
 
 function forwardToUser(eventName, toUserId, payload) {
   const normalizedTo = toUserId?.toString?.() ?? toUserId;
@@ -610,6 +612,44 @@ io.on("connection", async (socket) => {
     socket.to(room).emit("ticket-typing", { ticketId, userId: socket.userId, userName });
   });
 
+  // ─── Whiteboard real-time collaboration ──────────────────────
+  socket.on("whiteboard-join", ({ whiteboardId, userName }) => {
+    if (!whiteboardId || !socket.userId) return;
+    const room = `whiteboard:${whiteboardId}`;
+    socket.join(room);
+    if (!socket.whiteboardIds) socket.whiteboardIds = new Set();
+    socket.whiteboardIds.add(whiteboardId);
+    if (!activeWhiteboards[whiteboardId]) activeWhiteboards[whiteboardId] = {};
+    activeWhiteboards[whiteboardId][socket.userId] = { name: userName || "Unknown", socketId: socket.id };
+    const collaborators = Object.entries(activeWhiteboards[whiteboardId]).map(([uid, info]) => ({ userId: uid, name: info.name }));
+    io.to(room).emit("whiteboard-collaborators", { whiteboardId, collaborators });
+    console.log(`[WHITEBOARD] ${socket.userId} joined ${room}`);
+  });
+
+  socket.on("whiteboard-leave", ({ whiteboardId }) => {
+    if (!whiteboardId || !socket.userId) return;
+    const room = `whiteboard:${whiteboardId}`;
+    socket.leave(room);
+    if (socket.whiteboardIds) socket.whiteboardIds.delete(whiteboardId);
+    if (activeWhiteboards[whiteboardId]) {
+      delete activeWhiteboards[whiteboardId][socket.userId];
+      const collaborators = Object.entries(activeWhiteboards[whiteboardId]).map(([uid, info]) => ({ userId: uid, name: info.name }));
+      if (collaborators.length === 0) delete activeWhiteboards[whiteboardId];
+      else io.to(room).emit("whiteboard-collaborators", { whiteboardId, collaborators });
+    }
+    console.log(`[WHITEBOARD] ${socket.userId} left ${room}`);
+  });
+
+  socket.on("whiteboard-update", ({ whiteboardId, elements }) => {
+    if (!whiteboardId || !socket.userId) return;
+    socket.to(`whiteboard:${whiteboardId}`).emit("whiteboard-update", { whiteboardId, elements, senderId: socket.userId });
+  });
+
+  socket.on("whiteboard-cursor", ({ whiteboardId, cursor, userName }) => {
+    if (!whiteboardId || !socket.userId) return;
+    socket.to(`whiteboard:${whiteboardId}`).emit("whiteboard-cursor", { whiteboardId, userId: socket.userId, userName, cursor });
+  });
+
   socket.on("disconnect", () => {
     console.log(
       `Socket disconnected: ${socket.id} (userId=${normalizedUserId})`
@@ -656,6 +696,18 @@ io.on("connection", async (socket) => {
           );
           if (meetingLobby[key].length === 0) delete meetingLobby[key];
         });
+
+        // Remove user from any active whiteboard rooms
+        if (socket.whiteboardIds && socket.whiteboardIds.size > 0) {
+          socket.whiteboardIds.forEach((wbId) => {
+            const wb = activeWhiteboards[wbId];
+            if (!wb) return;
+            delete wb[normalizedUserId];
+            const collaborators = Object.entries(wb).map(([uid, info]) => ({ userId: uid, name: info.name }));
+            if (collaborators.length === 0) delete activeWhiteboards[wbId];
+            else io.to(`whiteboard:${wbId}`).emit("whiteboard-collaborators", { whiteboardId: wbId, collaborators });
+          });
+        }
 
         // Broadcast updated online users list
         broadcastOnlineUsers();

@@ -4,16 +4,23 @@ import {
   Users,
   MessageSquare,
   Video,
-  Activity,
   UserCheck,
   TrendingUp,
   TrendingDown,
   BarChart3,
   Clock,
   Building,
-  Flame,
-  Crown,
+  Cake,
+  CalendarOff,
+  CalendarCheck,
+  UserPlus,
+  CalendarDays,
+  PieChart as PieChartIcon,
   RefreshCcw,
+  PartyPopper,
+  Briefcase,
+  Home,
+  Monitor,
 } from "lucide-react";
 import {
   AreaChart,
@@ -36,25 +43,24 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const COLORS = [
-  "#6366f1",
-  "#8b5cf6",
-  "#a78bfa",
-  "#c4b5fd",
-  "#818cf8",
-  "#7c3aed",
-  "#4f46e5",
-];
-const STATUS_COLORS = {
-  scheduled: "#6366f1",
-  active: "#22c55e",
-  ended: "#a1a1aa",
-  cancelled: "#ef4444",
+const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#7c3aed", "#4f46e5"];
+const STATUS_COLORS = { scheduled: "#6366f1", active: "#22c55e", ended: "#a1a1aa", cancelled: "#ef4444" };
+const LEAVE_TYPE_COLORS = { paid: "#6366f1", floater: "#8b5cf6", marriage: "#ec4899", unpaid: "#f97316" };
+const ATTENDANCE_COLORS = {
+  present: "#22c55e",
+  absent: "#ef4444",
+  onLeave: "#f97316",
+  late: "#eab308",
+  halfDay: "#06b6d4",
+  notMarked: "#71717a",
 };
 
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const POSITION_LABELS = {
+  ceo: "CEO", cto: "CTO", project_manager: "Project Manager", team_lead: "Team Lead",
+  senior_engineer: "Senior Engineer", engineer: "Engineer", junior_engineer: "Junior Engineer", intern: "Intern",
+};
 
 export default function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
@@ -63,11 +69,14 @@ export default function AnalyticsDashboard() {
   const [messageActivity, setMessageActivity] = useState([]);
   const [meetingStats, setMeetingStats] = useState(null);
   const [departmentStats, setDepartmentStats] = useState([]);
-  const [heatmapData, setHeatmapData] = useState([]);
-  const [usageTrends, setUsageTrends] = useState([]);
-  const [topUsers, setTopUsers] = useState([]);
-  const [employeeReport, setEmployeeReport] = useState([]);
+  const [birthdays, setBirthdays] = useState({ today: [], thisWeek: [], thisMonth: [] });
+  const [onLeave, setOnLeave] = useState({ departments: [], totalOnLeave: 0 });
+  const [attendance, setAttendance] = useState(null);
+  const [newJoiners, setNewJoiners] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [leaveDistribution, setLeaveDistribution] = useState({ distribution: [], monthlyTrend: [] });
   const [timeRange, setTimeRange] = useState("7");
+  const [birthdayTab, setBirthdayTab] = useState("thisWeek");
 
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -76,48 +85,31 @@ export default function AnalyticsDashboard() {
     async (showRefresh = false) => {
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
-
       try {
-        const [
-          overviewRes,
-          msgRes,
-          meetRes,
-          deptRes,
-          heatRes,
-          trendRes,
-          topRes,
-          empRes,
-        ] = await Promise.all([
-          axios.get(`${BACKEND_URL}/analytics/overview`, { headers }),
-          axios.get(
-            `${BACKEND_URL}/analytics/messages?days=${timeRange}`,
-            { headers }
-          ),
-          axios.get(
-            `${BACKEND_URL}/analytics/meetings?days=${timeRange}`,
-            { headers }
-          ),
-          axios.get(`${BACKEND_URL}/analytics/departments`, { headers }),
-          axios.get(`${BACKEND_URL}/analytics/login-heatmap`, { headers }),
-          axios.get(`${BACKEND_URL}/analytics/usage-trends`, { headers }),
-          axios.get(
-            `${BACKEND_URL}/analytics/top-users?days=${timeRange}`,
-            { headers }
-          ),
-          axios.get(
-            `${BACKEND_URL}/analytics/employee-activity?days=${timeRange}`,
-            { headers }
-          ),
-        ]);
+        const [overviewRes, msgRes, meetRes, deptRes, bdayRes, leaveRes, attRes, joinRes, holRes, lDistRes] =
+          await Promise.all([
+            axios.get(`${BACKEND_URL}/analytics/overview`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/messages?days=${timeRange}`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/meetings?days=${timeRange}`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/departments`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/birthdays`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/on-leave-today`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/attendance-overview`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/new-joiners?days=90`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/upcoming-holidays?limit=8`, { headers }),
+            axios.get(`${BACKEND_URL}/analytics/leave-distribution`, { headers }),
+          ]);
 
         setOverview(overviewRes.data);
         setMessageActivity(msgRes.data.data || []);
         setMeetingStats(meetRes.data);
         setDepartmentStats(deptRes.data.departments || []);
-        setHeatmapData(heatRes.data.heatmap || []);
-        setUsageTrends(trendRes.data.data || []);
-        setTopUsers(topRes.data.users || []);
-        setEmployeeReport(empRes.data.report || []);
+        setBirthdays(bdayRes.data || { today: [], thisWeek: [], thisMonth: [] });
+        setOnLeave(leaveRes.data || { departments: [], totalOnLeave: 0 });
+        setAttendance(attRes.data);
+        setNewJoiners(joinRes.data.joiners || []);
+        setHolidays(holRes.data.holidays || []);
+        setLeaveDistribution(lDistRes.data || { distribution: [], monthlyTrend: [] });
       } catch (err) {
         console.error("Analytics fetch error:", err);
       } finally {
@@ -128,46 +120,37 @@ export default function AnalyticsDashboard() {
     [timeRange]
   );
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  // ── Heatmap helper ─────────────────────────
-  const maxActivity = Math.max(
-    ...heatmapData.map((d) => d.activity + d.logins),
-    1
-  );
-  const getHeatColor = (val) => {
-    const intensity = val / maxActivity;
-    if (intensity === 0) return "bg-zinc-800/50";
-    if (intensity < 0.25) return "bg-indigo-500/20";
-    if (intensity < 0.5) return "bg-indigo-500/40";
-    if (intensity < 0.75) return "bg-indigo-500/60";
-    return "bg-indigo-500/90";
-  };
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   if (loading) {
     return (
       <div className="p-6 lg:p-8 w-full space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-7 w-52 mb-2" />
-            <Skeleton className="h-4 w-80" />
-          </div>
+          <div><Skeleton className="h-7 w-52 mb-2" /><Skeleton className="h-4 w-80" /></div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-xl" />
-          ))}
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-80 rounded-xl" />
-          <Skeleton className="h-80 rounded-xl" />
+          <Skeleton className="h-80 rounded-xl" /><Skeleton className="h-80 rounded-xl" />
         </div>
         <Skeleton className="h-96 rounded-xl" />
       </div>
     );
   }
+
+  const attendancePieData = attendance
+    ? [
+        { name: "Present", value: attendance.present, color: ATTENDANCE_COLORS.present },
+        { name: "Absent", value: attendance.absent, color: ATTENDANCE_COLORS.absent },
+        { name: "On Leave", value: attendance.onLeave, color: ATTENDANCE_COLORS.onLeave },
+        { name: "Half Day", value: attendance.halfDay, color: ATTENDANCE_COLORS.halfDay },
+        { name: "Late", value: attendance.late, color: ATTENDANCE_COLORS.late },
+        { name: "Not Marked", value: attendance.notMarked, color: ATTENDANCE_COLORS.notMarked },
+      ].filter((d) => d.value > 0)
+    : [];
+
+  const birthdayList = birthdays[birthdayTab] || [];
 
   return (
     <div className="p-6 lg:p-8 w-full space-y-6">
@@ -179,75 +162,243 @@ export default function AnalyticsDashboard() {
             Reports &amp; Analytics
           </h1>
           <p className="text-sm text-muted-foreground">
-            Track employee activity, system usage, and department performance
+            Workforce insights, attendance, birthdays, and department overview
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs
-            value={timeRange}
-            onValueChange={setTimeRange}
-            className="h-9"
-          >
+          <Tabs value={timeRange} onValueChange={setTimeRange} className="h-9">
             <TabsList className="h-8">
-              <TabsTrigger value="7" className="text-xs px-3 h-7">
-                7d
-              </TabsTrigger>
-              <TabsTrigger value="14" className="text-xs px-3 h-7">
-                14d
-              </TabsTrigger>
-              <TabsTrigger value="30" className="text-xs px-3 h-7">
-                30d
-              </TabsTrigger>
+              <TabsTrigger value="7" className="text-xs px-3 h-7">7d</TabsTrigger>
+              <TabsTrigger value="14" className="text-xs px-3 h-7">14d</TabsTrigger>
+              <TabsTrigger value="30" className="text-xs px-3 h-7">30d</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchAll(true)}
-            disabled={refreshing}
-            className="h-8"
-          >
-            <RefreshCcw
-              className={`size-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`}
-            />
+          <Button variant="outline" size="sm" onClick={() => fetchAll(true)} disabled={refreshing} className="h-8">
+            <RefreshCcw className={`size-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* ─── KPI Cards ─────────────────────────────── */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard
-          icon={UserCheck}
-          label="Active Users Today"
-          value={overview?.activeUsersToday ?? 0}
-          sub={`${overview?.activeEmployees ?? 0} / ${overview?.totalEmployees ?? 0} employees active`}
+          icon={Users}
+          label="Total Employees"
+          value={overview?.activeEmployees ?? 0}
+          sub={`${overview?.totalEmployees ?? 0} total | ${overview?.activeUsersToday ?? 0} online today`}
         />
         <KPICard
-          icon={MessageSquare}
-          label="Messages This Week"
-          value={overview?.messagesThisWeek ?? 0}
-          change={overview?.messagesWeekChange}
-          sub={`${overview?.messagesToday ?? 0} today`}
+          icon={CalendarCheck}
+          label="Attendance Rate"
+          value={`${attendance?.attendanceRate ?? 0}%`}
+          sub={`${attendance?.present ?? 0} present | ${attendance?.late ?? 0} late`}
         />
         <KPICard
-          icon={Video}
-          label="Meetings This Week"
-          value={overview?.meetingsThisWeek ?? 0}
-          change={overview?.meetingsWeekChange}
-          sub={`${overview?.activeMeetings ?? 0} active now`}
+          icon={CalendarOff}
+          label="On Leave Today"
+          value={overview?.onLeaveToday ?? 0}
+          sub={`${attendance?.notMarked ?? 0} not yet marked`}
         />
         <KPICard
-          icon={Clock}
-          label="Avg Meeting Duration"
-          value={`${meetingStats?.avgDurationMinutes ?? 0}m`}
-          sub={`${meetingStats?.totalEndedMeetings ?? 0} meetings completed`}
+          icon={Cake}
+          label="Birthdays This Month"
+          value={birthdays.thisMonth?.length ?? 0}
+          sub={`${birthdays.today?.length ?? 0} celebrating today`}
+          highlight={birthdays.today?.length > 0}
         />
       </div>
 
-      {/* ─── Row: Message Activity + Meeting Breakdown ── */}
+      {/* Birthdays + On Leave Today */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Birthdays */}
+        <Card className="bg-zinc-900/80 border-zinc-800/80">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Cake className="size-4 text-pink-400" />
+                Birthdays
+              </CardTitle>
+              <Tabs value={birthdayTab} onValueChange={setBirthdayTab}>
+                <TabsList className="h-7">
+                  <TabsTrigger value="today" className="text-[10px] px-2 h-6">
+                    Today {birthdays.today?.length > 0 && <span className="ml-1 text-pink-400">({birthdays.today.length})</span>}
+                  </TabsTrigger>
+                  <TabsTrigger value="thisWeek" className="text-[10px] px-2 h-6">This Week</TabsTrigger>
+                  <TabsTrigger value="thisMonth" className="text-[10px] px-2 h-6">This Month</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-0 max-h-72 overflow-y-auto">
+              {birthdayList.length === 0 ? (
+                <div className="py-10 text-center">
+                  <PartyPopper className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    No birthdays {birthdayTab === "today" ? "today" : birthdayTab === "thisWeek" ? "this week" : "this month"}
+                  </p>
+                </div>
+              ) : (
+                birthdayList.map((p) => {
+                  const dob = new Date(p.date_of_birth);
+                  const dobStr = dob.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  const isToday = birthdays.today?.some((t) => t._id === p._id);
+                  return (
+                    <div key={p._id} className={`flex items-center gap-3 py-2.5 px-2 rounded-lg transition-colors ${isToday ? "bg-pink-500/10 border border-pink-500/20" : "hover:bg-muted/30"}`}>
+                      <Avatar className="size-8">
+                        <AvatarImage src={p.profile_picture} />
+                        <AvatarFallback className="text-[10px]">{p.first_name?.[0]}{p.last_name?.[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {p.first_name} {p.last_name}
+                          {isToday && <span className="ml-2 text-xs">&#127874;</span>}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {p.department?.name || "\u2014"} · {POSITION_LABELS[p.position] || p.position || "\u2014"}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-medium">{dobStr}</p>
+                        {p.age && <p className="text-[10px] text-muted-foreground">Turns {p.age}</p>}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* On Leave Today */}
+        <Card className="bg-zinc-900/80 border-zinc-800/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CalendarOff className="size-4 text-orange-400" />
+              On Leave Today
+              <Badge variant="secondary" className="text-[10px] ml-auto">{onLeave.totalOnLeave} total</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-72 overflow-y-auto">
+              {onLeave.departments.length === 0 ? (
+                <div className="py-10 text-center">
+                  <UserCheck className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No one is on leave today</p>
+                </div>
+              ) : (
+                onLeave.departments.map((dept) => (
+                  <div key={dept.department}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="size-2 rounded-full" style={{ backgroundColor: dept.color }} />
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{dept.department}</p>
+                      <span className="text-[10px] text-muted-foreground">({dept.employees.length})</span>
+                    </div>
+                    {dept.employees.map((emp, idx) => (
+                      <div key={emp._id + "-" + idx} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
+                        <Avatar className="size-7">
+                          <AvatarImage src={emp.profile_picture} />
+                          <AvatarFallback className="text-[9px]">{emp.first_name?.[0]}{emp.last_name?.[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{emp.first_name} {emp.last_name}</p>
+                          <p className="text-[10px] text-muted-foreground">{POSITION_LABELS[emp.position] || emp.position || ""}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] capitalize" style={{ borderColor: LEAVE_TYPE_COLORS[emp.leave_type] || "#6366f1", color: LEAVE_TYPE_COLORS[emp.leave_type] || "#a1a1aa" }}>
+                          {emp.leave_type} | {emp.days_count}d
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Attendance Overview + Leave Distribution */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Message Activity Chart */}
+        {/* Attendance Donut */}
+        <Card className="bg-zinc-900/80 border-zinc-800/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CalendarCheck className="size-4 text-emerald-400" />
+              Today's Attendance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-56">
+              {attendancePieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={attendancePieData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
+                      {attendancePieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Legend formatter={(value) => <span className="text-xs">{value}</span>} wrapperStyle={{ fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">No attendance data today</div>
+              )}
+            </div>
+            {attendance && (
+              <div className="flex items-center justify-center gap-4 mt-2 pt-2 border-t border-zinc-800/50">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Briefcase className="size-3" /> Office: <span className="font-medium text-foreground">{attendance.workType?.office || 0}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Home className="size-3" /> WFH: <span className="font-medium text-foreground">{attendance.workType?.wfh || 0}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Monitor className="size-3" /> Hybrid: <span className="font-medium text-foreground">{attendance.workType?.hybrid || 0}</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Leave Trends */}
+        <Card className="xl:col-span-2 bg-zinc-900/80 border-zinc-800/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <PieChartIcon className="size-4 text-violet-400" />
+              Leave Trends ({new Date().getFullYear()})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={leaveDistribution.monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="month" stroke="#52525b" fontSize={11} />
+                  <YAxis stroke="#52525b" fontSize={11} />
+                  <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="leaves" name="Leave Requests" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="days" name="Total Days" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {leaveDistribution.distribution.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mt-3 pt-2 border-t border-zinc-800/50">
+                {leaveDistribution.distribution.map((d) => (
+                  <div key={d.type} className="flex items-center gap-1.5">
+                    <div className="size-2 rounded-full" style={{ backgroundColor: LEAVE_TYPE_COLORS[d.type] || "#6366f1" }} />
+                    <span className="text-xs text-muted-foreground capitalize">{d.type}:</span>
+                    <span className="text-xs font-medium">{d.totalDays}d ({d.count})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Message Activity + Meeting Breakdown */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <Card className="xl:col-span-2 bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -256,55 +407,26 @@ export default function AnalyticsDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={messageActivity}>
                   <defs>
-                    <linearGradient
-                      id="msgGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
+                    <linearGradient id="msgGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                      <stop
-                        offset="95%"
-                        stopColor="#6366f1"
-                        stopOpacity={0.02}
-                      />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(d) => d.slice(5)}
-                    stroke="#52525b"
-                    fontSize={11}
-                  />
+                  <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} stroke="#52525b" fontSize={11} />
                   <YAxis stroke="#52525b" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="messages"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    fill="url(#msgGradient)"
-                  />
+                  <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="messages" stroke="#6366f1" strokeWidth={2} fill="url(#msgGradient)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        {/* Meeting Status Pie */}
         <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -313,42 +435,17 @@ export default function AnalyticsDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={(meetingStats?.byStatus || []).map((s) => ({
-                      name: s.status,
-                      value: s.count,
-                    }))}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={4}
-                    dataKey="value"
+                    data={(meetingStats?.byStatus || []).map((s) => ({ name: s.status, value: s.count }))}
+                    cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value"
                   >
-                    {(meetingStats?.byStatus || []).map((s, i) => (
-                      <Cell
-                        key={i}
-                        fill={STATUS_COLORS[s.status] || COLORS[i]}
-                      />
-                    ))}
+                    {(meetingStats?.byStatus || []).map((s, i) => <Cell key={i} fill={STATUS_COLORS[s.status] || COLORS[i]} />)}
                   </Pie>
-                  <Legend
-                    formatter={(value) =>
-                      value.charAt(0).toUpperCase() + value.slice(1)
-                    }
-                    wrapperStyle={{ fontSize: 12 }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
+                  <Legend formatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)} wrapperStyle={{ fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -356,53 +453,26 @@ export default function AnalyticsDashboard() {
         </Card>
       </div>
 
-      {/* ─── Department Performance ────────────────── */}
+      {/* Department Performance */}
       <Card className="bg-zinc-900/80 border-zinc-800/80">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Building className="size-4 text-cyan-400" />
-            Department Performance
-            <Badge variant="secondary" className="text-[10px] ml-auto">
-              This week
-            </Badge>
+            Department Overview
+            <Badge variant="secondary" className="text-[10px] ml-auto">This week</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-72">
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={departmentStats}
-                barGap={4}
-              >
+              <BarChart data={departmentStats} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="department" stroke="#52525b" fontSize={11} />
                 <YAxis stroke="#52525b" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#18181b",
-                    border: "1px solid #27272a",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
-                <Bar
-                  dataKey="messagesThisWeek"
-                  name="Messages"
-                  fill="#6366f1"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="meetingsThisWeek"
-                  name="Meetings"
-                  fill="#8b5cf6"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="employees"
-                  name="Employees"
-                  fill="#06b6d4"
-                  radius={[4, 4, 0, 0]}
-                />
+                <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="employees" name="Employees" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="messagesThisWeek" name="Messages" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="meetingsThisWeek" name="Meetings" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
               </BarChart>
             </ResponsiveContainer>
@@ -410,203 +480,42 @@ export default function AnalyticsDashboard() {
         </CardContent>
       </Card>
 
-      {/* ─── Row: System Usage Trends + Login Heatmap ── */}
+      {/* New Joiners + Upcoming Holidays */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* System Usage Trends */}
+        {/* New Joiners */}
         <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="size-4 text-emerald-400" />
-              System Usage Trends
-              <Badge variant="secondary" className="text-[10px] ml-auto">
-                12 weeks
-              </Badge>
+              <UserPlus className="size-4 text-emerald-400" />
+              New Joiners
+              <Badge variant="secondary" className="text-[10px] ml-auto">Last 90 days</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={usageTrends}>
-                  <defs>
-                    <linearGradient
-                      id="trendMsg"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
-                      <stop
-                        offset="95%"
-                        stopColor="#6366f1"
-                        stopOpacity={0.02}
-                      />
-                    </linearGradient>
-                    <linearGradient
-                      id="trendMeet"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
-                      <stop
-                        offset="95%"
-                        stopColor="#8b5cf6"
-                        stopOpacity={0.02}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis
-                    dataKey="week"
-                    tickFormatter={(d) => d.slice(5)}
-                    stroke="#52525b"
-                    fontSize={11}
-                  />
-                  <YAxis stroke="#52525b" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="messages"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    fill="url(#trendMsg)"
-                    name="Messages"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="meetings"
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    fill="url(#trendMeet)"
-                    name="Meetings"
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Login Heatmap */}
-        <Card className="bg-zinc-900/80 border-zinc-800/80">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Flame className="size-4 text-orange-400" />
-              Activity Heatmap
-              <Badge variant="secondary" className="text-[10px] ml-auto">
-                Last 30 days
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              {/* Hour labels */}
-              <div className="flex items-center gap-0.5 mb-1">
-                <div className="w-8" />
-                {Array.from({ length: 24 }, (_, h) => (
-                  <div
-                    key={h}
-                    className="flex-1 text-center text-[9px] text-muted-foreground"
-                  >
-                    {h % 4 === 0 ? `${h}` : ""}
-                  </div>
-                ))}
-              </div>
-              {/* Rows: one per day */}
-              {DAY_LABELS.map((day, dayIdx) => (
-                <div key={day} className="flex items-center gap-0.5">
-                  <div className="w-8 text-[10px] text-muted-foreground font-medium">
-                    {day}
-                  </div>
-                  {Array.from({ length: 24 }, (_, hour) => {
-                    const entry = heatmapData.find(
-                      (d) => d.dayIndex === dayIdx + 1 && d.hour === hour
-                    );
-                    const val = entry
-                      ? entry.activity + entry.logins
-                      : 0;
-                    return (
-                      <div
-                        key={hour}
-                        className={`flex-1 h-5 rounded-[3px] transition-colors ${getHeatColor(val)}`}
-                        title={`${day} ${hour}:00 — ${val} activities`}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-              {/* Legend */}
-              <div className="flex items-center justify-end gap-1.5 mt-2">
-                <span className="text-[10px] text-muted-foreground">Less</span>
-                <div className="w-3 h-3 rounded-sm bg-zinc-800/50" />
-                <div className="w-3 h-3 rounded-sm bg-indigo-500/20" />
-                <div className="w-3 h-3 rounded-sm bg-indigo-500/40" />
-                <div className="w-3 h-3 rounded-sm bg-indigo-500/60" />
-                <div className="w-3 h-3 rounded-sm bg-indigo-500/90" />
-                <span className="text-[10px] text-muted-foreground">More</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ─── Row: Top Active Users + Employee Activity ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        {/* Top Active Users */}
-        <Card className="xl:col-span-2 bg-zinc-900/80 border-zinc-800/80">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Crown className="size-4 text-amber-400" />
-              Top Active Users
-              <Badge variant="secondary" className="text-[10px] ml-auto">
-                {timeRange}d
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-0">
-              {topUsers.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  No activity data
+            <div className="space-y-0 max-h-64 overflow-y-auto">
+              {newJoiners.length === 0 ? (
+                <div className="py-10 text-center">
+                  <UserPlus className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No new joiners in the last 90 days</p>
                 </div>
               ) : (
-                topUsers.map((u, idx) => (
-                  <div
-                    key={u._id}
-                    className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs font-bold text-muted-foreground w-5 text-right">
-                      {idx + 1}
-                    </span>
+                newJoiners.map((emp) => (
+                  <div key={emp._id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
                     <Avatar className="size-8">
-                      <AvatarImage src={u.profile_picture} />
-                      <AvatarFallback className="text-[10px]">
-                        {u.first_name?.[0]}
-                        {u.last_name?.[0]}
-                      </AvatarFallback>
+                      <AvatarImage src={emp.profile_picture} />
+                      <AvatarFallback className="text-[10px]">{emp.first_name?.[0]}{emp.last_name?.[0]}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {u.first_name} {u.last_name}
-                      </p>
+                      <p className="text-sm font-medium truncate">{emp.first_name} {emp.last_name}</p>
                       <p className="text-[10px] text-muted-foreground truncate">
-                        {u.department
-                          ? `${u.department?.name || "—"} · ${u.position || ""}`
-                          : u.email}
+                        {emp.department?.name || "\u2014"} · {POSITION_LABELS[emp.position] || emp.position || "\u2014"}
                       </p>
                     </div>
-                    <Badge variant="secondary" className="text-xs tabular-nums">
-                      {u.messageCount}
-                    </Badge>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(emp.hire_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    </div>
                   </div>
                 ))
               )}
@@ -614,115 +523,52 @@ export default function AnalyticsDashboard() {
           </CardContent>
         </Card>
 
-        {/* Employee Activity Report Table */}
-        <Card className="xl:col-span-3 bg-zinc-900/80 border-zinc-800/80">
+        {/* Upcoming Holidays */}
+        <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Activity className="size-4 text-emerald-400" />
-              Employee Activity Report
-              <Badge variant="secondary" className="text-[10px] ml-auto">
-                {timeRange}d
-              </Badge>
+              <CalendarDays className="size-4 text-amber-400" />
+              Upcoming Holidays
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800">
-                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">
-                      Employee
-                    </th>
-                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">
-                      Dept
-                    </th>
-                    <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">
-                      Messages
-                    </th>
-                    <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">
-                      Meetings
-                    </th>
-                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">
-                      Last Login
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employeeReport.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="py-12 text-center text-muted-foreground"
-                      >
-                        No data
-                      </td>
-                    </tr>
-                  ) : (
-                    employeeReport.slice(0, 15).map((emp) => (
-                      <tr
-                        key={emp._id}
-                        className="border-b border-zinc-800/50 hover:bg-muted/20 transition-colors"
-                      >
-                        <td className="py-2 px-2">
-                          <div className="flex items-center gap-2">
-                            <Avatar className="size-6">
-                              <AvatarImage src={emp.profile_picture} />
-                              <AvatarFallback className="text-[9px]">
-                                {emp.first_name?.[0]}
-                                {emp.last_name?.[0]}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate max-w-[140px]">
-                              {emp.first_name} {emp.last_name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2 px-2">
-                          <Badge
-                            variant="outline"
-                            className="text-[10px]"
-                            style={{
-                              borderColor:
-                                emp.department?.color || "#52525b",
-                              color:
-                                emp.department?.color || "#a1a1aa",
-                            }}
-                          >
-                            {emp.department?.name || "—"}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-2 text-center tabular-nums">
-                          {emp.messageCount}
-                        </td>
-                        <td className="py-2 px-2 text-center tabular-nums">
-                          {emp.meetingCount}
-                        </td>
-                        <td className="py-2 px-2 text-xs text-muted-foreground">
-                          {emp.last_login
-                            ? new Date(emp.last_login).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )
-                            : "Never"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="space-y-0 max-h-64 overflow-y-auto">
+              {holidays.length === 0 ? (
+                <div className="py-10 text-center">
+                  <CalendarDays className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No upcoming holidays</p>
+                </div>
+              ) : (
+                holidays.map((h) => {
+                  const hDate = new Date(h.date);
+                  const dayName = hDate.toLocaleDateString("en-US", { weekday: "short" });
+                  const daysUntil = Math.ceil((hDate - new Date()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={h._id} className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
+                      <div className="size-10 rounded-lg bg-amber-500/10 flex flex-col items-center justify-center">
+                        <span className="text-[9px] font-bold text-amber-400 uppercase">{hDate.toLocaleDateString("en-US", { month: "short" })}</span>
+                        <span className="text-sm font-bold text-amber-300 -mt-0.5">{hDate.getDate()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{h.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {dayName} · <span className="capitalize">{h.type || "holiday"}</span>
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">
+                        {daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : `In ${daysUntil}d`}
+                      </Badge>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ─── Meeting Types Breakdown ───────────────── */}
+      {/* Meeting Activity + Types */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Meetings per day */}
         <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -731,37 +577,20 @@ export default function AnalyticsDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-56">
+            <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={meetingStats?.dailyData || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(d) => d.slice(5)}
-                    stroke="#52525b"
-                    fontSize={11}
-                  />
+                  <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} stroke="#52525b" fontSize={11} />
                   <YAxis stroke="#52525b" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar
-                    dataKey="meetings"
-                    fill="#8b5cf6"
-                    radius={[4, 4, 0, 0]}
-                  />
+                  <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="meetings" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        {/* Meeting by Type */}
         <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -770,35 +599,17 @@ export default function AnalyticsDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-56">
+            <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={(meetingStats?.byType || []).map((t) => ({
-                      name: t.type?.replace("_", " ") || "Unknown",
-                      value: t.count,
-                    }))}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
+                    data={(meetingStats?.byType || []).map((t) => ({ name: t.type?.replace("_", " ") || "Unknown", value: t.count }))}
+                    cx="50%" cy="50%" outerRadius={75} paddingAngle={4} dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
-                    {(meetingStats?.byType || []).map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
+                    {(meetingStats?.byType || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
+                  <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -809,35 +620,25 @@ export default function AnalyticsDashboard() {
   );
 }
 
-// ─── KPI Card Component ────────────────────────────────────
-function KPICard({ icon: Icon, label, value, change, sub }) {
+// KPI Card Component
+function KPICard({ icon: Icon, label, value, change, sub, highlight }) {
   return (
-    <Card className="bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700/80 transition-all duration-200 overflow-hidden">
+    <Card className={`bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700/80 transition-all duration-200 overflow-hidden ${highlight ? "ring-1 ring-pink-500/30" : ""}`}>
       <CardContent className="p-5 relative">
         <div className="flex items-center justify-between mb-4">
-          <div className="size-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
-            <Icon className="size-[18px] text-indigo-400" />
+          <div className={`size-10 rounded-xl flex items-center justify-center ${highlight ? "bg-pink-500/10" : "bg-indigo-500/10"}`}>
+            <Icon className={`size-[18px] ${highlight ? "text-pink-400" : "text-indigo-400"}`} />
           </div>
           {change !== undefined && change !== null && (
-            <Badge
-              variant={change >= 0 ? "default" : "destructive"}
-              className="text-[10px] gap-0.5"
-            >
-              {change >= 0 ? (
-                <TrendingUp className="size-2.5" />
-              ) : (
-                <TrendingDown className="size-2.5" />
-              )}
-              {change >= 0 ? "+" : ""}
-              {change}%
+            <Badge variant={change >= 0 ? "default" : "destructive"} className="text-[10px] gap-0.5">
+              {change >= 0 ? <TrendingUp className="size-2.5" /> : <TrendingDown className="size-2.5" />}
+              {change >= 0 ? "+" : ""}{change}%
             </Badge>
           )}
         </div>
         <p className="text-3xl font-bold tracking-tight tabular-nums">{value}</p>
         <p className="text-xs text-zinc-500 mt-1 font-medium">{label}</p>
-        {sub && (
-          <p className="text-[10px] text-zinc-600 mt-1">{sub}</p>
-        )}
+        {sub && <p className="text-[10px] text-zinc-600 mt-1">{sub}</p>}
       </CardContent>
     </Card>
   );

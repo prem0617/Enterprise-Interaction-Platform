@@ -17,6 +17,7 @@ import {
   Building2,
   Ticket,
   ShieldCheck,
+  PenLine,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
@@ -30,6 +31,7 @@ import TicketManagement from "./TicketManagement";
 import RoleManagement from "./RoleManagement";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import WhiteboardModule from "@/components/WhiteboardModule";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
@@ -93,6 +95,7 @@ export default function AdminDashboard() {
     { id: "tickets", icon: Ticket, label: "Tickets" },
     { id: "roles", icon: ShieldCheck, label: "Roles & Access" },
     { id: "analytics", icon: BarChart3, label: "Analytics" },
+    { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
     { id: "profile", icon: User, label: "Profile" },
   ];
 
@@ -323,13 +326,16 @@ export default function AdminDashboard() {
               />
             )}
 
-            {currentPage !== "meetings" && renderPageContent()}
+            {currentPage !== "meetings" && currentPage !== "whiteboard" && renderPageContent()}
 
             {/* MeetingModule is ALWAYS mounted — hidden via CSS when not on the meetings tab */}
             <MeetingModule
               isVisible={currentPage === "meetings"}
               onMeetingStateChange={handleMeetingStateChange}
             />
+
+            {/* WhiteboardModule is ALWAYS mounted — hidden via CSS when not on the whiteboard tab */}
+            <WhiteboardModule isVisible={currentPage === "whiteboard"} />
           </main>
         </div>
       </div>

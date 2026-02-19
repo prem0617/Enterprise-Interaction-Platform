@@ -14,10 +14,12 @@ import {
   CalendarCheck,
   Hexagon,
   Ticket,
+  PenLine,
 } from "lucide-react";
 import EmployeeHome from "@/components/EmployeeHome";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
+import WhiteboardModule from "@/components/WhiteboardModule";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import AttendanceModule from "./AttendanceModule";
 import EmployeeTicketView from "@/components/EmployeeTicketView";
@@ -64,6 +66,7 @@ export default function EmployeeDashboard() {
     { id: "files", icon: FileText, label: "Files" },
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
     { id: "meetings", icon: Video, label: "Meetings" },
+    { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
     { id: "tickets", icon: Ticket, label: "Tickets" },
   ];
 
@@ -234,6 +237,9 @@ export default function EmployeeDashboard() {
           isVisible={activeTab === "meetings"}
           onMeetingStateChange={handleMeetingStateChange}
         />
+
+        {/* WhiteboardModule is ALWAYS mounted — hidden via CSS when not on the whiteboard tab */}
+        <WhiteboardModule isVisible={activeTab === "whiteboard"} />
 
         {activeTab === "tickets" && (
           <div className="flex-1 p-4 overflow-hidden">

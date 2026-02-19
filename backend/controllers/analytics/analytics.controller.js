@@ -3,12 +3,20 @@ import Employee from "../../models/Employee.js";
 import Meeting from "../../models/Meeting.js";
 import { Message } from "../../models/Message.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
-import { ChannelMember } from "../../models/ChannelMember.js";
+import Attendance from "../../models/Attendance.js";
+import LeaveRequest from "../../models/LeaveRequest.js";
+import Holiday from "../../models/Holiday.js";
 
 // ─── Helpers ────────────────────────────────────────────────
 function startOfDay(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
   return d;
 }
 
@@ -18,14 +26,11 @@ function daysAgo(n) {
   return startOfDay(d);
 }
 
-function weeksAgo(n) {
-  return daysAgo(n * 7);
-}
-
 // ─── 1. Overview KPI cards ──────────────────────────────────
 export const getOverviewStats = async (req, res) => {
   try {
     const today = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
     const weekAgo = daysAgo(7);
     const prevWeekStart = daysAgo(14);
 
@@ -40,48 +45,39 @@ export const getOverviewStats = async (req, res) => {
       meetingsThisWeek,
       meetingsPrevWeek,
       totalChannels,
+      onLeaveToday,
+      presentToday,
     ] = await Promise.all([
       Employee.countDocuments(),
       Employee.countDocuments({ is_active: true }),
       User.countDocuments({ last_login: { $gte: today }, status: "active" }),
-      Message.countDocuments({
-        created_at: { $gte: today },
-        deleted_at: null,
-      }),
-      Message.countDocuments({
-        created_at: { $gte: weekAgo },
-        deleted_at: null,
-      }),
-      Message.countDocuments({
-        created_at: { $gte: prevWeekStart, $lt: weekAgo },
-        deleted_at: null,
-      }),
+      Message.countDocuments({ created_at: { $gte: today }, deleted_at: null }),
+      Message.countDocuments({ created_at: { $gte: weekAgo }, deleted_at: null }),
+      Message.countDocuments({ created_at: { $gte: prevWeekStart, $lt: weekAgo }, deleted_at: null }),
       Meeting.countDocuments({ status: "active" }),
       Meeting.countDocuments({ createdAt: { $gte: weekAgo } }),
-      Meeting.countDocuments({
-        createdAt: { $gte: prevWeekStart, $lt: weekAgo },
-      }),
+      Meeting.countDocuments({ createdAt: { $gte: prevWeekStart, $lt: weekAgo } }),
       ChatChannel.countDocuments(),
+      LeaveRequest.countDocuments({
+        status: "approved",
+        start_date: { $lte: todayEnd },
+        end_date: { $gte: today },
+      }),
+      Attendance.countDocuments({
+        date: { $gte: today, $lte: todayEnd },
+        status: { $in: ["present", "late"] },
+      }),
     ]);
 
-    // Percentage change = ((curr - prev) / prev) * 100
     const msgChange =
       messagesPrevWeek > 0
-        ? Math.round(
-            ((messagesThisWeek - messagesPrevWeek) / messagesPrevWeek) * 100
-          )
-        : messagesThisWeek > 0
-        ? 100
-        : 0;
+        ? Math.round(((messagesThisWeek - messagesPrevWeek) / messagesPrevWeek) * 100)
+        : messagesThisWeek > 0 ? 100 : 0;
 
     const meetChange =
       meetingsPrevWeek > 0
-        ? Math.round(
-            ((meetingsThisWeek - meetingsPrevWeek) / meetingsPrevWeek) * 100
-          )
-        : meetingsThisWeek > 0
-        ? 100
-        : 0;
+        ? Math.round(((meetingsThisWeek - meetingsPrevWeek) / meetingsPrevWeek) * 100)
+        : meetingsThisWeek > 0 ? 100 : 0;
 
     res.json({
       totalEmployees,
@@ -94,6 +90,8 @@ export const getOverviewStats = async (req, res) => {
       meetingsThisWeek,
       meetingsWeekChange: meetChange,
       totalChannels,
+      onLeaveToday,
+      presentToday,
     });
   } catch (error) {
     console.error("Overview stats error:", error);
@@ -101,33 +99,23 @@ export const getOverviewStats = async (req, res) => {
   }
 };
 
-// ─── 2. Message activity (daily counts for last 30 days) ────
+// ─── 2. Message activity ────────────────────────────────────
 export const getMessageActivity = async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
     const since = daysAgo(days);
 
-    const pipeline = [
-      {
-        $match: {
-          created_at: { $gte: since },
-          deleted_at: null,
-        },
-      },
+    const data = await Message.aggregate([
+      { $match: { created_at: { $gte: since }, deleted_at: null } },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$created_at" },
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$created_at" } },
           count: { $sum: 1 },
         },
       },
       { $sort: { _id: 1 } },
-    ];
+    ]);
 
-    const data = await Message.aggregate(pipeline);
-
-    // Fill gaps so every day has a value
     const result = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
@@ -136,7 +124,6 @@ export const getMessageActivity = async (req, res) => {
       const found = data.find((r) => r._id === key);
       result.push({ date: key, messages: found ? found.count : 0 });
     }
-
     res.json({ data: result });
   } catch (error) {
     console.error("Message activity error:", error);
@@ -150,7 +137,6 @@ export const getMeetingStats = async (req, res) => {
     const days = parseInt(req.query.days) || 30;
     const since = daysAgo(days);
 
-    // Meetings per day
     const perDay = await Meeting.aggregate([
       { $match: { createdAt: { $gte: since } } },
       {
@@ -162,7 +148,6 @@ export const getMeetingStats = async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
-    // Fill gaps
     const dailyData = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
@@ -172,7 +157,6 @@ export const getMeetingStats = async (req, res) => {
       dailyData.push({ date: key, meetings: found ? found.count : 0 });
     }
 
-    // Average duration (only ended meetings with both timestamps)
     const durationAgg = await Meeting.aggregate([
       {
         $match: {
@@ -180,11 +164,7 @@ export const getMeetingStats = async (req, res) => {
           ended_at: { $exists: true, $ne: null },
         },
       },
-      {
-        $project: {
-          duration: { $subtract: ["$ended_at", "$started_at"] },
-        },
-      },
+      { $project: { duration: { $subtract: ["$ended_at", "$started_at"] } } },
       {
         $group: {
           _id: null,
@@ -195,19 +175,15 @@ export const getMeetingStats = async (req, res) => {
     ]);
 
     const avgDurationMinutes =
-      durationAgg.length > 0
-        ? Math.round(durationAgg[0].avgDuration / 60000)
-        : 0;
+      durationAgg.length > 0 ? Math.round(durationAgg[0].avgDuration / 60000) : 0;
     const totalEndedMeetings =
       durationAgg.length > 0 ? durationAgg[0].totalMeetings : 0;
 
-    // By type
     const byType = await Meeting.aggregate([
       { $match: { createdAt: { $gte: since } } },
       { $group: { _id: "$meeting_type", count: { $sum: 1 } } },
     ]);
 
-    // By status
     const byStatus = await Meeting.aggregate([
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
@@ -228,7 +204,6 @@ export const getMeetingStats = async (req, res) => {
 // ─── 4. Department-wise performance ─────────────────────────
 export const getDepartmentStats = async (req, res) => {
   try {
-    // Employee count per department
     const deptCounts = await Employee.aggregate([
       { $match: { is_active: true } },
       { $group: { _id: "$department", count: { $sum: 1 } } },
@@ -237,18 +212,10 @@ export const getDepartmentStats = async (req, res) => {
       { $sort: { count: -1 } },
     ]);
 
-    // Messages per department — join through employee → user → message
     const weekAgo = daysAgo(7);
-
-    // Get all employees grouped by department with user_ids
     const departments = await Employee.aggregate([
       { $match: { is_active: true } },
-      {
-        $group: {
-          _id: "$department",
-          userIds: { $push: "$user_id" },
-        },
-      },
+      { $group: { _id: "$department", userIds: { $push: "$user_id" } } },
     ]);
 
     const deptMessageCounts = await Promise.all(
@@ -262,7 +229,6 @@ export const getDepartmentStats = async (req, res) => {
       })
     );
 
-    // Meetings per department (via host)
     const deptMeetingCounts = await Promise.all(
       departments.map(async (dept) => {
         const meetCount = await Meeting.countDocuments({
@@ -273,16 +239,12 @@ export const getDepartmentStats = async (req, res) => {
       })
     );
 
-    // Combine
     const combined = deptCounts.map((d) => {
-      const msgData = deptMessageCounts.find(
-        (m) => m.department === d._id
-      ) || { messages: 0 };
-      const meetData = deptMeetingCounts.find(
-        (m) => m.department === d._id
-      ) || { meetings: 0 };
+      const msgData = deptMessageCounts.find((m) => String(m.department) === String(d._id)) || { messages: 0 };
+      const meetData = deptMeetingCounts.find((m) => String(m.department) === String(d._id)) || { meetings: 0 };
       return {
         department: d.dept?.name || String(d._id),
+        departmentColor: d.dept?.color || "#6366f1",
         employees: d.count,
         messagesThisWeek: msgData.messages,
         meetingsThisWeek: meetData.meetings,
@@ -296,222 +258,263 @@ export const getDepartmentStats = async (req, res) => {
   }
 };
 
-// ─── 5. Login frequency heatmap (hour × dayOfWeek) ─────────
-export const getLoginHeatmap = async (req, res) => {
+// ─── 5. Birthdays ───────────────────────────────────────────
+export const getBirthdays = async (req, res) => {
   try {
-    const thirtyDaysAgo = daysAgo(30);
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
 
-    const data = await User.aggregate([
-      {
-        $match: {
-          last_login: { $gte: thirtyDaysAgo },
-          status: "active",
-        },
-      },
-      {
-        $project: {
-          hour: { $hour: "$last_login" },
-          dayOfWeek: { $dayOfWeek: "$last_login" }, // 1=Sun … 7=Sat
-        },
-      },
-      {
-        $group: {
-          _id: { hour: "$hour", day: "$dayOfWeek" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const employees = await Employee.find({ is_active: true })
+      .populate("user_id", "first_name last_name email profile_picture date_of_birth")
+      .populate("department", "name color")
+      .lean();
 
-    // Also build a 30-day login-per-day array from all users last_login
-    // This is a simpler fallback; for a true heatmap we need login history.
-    // We'll enrich this by also looking at messages as proxy for activity.
-    const activityPerHour = await Message.aggregate([
-      { $match: { created_at: { $gte: thirtyDaysAgo }, deleted_at: null } },
-      {
-        $project: {
-          hour: { $hour: "$created_at" },
-          dayOfWeek: { $dayOfWeek: "$created_at" },
-        },
-      },
-      {
-        $group: {
-          _id: { hour: "$hour", day: "$dayOfWeek" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const withDob = employees.filter((e) => e.user_id?.date_of_birth);
 
-    // Merge both datasets
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const heatmap = [];
-    for (let day = 1; day <= 7; day++) {
-      for (let hour = 0; hour < 24; hour++) {
-        const loginEntry = data.find(
-          (d) => d._id.hour === hour && d._id.day === day
-        );
-        const activityEntry = activityPerHour.find(
-          (d) => d._id.hour === hour && d._id.day === day
-        );
-        heatmap.push({
-          day: dayNames[day - 1],
-          dayIndex: day,
-          hour,
-          logins: loginEntry ? loginEntry.count : 0,
-          activity: activityEntry ? activityEntry.count : 0,
-        });
+    const today = [];
+    const thisWeek = [];
+    const thisMonth = [];
+
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStartDay = currentDay + mondayOffset;
+    const weekEndDay = weekStartDay + 6;
+
+    for (const emp of withDob) {
+      const dob = new Date(emp.user_id.date_of_birth);
+      const dobMonth = dob.getMonth() + 1;
+      const dobDay = dob.getDate();
+      const age = now.getFullYear() - dob.getFullYear();
+
+      const person = {
+        _id: emp._id,
+        user_id: emp.user_id._id,
+        first_name: emp.user_id.first_name,
+        last_name: emp.user_id.last_name,
+        email: emp.user_id.email,
+        profile_picture: emp.user_id.profile_picture,
+        date_of_birth: emp.user_id.date_of_birth,
+        department: emp.department,
+        position: emp.position,
+        age,
+        birthdayDate: String(dobMonth).padStart(2, "0") + "-" + String(dobDay).padStart(2, "0"),
+      };
+
+      if (dobMonth === currentMonth) {
+        thisMonth.push(person);
+        if (dobDay === currentDay) today.push(person);
+        if (dobDay >= weekStartDay && dobDay <= weekEndDay) thisWeek.push(person);
       }
     }
 
-    res.json({ heatmap });
+    const sortByDay = (a, b) => new Date(a.date_of_birth).getDate() - new Date(b.date_of_birth).getDate();
+    today.sort(sortByDay);
+    thisWeek.sort(sortByDay);
+    thisMonth.sort(sortByDay);
+
+    res.json({ today, thisWeek, thisMonth });
   } catch (error) {
-    console.error("Login heatmap error:", error);
+    console.error("Birthdays error:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// ─── 6. System usage trends (weekly aggregated) ─────────────
-export const getSystemUsageTrends = async (req, res) => {
+// ─── 6. On leave today ─────────────────────────────────────
+export const getOnLeaveToday = async (req, res) => {
   try {
-    const weeks = parseInt(req.query.weeks) || 12;
-    const result = [];
+    const today = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
 
-    for (let i = weeks - 1; i >= 0; i--) {
-      const weekStart = weeksAgo(i + 1);
-      const weekEnd = weeksAgo(i);
+    const leaveRequests = await LeaveRequest.find({
+      status: "approved",
+      start_date: { $lte: todayEnd },
+      end_date: { $gte: today },
+    })
+      .populate("employee_id", "first_name last_name email profile_picture")
+      .lean();
 
-      const [messages, meetings, newUsers] = await Promise.all([
-        Message.countDocuments({
-          created_at: { $gte: weekStart, $lt: weekEnd },
-          deleted_at: null,
-        }),
-        Meeting.countDocuments({
-          createdAt: { $gte: weekStart, $lt: weekEnd },
-        }),
-        User.countDocuments({
-          created_at: { $gte: weekStart, $lt: weekEnd },
-        }),
-      ]);
+    const employeeUserIds = leaveRequests.map((lr) => lr.employee_id?._id);
+    const employees = await Employee.find({
+      user_id: { $in: employeeUserIds },
+      is_active: true,
+    })
+      .populate("department", "name color")
+      .lean();
 
-      result.push({
-        week: weekStart.toISOString().slice(0, 10),
-        messages,
-        meetings,
-        newUsers,
+    const empMap = {};
+    employees.forEach((e) => { empMap[e.user_id.toString()] = e; });
+
+    const byDepartment = {};
+    for (const lr of leaveRequests) {
+      if (!lr.employee_id) continue;
+      const uid = lr.employee_id._id.toString();
+      const emp = empMap[uid];
+      const deptName = emp?.department?.name || "Unassigned";
+      const deptColor = emp?.department?.color || "#6366f1";
+
+      if (!byDepartment[deptName]) {
+        byDepartment[deptName] = { department: deptName, color: deptColor, employees: [] };
+      }
+
+      byDepartment[deptName].employees.push({
+        _id: lr.employee_id._id,
+        first_name: lr.employee_id.first_name,
+        last_name: lr.employee_id.last_name,
+        email: lr.employee_id.email,
+        profile_picture: lr.employee_id.profile_picture,
+        leave_type: lr.leave_type,
+        start_date: lr.start_date,
+        end_date: lr.end_date,
+        days_count: lr.days_count,
+        position: emp?.position || "",
       });
     }
 
-    res.json({ data: result });
+    const departments = Object.values(byDepartment).sort((a, b) => b.employees.length - a.employees.length);
+    res.json({ departments, totalOnLeave: leaveRequests.length });
   } catch (error) {
-    console.error("System usage trends error:", error);
+    console.error("On leave today error:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// ─── 7. Top active users ────────────────────────────────────
-export const getTopActiveUsers = async (req, res) => {
+// ─── 7. Attendance overview ─────────────────────────────────
+export const getAttendanceOverview = async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 7;
-    const since = daysAgo(days);
+    const today = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+    const totalActive = await Employee.countDocuments({ is_active: true });
 
-    const topSenders = await Message.aggregate([
-      { $match: { created_at: { $gte: since }, deleted_at: null } },
-      { $group: { _id: "$sender_id", messageCount: { $sum: 1 } } },
-      { $sort: { messageCount: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $lookup: {
-          from: "employees",
-          localField: "_id",
-          foreignField: "user_id",
-          as: "employee",
-        },
-      },
-      {
-        $unwind: { path: "$employee", preserveNullAndEmptyArrays: true },
-      },
-      {
-        $project: {
-          _id: 1,
-          messageCount: 1,
-          first_name: "$user.first_name",
-          last_name: "$user.last_name",
-          email: "$user.email",
-          profile_picture: "$user.profile_picture",
-          department: "$employee.department",
-          position: "$employee.position",
-        },
-      },
+    const statusCounts = await Attendance.aggregate([
+      { $match: { date: { $gte: today, $lte: todayEnd } } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
 
-    res.json({ users: topSenders });
+    const workTypeCounts = await Attendance.aggregate([
+      { $match: { date: { $gte: today, $lte: todayEnd }, status: { $in: ["present", "late"] } } },
+      { $group: { _id: "$work_type", count: { $sum: 1 } } },
+    ]);
+
+    const statusMap = {};
+    statusCounts.forEach((s) => { statusMap[s._id] = s.count; });
+    const workTypeMap = {};
+    workTypeCounts.forEach((w) => { workTypeMap[w._id] = w.count; });
+
+    const present = (statusMap["present"] || 0) + (statusMap["late"] || 0);
+    const totalMarked = Object.values(statusMap).reduce((a, b) => a + b, 0);
+
+    res.json({
+      totalActive,
+      present,
+      absent: statusMap["absent"] || 0,
+      onLeave: statusMap["on_leave"] || 0,
+      halfDay: statusMap["half_day"] || 0,
+      late: statusMap["late"] || 0,
+      notMarked: Math.max(0, totalActive - totalMarked),
+      workType: {
+        office: workTypeMap["office"] || 0,
+        wfh: workTypeMap["wfh"] || 0,
+        hybrid: workTypeMap["hybrid"] || 0,
+      },
+      attendanceRate: totalActive > 0 ? Math.round((present / totalActive) * 100) : 0,
+    });
   } catch (error) {
-    console.error("Top active users error:", error);
+    console.error("Attendance overview error:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// ─── 8. Employee activity report ────────────────────────────
-export const getEmployeeActivityReport = async (req, res) => {
+// ─── 8. New joiners ─────────────────────────────────────────
+export const getNewJoiners = async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 7;
+    const days = parseInt(req.query.days) || 90;
     const since = daysAgo(days);
 
-    const employees = await Employee.find({ is_active: true }).populate(
-      "user_id",
-      "first_name last_name email last_login profile_picture status"
-    );
+    const newEmployees = await Employee.find({
+      hire_date: { $gte: since },
+      is_active: true,
+    })
+      .populate("user_id", "first_name last_name email profile_picture")
+      .populate("department", "name color")
+      .sort({ hire_date: -1 })
+      .lean();
 
-    const report = await Promise.all(
-      employees.map(async (emp) => {
-        const [messageCount, meetingCount] = await Promise.all([
-          Message.countDocuments({
-            sender_id: emp.user_id._id,
-            created_at: { $gte: since },
-            deleted_at: null,
-          }),
-          Meeting.countDocuments({
-            $or: [
-              { host_id: emp.user_id._id },
-              { participants: emp.user_id._id },
-            ],
-            createdAt: { $gte: since },
-          }),
-        ]);
+    const joiners = newEmployees.map((emp) => ({
+      _id: emp._id,
+      first_name: emp.user_id?.first_name,
+      last_name: emp.user_id?.last_name,
+      email: emp.user_id?.email,
+      profile_picture: emp.user_id?.profile_picture,
+      department: emp.department,
+      position: emp.position,
+      hire_date: emp.hire_date,
+    }));
 
-        return {
-          _id: emp._id,
-          user_id: emp.user_id._id,
-          first_name: emp.user_id.first_name,
-          last_name: emp.user_id.last_name,
-          email: emp.user_id.email,
-          profile_picture: emp.user_id.profile_picture,
-          department: emp.department,
-          position: emp.position,
-          last_login: emp.user_id.last_login,
-          messageCount,
-          meetingCount,
-        };
-      })
-    );
-
-    // Sort by total activity
-    report.sort(
-      (a, b) =>
-        b.messageCount + b.meetingCount - (a.messageCount + a.meetingCount)
-    );
-
-    res.json({ report });
+    res.json({ joiners, total: joiners.length });
   } catch (error) {
-    console.error("Employee activity report error:", error);
+    console.error("New joiners error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ─── 9. Upcoming holidays ──────────────────────────────────
+export const getUpcomingHolidays = async (req, res) => {
+  try {
+    const today = startOfDay(new Date());
+    const limit = parseInt(req.query.limit) || 10;
+
+    const holidays = await Holiday.find({ date: { $gte: today } })
+      .sort({ date: 1 })
+      .limit(limit)
+      .lean();
+
+    res.json({ holidays });
+  } catch (error) {
+    console.error("Upcoming holidays error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ─── 10. Leave distribution ─────────────────────────────────
+export const getLeaveDistribution = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+
+    const distribution = await LeaveRequest.aggregate([
+      {
+        $match: {
+          status: { $in: ["approved", "pending"] },
+          start_date: { $gte: new Date(year + "-01-01"), $lte: new Date(year + "-12-31") },
+        },
+      },
+      { $group: { _id: "$leave_type", count: { $sum: 1 }, totalDays: { $sum: "$days_count" } } },
+      { $sort: { totalDays: -1 } },
+    ]);
+
+    const monthlyTrend = await LeaveRequest.aggregate([
+      {
+        $match: {
+          status: "approved",
+          start_date: { $gte: new Date(year + "-01-01"), $lte: new Date(year + "-12-31") },
+        },
+      },
+      { $group: { _id: { $month: "$start_date" }, count: { $sum: 1 }, totalDays: { $sum: "$days_count" } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthlyData = monthNames.map((name, idx) => {
+      const found = monthlyTrend.find((m) => m._id === idx + 1);
+      return { month: name, leaves: found ? found.count : 0, days: found ? found.totalDays : 0 };
+    });
+
+    res.json({
+      distribution: distribution.map((d) => ({ type: d._id, count: d.count, totalDays: d.totalDays })),
+      monthlyTrend: monthlyData,
+    });
+  } catch (error) {
+    console.error("Leave distribution error:", error);
     res.status(500).json({ error: error.message });
   }
 };

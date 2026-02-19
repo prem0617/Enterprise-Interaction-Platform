@@ -5,10 +5,12 @@ import {
   getMessageActivity,
   getMeetingStats,
   getDepartmentStats,
-  getLoginHeatmap,
-  getSystemUsageTrends,
-  getTopActiveUsers,
-  getEmployeeActivityReport,
+  getBirthdays,
+  getOnLeaveToday,
+  getAttendanceOverview,
+  getNewJoiners,
+  getUpcomingHolidays,
+  getLeaveDistribution,
 } from "../controllers/analytics/analytics.controller.js";
 
 const router = express.Router();
@@ -20,9 +22,11 @@ router.get("/overview", getOverviewStats);
 router.get("/messages", getMessageActivity);
 router.get("/meetings", getMeetingStats);
 router.get("/departments", getDepartmentStats);
-router.get("/login-heatmap", getLoginHeatmap);
-router.get("/usage-trends", getSystemUsageTrends);
-router.get("/top-users", getTopActiveUsers);
-router.get("/employee-activity", getEmployeeActivityReport);
+router.get("/birthdays", getBirthdays);
+router.get("/on-leave-today", getOnLeaveToday);
+router.get("/attendance-overview", getAttendanceOverview);
+router.get("/new-joiners", getNewJoiners);
+router.get("/upcoming-holidays", getUpcomingHolidays);
+router.get("/leave-distribution", getLeaveDistribution);
 
 export default router;
