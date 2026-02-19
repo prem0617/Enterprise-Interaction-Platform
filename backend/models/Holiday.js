@@ -13,7 +13,7 @@ const holidaySchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["public", "company", "optional"],
+      enum: ["public", "company", "optional", "national"],
       default: "public",
     },
     description: {

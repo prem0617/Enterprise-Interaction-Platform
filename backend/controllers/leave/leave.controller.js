@@ -4,13 +4,11 @@ import Attendance from "../../models/Attendance.js";
 import Employee from "../../models/Employee.js";
 
 // Default leave allocation per year
+// 21 Paid Leaves + 2 Floater Leaves + 15 Marriage Leaves + Indian National Holidays
 const DEFAULT_LEAVE_ALLOCATION = {
-  sick: 12,
-  casual: 12,
-  earned: 15,
-  maternity: 180,
-  paternity: 15,
-  compensatory: 0,
+  paid: 21,
+  floater: 2,
+  marriage: 15,
   unpaid: 0,
 };
 
@@ -21,12 +19,17 @@ function startOfDay(date) {
   return d;
 }
 
-// Ensure leave balance exists for a user for current year
+// The valid leave types in the current system
+const VALID_LEAVE_TYPES = new Set(Object.keys(DEFAULT_LEAVE_ALLOCATION));
+
+// Ensure leave balance exists for a user for current year.
+// Also migrates away from old leave types (sick, casual, earned, etc.)
 async function ensureLeaveBalance(userId) {
   const year = new Date().getFullYear();
   const existing = await LeaveBalance.find({ employee_id: userId, year });
 
   if (existing.length === 0) {
+    // No records at all — create fresh
     const entries = Object.entries(DEFAULT_LEAVE_ALLOCATION).map(
       ([leave_type, allocated]) => ({
         employee_id: userId,
@@ -40,6 +43,41 @@ async function ensureLeaveBalance(userId) {
     await LeaveBalance.insertMany(entries);
     return LeaveBalance.find({ employee_id: userId, year });
   }
+
+  // Remove any obsolete leave type records
+  const hasOld = existing.some((b) => !VALID_LEAVE_TYPES.has(b.leave_type));
+  if (hasOld) {
+    await LeaveBalance.deleteMany({
+      employee_id: userId,
+      year,
+      leave_type: { $nin: [...VALID_LEAVE_TYPES] },
+    });
+  }
+
+  // Check which valid types already exist and create any missing ones
+  const existingTypes = new Set(
+    existing.filter((b) => VALID_LEAVE_TYPES.has(b.leave_type)).map((b) => b.leave_type)
+  );
+  const missing = Object.entries(DEFAULT_LEAVE_ALLOCATION).filter(
+    ([type]) => !existingTypes.has(type)
+  );
+  if (missing.length > 0) {
+    await LeaveBalance.insertMany(
+      missing.map(([leave_type, allocated]) => ({
+        employee_id: userId,
+        year,
+        leave_type,
+        allocated,
+        used: 0,
+        carried_forward: 0,
+      }))
+    );
+  }
+
+  if (hasOld || missing.length > 0) {
+    return LeaveBalance.find({ employee_id: userId, year });
+  }
+
   return existing;
 }
 

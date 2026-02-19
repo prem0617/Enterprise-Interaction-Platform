@@ -48,6 +48,7 @@ import {
   ChevronUp,
   Cpu,
   Cloud,
+  Bot,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -963,15 +964,20 @@ const RecordingPlaybackModal = ({
   axiosConfig,
 }) => {
   const [selectedRecording, setSelectedRecording] = useState(null);
-  const [activeTab, setActiveTab] = useState("recording"); // "recording" | "transcript" | "notes"
+  const [activeTab, setActiveTab] = useState("recording"); // "recording" | "transcript" | "notes" | "chat"
   const [generatingNotes, setGeneratingNotes] = useState(null);
   const [retryingTranscription, setRetryingTranscription] = useState(null);
   const [notesMap, setNotesMap] = useState({}); // recordingId -> { meeting_notes, transcript, transcript_segments }
   const [currentCaption, setCurrentCaption] = useState("");
   const [showCaptions, setShowCaptions] = useState(true);
   const [polledRecordings, setPolledRecordings] = useState(null); // locally polled recordings
+  const [chatMessages, setChatMessages] = useState([]); // [{ role: "user"|"assistant", content: string }]
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
   const videoRef = useRef(null);
   const transcriptRef = useRef(null);
+  const chatEndRef = useRef(null);
+  const chatInputRef = useRef(null);
 
   const baseRecordings = recordingsByMeeting[recordingModal.meetingId] || [];
   const recordings = polledRecordings || baseRecordings;
@@ -1123,6 +1129,57 @@ const RecordingPlaybackModal = ({
     }
   }, [currentRec]);
 
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatEndRef.current && activeTab === "chat") {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, activeTab]);
+
+  // Reset chat when switching recordings
+  useEffect(() => {
+    setChatMessages([]);
+    setChatInput("");
+  }, [currentRec?._id]);
+
+  // Focus chat input when switching to chat tab
+  useEffect(() => {
+    if (activeTab === "chat" && chatInputRef.current) {
+      setTimeout(() => chatInputRef.current?.focus(), 100);
+    }
+  }, [activeTab]);
+
+  const handleChatSend = async () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatLoading || !currentRec) return;
+
+    const userMsg = { role: "user", content: trimmed };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/meetings/${recordingModal.meetingId}/recordings/${currentRec._id}/chat`,
+        { message: trimmed, history: chatMessages },
+        axiosConfig
+      );
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.data.reply },
+      ]);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || "Failed to get a response";
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Error: ${errMsg}` },
+      ]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatInputRef.current?.focus(), 50);
+    }
+  };
+
   const transcriptionReady = currentRec?.transcription_status === "completed" && currentRec?.transcript;
   const transcriptionFailed = currentRec?.transcription_status === "failed";
   const transcriptionPending = currentRec?.transcription_status === "pending" || currentRec?.transcription_status === "processing";
@@ -1270,6 +1327,7 @@ const RecordingPlaybackModal = ({
                       {[
                         { id: "transcript", label: "Transcript", icon: ScrollText },
                         { id: "notes", label: "Notes", icon: FileText },
+                        { id: "chat", label: "Chat", icon: Bot },
                       ].map((tab) => (
                         <button
                           key={tab.id}
@@ -1463,6 +1521,129 @@ const RecordingPlaybackModal = ({
                             <div className="flex flex-col items-center justify-center py-8 text-center">
                               <FileText className="w-8 h-8 text-zinc-600 mb-2" />
                               <p className="text-xs text-zinc-400">Meeting notes will be available after transcription is complete.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Chat tab */}
+                      {activeTab === "chat" && (
+                        <div className="flex flex-col h-full" style={{ minHeight: "320px" }}>
+                          {transcriptionReady || notes?.meeting_notes ? (
+                            <>
+                              {/* Chat messages */}
+                              <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: "calc(50vh - 100px)" }}>
+                                {chatMessages.length === 0 && (
+                                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                                    <Bot className="w-8 h-8 text-indigo-400/50 mb-2" />
+                                    <p className="text-xs text-zinc-400 mb-1">Ask anything about this meeting</p>
+                                    <p className="text-[10px] text-zinc-600 mb-3">
+                                      The AI has access to the transcript and notes
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5 justify-center max-w-[280px]">
+                                      {[
+                                        "What were the action items?",
+                                        "Summarize key decisions",
+                                        "What deadlines were mentioned?",
+                                        "Who was assigned tasks?",
+                                      ].map((q) => (
+                                        <button
+                                          key={q}
+                                          onClick={() => {
+                                            setChatInput(q);
+                                            setTimeout(() => chatInputRef.current?.focus(), 50);
+                                          }}
+                                          className="px-2.5 py-1.5 rounded-lg text-[10px] bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700/50 transition-colors"
+                                        >
+                                          {q}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {chatMessages.map((msg, i) => (
+                                  <div
+                                    key={i}
+                                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                                  >
+                                    <div
+                                      className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                                        msg.role === "user"
+                                          ? "bg-indigo-500/20 text-indigo-100 border border-indigo-500/30 rounded-br-sm"
+                                          : "bg-zinc-800 text-zinc-300 border border-zinc-700/50 rounded-bl-sm"
+                                      }`}
+                                    >
+                                      {msg.role === "assistant" && (
+                                        <div className="flex items-center gap-1 mb-1.5">
+                                          <Bot className="w-3 h-3 text-indigo-400" />
+                                          <span className="text-[10px] font-medium text-indigo-400">Meeting Assistant</span>
+                                        </div>
+                                      )}
+                                      <div className="whitespace-pre-wrap">
+                                        {msg.content.split("\n").map((line, j) => {
+                                          if (line.startsWith("**") && line.endsWith("**"))
+                                            return <p key={j}><strong className="text-zinc-200">{line.slice(2, -2)}</strong></p>;
+                                          if (line.startsWith("- "))
+                                            return <p key={j} className="ml-2">• {line.slice(2)}</p>;
+                                          if (line.trim() === "") return <br key={j} />;
+                                          return <p key={j}>{line}</p>;
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                {chatLoading && (
+                                  <div className="flex justify-start">
+                                    <div className="bg-zinc-800 border border-zinc-700/50 rounded-xl rounded-bl-sm px-3 py-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <Bot className="w-3 h-3 text-indigo-400" />
+                                        <div className="flex gap-1">
+                                          <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                                          <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                                          <span className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div ref={chatEndRef} />
+                              </div>
+
+                              {/* Chat input */}
+                              <div className="shrink-0 border-t border-zinc-700/50 p-3">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    ref={chatInputRef}
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleChatSend();
+                                      }
+                                    }}
+                                    placeholder="Ask about this meeting..."
+                                    disabled={chatLoading}
+                                    className="flex-1 bg-zinc-800 border border-zinc-700/50 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50"
+                                  />
+                                  <button
+                                    onClick={handleChatSend}
+                                    disabled={!chatInput.trim() || chatLoading}
+                                    className="p-2 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                              <Bot className="w-8 h-8 text-zinc-600 mb-2" />
+                              <p className="text-xs text-zinc-400">Chat will be available after transcription and notes are generated.</p>
                             </div>
                           )}
                         </div>

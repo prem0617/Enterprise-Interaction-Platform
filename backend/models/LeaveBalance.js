@@ -13,7 +13,7 @@ const leaveBalanceSchema = new mongoose.Schema(
     },
     leave_type: {
       type: String,
-      enum: ["sick", "casual", "earned", "maternity", "paternity", "compensatory", "unpaid"],
+      enum: ["paid", "floater", "marriage", "unpaid"],
       required: true,
     },
     allocated: {

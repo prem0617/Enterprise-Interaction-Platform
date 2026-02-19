@@ -61,12 +61,9 @@ const LEAVE_STATUS_BADGES = {
 };
 
 const LEAVE_COLORS = {
-  sick: { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20" },
-  casual: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20" },
-  earned: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20" },
-  maternity: { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-pink-500/20" },
-  paternity: { bg: "bg-cyan-500/10", text: "text-cyan-400", border: "border-cyan-500/20" },
-  compensatory: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20" },
+  paid: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20" },
+  floater: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20" },
+  marriage: { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-pink-500/20" },
   unpaid: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/20" },
 };
 
@@ -103,7 +100,7 @@ export default function AttendanceModule() {
   const [myLeaveRequests, setMyLeaveRequests] = useState([]);
   const [leaveDialog, setLeaveDialog] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
-    leave_type: "casual",
+    leave_type: "paid",
     start_date: "",
     end_date: "",
     reason: "",
@@ -209,7 +206,7 @@ export default function AttendanceModule() {
       await axios.post(`${BACKEND_URL}/leave/request`, leaveForm, { headers });
       toast.success("Leave request submitted");
       setLeaveDialog(false);
-      setLeaveForm({ leave_type: "casual", start_date: "", end_date: "", reason: "" });
+      setLeaveForm({ leave_type: "paid", start_date: "", end_date: "", reason: "" });
       fetchMyLeaves();
       fetchLeaveBalance();
     } catch (err) {
@@ -574,7 +571,7 @@ export default function AttendanceModule() {
                         </p>
                         {h.description && <p className="text-xs text-zinc-500 mt-1">{h.description}</p>}
                       </div>
-                      <Badge variant="outline" className={`text-[10px] ${h.type === "public" ? "border-emerald-500/20 text-emerald-400" : h.type === "company" ? "border-indigo-500/20 text-indigo-400" : "border-amber-500/20 text-amber-400"}`}>
+                      <Badge variant="outline" className={`text-[10px] ${h.type === "national" ? "border-red-500/20 text-red-400" : h.type === "public" ? "border-emerald-500/20 text-emerald-400" : h.type === "company" ? "border-indigo-500/20 text-indigo-400" : "border-amber-500/20 text-amber-400"}`}>
                         {h.type}
                       </Badge>
                     </div>
@@ -598,7 +595,7 @@ export default function AttendanceModule() {
               <Select value={leaveForm.leave_type} onValueChange={(v) => setLeaveForm({ ...leaveForm, leave_type: v })}>
                 <SelectTrigger className="bg-zinc-800/50 border-zinc-700"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["casual", "sick", "earned", "compensatory", "unpaid"].map((t) => (
+                  {["paid", "floater", "marriage", "unpaid"].map((t) => (
                     <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
                   ))}
                 </SelectContent>

@@ -554,3 +554,100 @@ export const retryTranscription = async (req, res) => {
     return res.status(500).json({ error: "Failed to retry transcription" });
   }
 };
+
+/**
+ * POST /api/meetings/:id/recordings/:recordingId/chat
+ * Chat with AI about the meeting notes and transcript.
+ * Body: { message: string, history: [{ role, content }] }
+ * Returns: { data: { reply: string } }
+ */
+export const chatWithNotes = async (req, res) => {
+  try {
+    const { id: meetingId, recordingId } = req.params;
+    const userId = String(req.userId);
+    const { message, history = [] } = req.body;
+
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    // Verify meeting access
+    const meeting = await Meeting.findById(meetingId).lean();
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    const isParticipant =
+      String(meeting.host_id) === userId ||
+      (Array.isArray(meeting.participants) &&
+        meeting.participants.some((p) => String(p) === userId));
+
+    if (!isParticipant) {
+      return res.status(403).json({ error: "You are not allowed to access this recording" });
+    }
+
+    const recording = await MeetingRecording.findOne({
+      _id: recordingId,
+      meeting_id: meetingId,
+    });
+
+    if (!recording) {
+      return res.status(404).json({ error: "Recording not found" });
+    }
+
+    if (!recording.transcript && !recording.meeting_notes) {
+      return res.status(400).json({
+        error: "No transcript or meeting notes available to chat about.",
+      });
+    }
+
+    // Build context from transcript and notes
+    const contextParts = [];
+    if (recording.meeting_notes) {
+      contextParts.push(`## Meeting Notes\n${recording.meeting_notes}`);
+    }
+    if (recording.transcript) {
+      contextParts.push(`## Full Transcript\n${recording.transcript}`);
+    }
+    const meetingContext = contextParts.join("\n\n");
+
+    // Build message history for multi-turn conversation
+    const conversationMessages = [
+      {
+        role: "system",
+        content: `You are a helpful meeting assistant. You have access to the notes and transcript of a meeting titled "${meeting.title || "Untitled Meeting"}"${meeting.scheduled_at ? ` held on ${new Date(meeting.scheduled_at).toLocaleString()}` : ""}.
+
+Answer the user's questions based ONLY on the information in the meeting notes and transcript provided below. If the answer is not found in the provided context, say so clearly. Be concise, accurate, and helpful.
+
+--- BEGIN MEETING CONTEXT ---
+${meetingContext}
+--- END MEETING CONTEXT ---`,
+      },
+    ];
+
+    // Add previous conversation history (limit to last 20 messages to stay within token limits)
+    const recentHistory = history.slice(-20);
+    for (const msg of recentHistory) {
+      if (msg.role === "user" || msg.role === "assistant") {
+        conversationMessages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
+    // Add the current user message
+    conversationMessages.push({ role: "user", content: message.trim() });
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: conversationMessages,
+      max_tokens: 800,
+      temperature: 0.3,
+    });
+
+    const reply = completion.choices[0]?.message?.content?.trim() || "Sorry, I could not generate a response.";
+
+    return res.json({ data: { reply } });
+  } catch (error) {
+    console.error("❌ [NOTES CHAT] Error:", error.message);
+    return res.status(500).json({ error: "Failed to process chat message" });
+  }
+};

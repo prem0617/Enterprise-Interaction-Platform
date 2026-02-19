@@ -73,12 +73,9 @@ const ATTENDANCE_BADGES = {
 };
 
 const LEAVE_COLORS = {
-  sick: "text-red-400",
-  casual: "text-blue-400",
-  earned: "text-emerald-400",
-  maternity: "text-pink-400",
-  paternity: "text-cyan-400",
-  compensatory: "text-amber-400",
+  paid: "text-blue-400",
+  floater: "text-amber-400",
+  marriage: "text-pink-400",
   unpaid: "text-zinc-400",
 };
 
@@ -533,14 +530,14 @@ export default function AttendanceDashboard() {
                     <tr className="border-b border-zinc-800">
                       <th className="text-left py-2 px-3 text-xs font-medium text-zinc-500">Employee</th>
                       <th className="text-left py-2 px-3 text-xs font-medium text-zinc-500">Dept</th>
-                      {["sick", "casual", "earned"].map((t) => (
+                      {["paid", "floater", "marriage", "unpaid"].map((t) => (
                         <th key={t} className="text-center py-2 px-2 text-xs font-medium text-zinc-500 capitalize">{t}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {leaveBalances.length === 0 ? (
-                      <tr><td colSpan={5} className="py-12 text-center text-zinc-500">No data</td></tr>
+                      <tr><td colSpan={6} className="py-12 text-center text-zinc-500">No data</td></tr>
                     ) : leaveBalances.map((emp) => (
                       <tr key={emp.employee?._id} className="border-b border-zinc-800/50 hover:bg-white/[0.02]">
                         <td className="py-2.5 px-3">
@@ -555,7 +552,7 @@ export default function AttendanceDashboard() {
                         <td className="py-2.5 px-3">
                           <Badge variant="outline" className="text-[10px] capitalize">{emp.department?.name || "—"}</Badge>
                         </td>
-                        {["sick", "casual", "earned"].map((t) => {
+                        {["paid", "floater", "marriage", "unpaid"].map((t) => {
                           const b = emp.balances?.[t];
                           return (
                             <td key={t} className="py-2.5 px-2 text-center">
@@ -604,7 +601,7 @@ export default function AttendanceDashboard() {
                       {h.description && <p className="text-xs text-zinc-500 mt-1">{h.description}</p>}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Badge variant="outline" className={`text-[10px] ${h.type === "public" ? "border-emerald-500/20 text-emerald-400" : h.type === "company" ? "border-indigo-500/20 text-indigo-400" : "border-amber-500/20 text-amber-400"}`}>
+                      <Badge variant="outline" className={`text-[10px] ${h.type === "national" ? "border-red-500/20 text-red-400" : h.type === "public" ? "border-emerald-500/20 text-emerald-400" : h.type === "company" ? "border-indigo-500/20 text-indigo-400" : "border-amber-500/20 text-amber-400"}`}>
                         {h.type}
                       </Badge>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
@@ -676,6 +673,7 @@ export default function AttendanceDashboard() {
                   <SelectTrigger className="bg-zinc-800/50 border-zinc-700"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="national">National</SelectItem>
                     <SelectItem value="company">Company</SelectItem>
                     <SelectItem value="optional">Optional</SelectItem>
                   </SelectContent>
