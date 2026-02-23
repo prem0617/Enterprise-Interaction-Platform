@@ -12,7 +12,7 @@ import axios from "axios";
 import { BACKEND_URL } from "../../../config";
 import { useAuthContext } from "@/context/AuthContextProvider";
 import { createSocketConnection } from "../../hooks/useSocket";
-import { useDocumentCollaboration } from "../../hooks/useDocumentCollaboration";
+import { useDocumentCollaboration } from "../../hooks/useDocumentCollboration";
 
 // ---------------------------------------------------------------------------
 // Helpers & tiny utils
