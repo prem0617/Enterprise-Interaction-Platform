@@ -5,24 +5,27 @@ import User from "../../models/User.js";
 
 const getUid = (req) => req.userId || req.user?._id;
 
+// Handle both populated (object with _id) and raw ObjectId values
+const idStr = (val) => String(val?._id ?? val);
+
 function findCollabEntry(doc, userId) {
-  return doc.collaborators.find((c) => String(c.user) === String(userId)) ?? null;
+  return doc.collaborators.find((c) => idStr(c.user) === String(userId)) ?? null;
 }
 
 function canRead(doc, userId) {
   if (doc.is_public) return true;
-  if (String(doc.owner) === String(userId)) return true;
+  if (idStr(doc.owner) === String(userId)) return true;
   return !!findCollabEntry(doc, userId);
 }
 
 function canWrite(doc, userId) {
-  if (String(doc.owner) === String(userId)) return true;
+  if (idStr(doc.owner) === String(userId)) return true;
   const entry = findCollabEntry(doc, userId);
   return entry?.access === "write";
 }
 
 function isOwnerOrAdmin(doc, userId, req) {
-  return String(doc.owner) === String(userId) || req.user?.user_type === "admin";
+  return idStr(doc.owner) === String(userId) || req.user?.user_type === "admin";
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
