@@ -23,6 +23,7 @@ import WhiteboardModule from "@/components/WhiteboardModule";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import AttendanceModule from "./AttendanceModule";
 import EmployeeTicketView from "@/components/EmployeeTicketView";
+import DocumentsPage from "@/pages/documents/DocumentsPage";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -216,19 +217,7 @@ export default function EmployeeDashboard() {
           </div>
         )}
 
-        {activeTab === "files" && (
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <h1 className="text-xl font-semibold text-zinc-100 mb-1">Files</h1>
-            <p className="text-sm text-zinc-500 mb-6">Manage shared files</p>
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-12 text-center">
-              <div className="size-14 rounded-full bg-zinc-800/80 flex items-center justify-center mx-auto mb-3">
-                <FileText className="size-6 text-zinc-500" />
-              </div>
-              <p className="text-sm text-zinc-400 font-medium">File management coming soon...</p>
-              <p className="text-xs text-zinc-600 mt-1">Access and share documents securely</p>
-            </div>
-          </div>
-        )}
+        {activeTab === "files" && <DocumentsPage />}
 
         {activeTab === "attendance" && <AttendanceModule />}
 
