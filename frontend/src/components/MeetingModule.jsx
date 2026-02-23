@@ -1667,7 +1667,7 @@ const RecordingPlaybackModal = ({
   );
 };
 
-const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
+const MeetingModule = ({ isVisible = true, onMeetingStateChange , readOnly = false }) => {
 
   const { socket, user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
