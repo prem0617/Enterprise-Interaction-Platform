@@ -3,6 +3,8 @@ import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import MeetingModule from "@/components/MeetingModule";
 import WhiteboardModule from "@/components/WhiteboardModule";
+import FloatingMeetingBar from "@/components/FloatingMeetingBar";
+
 import {
   Plus,
   Send,
@@ -52,7 +54,7 @@ function isImageUrl(url) {
   return /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url) || url.includes("/image/upload/");
 }
 
-function MeetingCard({ meta, onJoin }) {
+function MeetingCard({ meta }) {
   let data;
   try { data = JSON.parse(meta); } catch { return null; }
   const date = data.scheduled_at ? new Date(data.scheduled_at) : null;
@@ -71,29 +73,7 @@ function MeetingCard({ meta, onJoin }) {
           {data.duration ? ` · ${data.duration} min` : ""}
         </p>
       )}
-      <div className="flex items-center gap-2 mt-2">
-        <code className="text-xs bg-white dark:bg-zinc-800 border px-2 py-0.5 rounded font-mono tracking-wider">
-          {data.code}
-        </code>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-6 text-[10px] px-2"
-          onClick={() => {
-            navigator.clipboard.writeText(data.code);
-            toast.success("Meeting code copied!");
-          }}
-        >
-          Copy
-        </Button>
-        <Button
-          size="sm"
-          className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
-          onClick={() => onJoin?.(data.code)}
-        >
-          Join
-        </Button>
-      </div>
+      <p className="text-[10px] text-muted-foreground mt-1">Go to the <strong>Meetings</strong> tab to join when the host starts the meeting.</p>
     </div>
   );
 }
@@ -104,6 +84,8 @@ export default function CustomerDashboard() {
   const { user, socket } = useAuthContext();
   const [showMeeting, setShowMeeting] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [activeView, setActiveView] = useState("tickets");
+  const [activeMeetingInfo, setActiveMeetingInfo] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -254,9 +236,13 @@ export default function CustomerDashboard() {
 
   useEffect(() => {
     if (searchParams.get("joinCode")) {
-      setShowMeeting(true);
+      setActiveView("meetings");
     }
   }, [searchParams]);
+
+  const handleMeetingStateChange = useCallback((meeting) => {
+    setActiveMeetingInfo(meeting);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("customerData");
@@ -274,7 +260,7 @@ export default function CustomerDashboard() {
     (t) => t.status === "resolved" || t.status === "closed"
   ).length;
 
-  if (showWhiteboard) {
+if (showWhiteboard) {
     return (
       <div className="h-screen flex flex-col bg-background">
         <div className="h-12 border-b flex items-center px-4 gap-3 bg-white dark:bg-zinc-950 flex-shrink-0">
@@ -306,15 +292,39 @@ export default function CustomerDashboard() {
     );
   }
 
-  return (
-    <div className="h-screen flex flex-col bg-background">
+ return (
+    <div className="h-screen flex flex-col bg-zinc-950">
       {/* Header */}
-      <header className="h-14 border-b flex items-center justify-between px-4 bg-white dark:bg-zinc-950 flex-shrink-0">
+      <header className="h-14 border-b border-zinc-800/60 flex items-center justify-between px-4 bg-zinc-950/90 backdrop-blur-md flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <HeadphonesIcon className="h-4 w-4 text-white" />
           </div>
-          <span className="font-semibold text-sm">Customer Support</span>
+          <span className="font-semibold text-sm text-zinc-100">Customer Portal</span>
+          <div className="flex items-center gap-0.5 ml-4 p-1 bg-zinc-900/80 rounded-xl border border-zinc-800/60">
+            <button
+              onClick={() => setActiveView("tickets")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeView === "tickets"
+                  ? "bg-blue-500/15 text-blue-300 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+              }`}
+            >
+              <Ticket className="h-3.5 w-3.5" />
+              Tickets
+            </button>
+            <button
+              onClick={() => setActiveView("meetings")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeView === "meetings"
+                  ? "bg-blue-500/15 text-blue-300 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+              }`}
+            >
+              <Video className="h-3.5 w-3.5" />
+              Meetings
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button
@@ -326,17 +336,41 @@ export default function CustomerDashboard() {
             <PenLine className="h-4 w-4" />
           </Button>
           <span className="text-sm text-muted-foreground">
+
             {user?.first_name} {user?.last_name}
           </span>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-zinc-400 hover:text-zinc-200">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
+      {/* Floating meeting bar — shown when in a meeting but not on meetings tab */}
+      {activeMeetingInfo && activeView !== "meetings" && (
+        <FloatingMeetingBar
+          meetingTitle={activeMeetingInfo.title || "Untitled Meeting"}
+          isHost={!!activeMeetingInfo.isHost}
+          isMuted={!!activeMeetingInfo.isMuted}
+          isVideoOff={!!activeMeetingInfo.isVideoOff}
+          onToggleMute={activeMeetingInfo.toggleMute}
+          onToggleVideo={activeMeetingInfo.toggleVideo}
+          onLeaveMeeting={activeMeetingInfo.leaveMeeting}
+          onReturnToMeeting={() => setActiveView("meetings")}
+          startedAt={activeMeetingInfo.started_at || activeMeetingInfo.scheduled_at}
+        />
+      )}
+
+      {/* MeetingModule is always mounted — hidden via CSS when not on meetings tab */}
+      <MeetingModule
+        isVisible={activeView === "meetings"}
+        onMeetingStateChange={handleMeetingStateChange}
+        readOnly
+      />
+
+      {activeView === "tickets" && (
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-80 border-r flex flex-col bg-white dark:bg-zinc-950 flex-shrink-0">
+        <div className="w-80 border-r border-zinc-800/60 flex flex-col bg-zinc-950 flex-shrink-0">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <h2 className="font-semibold text-sm">My Tickets</h2>
@@ -580,10 +614,7 @@ export default function CustomerDashboard() {
                   if (msg.message_type === "meeting") {
                     return (
                       <div key={msg._id} className="flex justify-center my-2">
-                        <MeetingCard
-                          meta={msg.content}
-                          onJoin={(code) => navigate(`/customer/dashboard?joinCode=${encodeURIComponent(code)}`)}
-                        />
+                        <MeetingCard meta={msg.content} />
                       </div>
                     );
                   }
@@ -772,6 +803,7 @@ export default function CustomerDashboard() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,12 @@ async function ensureUniqueMeetingCode() {
 export const createMeeting = async (req, res) => {
   try {
     const userId = req.userId;
+
+    // Customers cannot create meetings
+    if (req.user && req.user.user_type === "customer") {
+      return res.status(403).json({ error: "Customers cannot schedule meetings" });
+    }
+
     const {
       title,
       description,
@@ -255,6 +261,11 @@ export const updateMeeting = async (req, res) => {
     const { id } = req.params;
     const userId = String(req.userId);
 
+    // Customers cannot update meetings
+    if (req.user && req.user.user_type === "customer") {
+      return res.status(403).json({ error: "Customers cannot modify meetings" });
+    }
+
     const meeting = await Meeting.findById(id);
     if (!meeting) {
       return res.status(404).json({ error: "Meeting not found" });
@@ -329,6 +340,11 @@ export const cancelMeeting = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = String(req.userId);
+
+    // Customers cannot cancel meetings
+    if (req.user && req.user.user_type === "customer") {
+      return res.status(403).json({ error: "Customers cannot cancel meetings" });
+    }
 
     const meeting = await Meeting.findById(id);
     if (!meeting) {
@@ -463,6 +479,11 @@ export const deleteMeeting = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = String(req.userId);
+
+    // Customers cannot delete meetings
+    if (req.user && req.user.user_type === "customer") {
+      return res.status(403).json({ error: "Customers cannot delete meetings" });
+    }
 
     const meeting = await Meeting.findById(id);
     if (!meeting) {

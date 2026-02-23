@@ -319,7 +319,14 @@ const MeetingRoom = ({
     : allTiles;
 
   const totalUnpinned = unpinnedTiles.length;
-  const gridCols = pinnedTile ? 1 : Math.min(3, Math.max(1, totalUnpinned));
+  // Responsive grid: optimised for video-call aspect ratios
+  const getGridCols = (count) => {
+    if (count <= 1) return 1;
+    if (count <= 4) return 2;
+    if (count <= 9) return 3;
+    return 4;
+  };
+  const gridCols = pinnedTile ? 1 : getGridCols(totalUnpinned);
   const gridRows = pinnedTile ? 1 : Math.ceil(totalUnpinned / gridCols) || 1;
 
   // Unread chat counter
@@ -955,6 +962,7 @@ const MeetingRoom = ({
   );
 };
 
+<<<<<<< HEAD
 // ---- Recording Playback Modal with Transcript & Meeting Notes ----
 const RecordingPlaybackModal = ({
   recordingModal,
@@ -1661,6 +1669,9 @@ const RecordingPlaybackModal = ({
 };
 
 const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
+=======
+const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = false }) => {
+>>>>>>> main
   const { socket, user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -1681,6 +1692,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const activeMeetingIdRef = useRef(null);
   const [roomParticipants, setRoomParticipants] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
@@ -1703,6 +1715,11 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     const id = setInterval(() => setNowTick(Date.now()), 15000);
     return () => clearInterval(id);
   }, []);
+
+  // Keep activeMeetingIdRef in sync with activeMeeting state
+  useEffect(() => {
+    activeMeetingIdRef.current = activeMeeting ? String(activeMeeting._id) : null;
+  }, [activeMeeting]);
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
@@ -1905,12 +1922,14 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     if (!socket) return;
 
     const handleParticipants = (payload) => {
-      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      const currentMeetingId = activeMeetingIdRef.current;
+      if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
       setRoomParticipants(payload.participants || []);
     };
 
     const handleMessage = (payload) => {
-      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      const currentMeetingId = activeMeetingIdRef.current;
+      if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
       if (!payload.message) return;
       // Prevent duplicate: ignore messages we sent locally
       if (
@@ -1928,7 +1947,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     };
 
     const handleEnded = (payload) => {
-      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      const currentMeetingId = activeMeetingIdRef.current;
+      if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
       toast("Meeting ended by host", { icon: "ℹ️" });
       if (localMediaStream) {
         localMediaStream.getTracks().forEach((t) => t.stop());
@@ -1936,6 +1956,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
       }
       meetingCall.cleanup();
       setActiveMeeting(null);
+      activeMeetingIdRef.current = null;
       setLobbyRequests([]);
       setRoomParticipants([]);
       setChatMessages([]);
@@ -1943,14 +1964,16 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     };
 
     const handleLobbyRequest = (payload) => {
-      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      const currentMeetingId = activeMeetingIdRef.current;
+      if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
       setLobbyRequests((prev) => {
         if (prev.some((r) => r.userId === payload.userId)) return prev;
         return [...prev, { userId: payload.userId, name: payload.name }];
       });
     };
     const handleLobbyLeft = (payload) => {
-      if (!activeMeeting || String(payload.meetingId) !== String(activeMeeting._id)) return;
+      const currentMeetingId = activeMeetingIdRef.current;
+      if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
       setLobbyRequests((prev) => prev.filter((r) => r.userId !== payload.userId));
     };
 
@@ -1968,7 +1991,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
       socket.off("meeting-lobby-left", handleLobbyLeft);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, activeMeeting, currentUserId]);
+  }, [socket, currentUserId]);
 
   // Guest in lobby: listen for admission or meeting ended
   useEffect(() => {
@@ -2342,6 +2365,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
         return [...prev, meeting];
       });
       setActiveMeeting({ ...meeting, isHost: true });
+      activeMeetingIdRef.current = String(meeting._id);
       setChatMessages([]);
       setChatInput("");
       socket.emit("meeting-join", {
@@ -2525,6 +2549,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     }
 
     setActiveMeeting({ ...meeting, isHost: host });
+    // Set ref synchronously BEFORE emitting socket event so the
+    // meeting-participants handler can match the incoming payload immediately
+    activeMeetingIdRef.current = String(meeting._id);
     setChatMessages([]);
     setChatInput("");
 
@@ -2550,6 +2577,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
   const handleLeaveMeeting = async () => {
     if (!activeMeeting || !socket) {
       setActiveMeeting(null);
+      activeMeetingIdRef.current = null;
       return;
     }
     // Confirm before ending if host
@@ -2603,6 +2631,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
     }
 
     setActiveMeeting(null);
+    activeMeetingIdRef.current = null;
     setRoomParticipants([]);
     setChatMessages([]);
     setChatInput("");
@@ -2902,7 +2931,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
       {showMainView && (
     <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden px-4 sm:px-6 lg:px-8 py-6">
       {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
-      {showInstantMeetingDialog && (
+      {showInstantMeetingDialog && !readOnly && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-xl max-w-sm w-full mx-4">
             <h3 className="text-lg font-semibold text-white mb-2">Start instant meeting</h3>
@@ -2934,6 +2963,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
             Schedule, manage and get reminders for your meetings
           </p>
         </div>
+        {!readOnly && (
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -2961,6 +2991,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
             <span className="hidden sm:inline">Schedule meeting</span>
           </button>
         </div>
+        )}
       </div>
 
       {/* Join by code or link */}
@@ -3134,6 +3165,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
               <p className="text-xs text-zinc-500 mb-2">
                 Schedule your first meeting for this day
               </p>
+              {!readOnly && (
               <button
                 type="button"
                 onClick={openCreateForm}
@@ -3144,6 +3176,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
                 <Plus className="w-3 h-3" />
                 New meeting
               </button>
+              )}
             </div>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
@@ -3232,7 +3265,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
                           </span>
                         )}
                         <div className="flex gap-1">
-                          {m.meeting_code && isHost(m) && m.status === "active" && (
+                          {m.meeting_code && isHost(m) && m.status === "active" && !readOnly && (
                             <button
                               type="button"
                               onClick={() => copyMeetingLink(m)}
@@ -3243,7 +3276,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
                               Link
                             </button>
                           )}
-                          {!isCancelled && !isEnded && isHost(m) && (
+                          {!isCancelled && !isEnded && isHost(m) && !readOnly && (
                             <button
                               type="button"
                               onClick={() => openEditForm(m)}
@@ -3252,7 +3285,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
                               Edit
                             </button>
                           )}
-                          {!isCancelled && !isEnded && isHost(m) && (
+                          {!isCancelled && !isEnded && isHost(m) && !readOnly && (
                             <button
                               type="button"
                               onClick={() => handleCancelMeeting(m)}
@@ -3261,7 +3294,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
                               Cancel
                             </button>
                           )}
-                          {(isCancelled || isEnded) && isHost(m) && (
+                          {(isCancelled || isEnded) && isHost(m) && !readOnly && (
                             <button
                               type="button"
                               onClick={() => handleDeleteMeeting(m)}
@@ -3368,7 +3401,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
       )}
 
       {/* Meeting Form Modal */}
-      {showForm && (
+      {showForm && !readOnly && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="bg-zinc-900 rounded-xl border border-zinc-700/60 shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/50">

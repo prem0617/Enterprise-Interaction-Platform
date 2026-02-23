@@ -65,29 +65,7 @@ function MeetingCard({ meta }) {
           {data.duration ? ` · ${data.duration} min` : ""}
         </p>
       )}
-      <div className="flex items-center gap-2 mt-2">
-        <code className="text-xs bg-white dark:bg-zinc-800 border px-2 py-0.5 rounded font-mono tracking-wider">
-          {data.code}
-        </code>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-6 text-[10px] px-2"
-          onClick={() => {
-            navigator.clipboard.writeText(data.code);
-            toast.success("Meeting code copied!");
-          }}
-        >
-          Copy
-        </Button>
-        <Button
-          size="sm"
-          className="h-6 text-[10px] px-2 bg-indigo-600 hover:bg-indigo-700"
-          onClick={() => window.open(`/join/${data.code}`, "_blank")}
-        >
-          Join
-        </Button>
-      </div>
+      <p className="text-[10px] text-muted-foreground mt-1">Go to the <strong>Meetings</strong> tab to join when the host starts the meeting.</p>
     </div>
   );
 }
@@ -108,6 +86,7 @@ export default function EmployeeTicketView() {
   const [allEmployees, setAllEmployees] = useState([]);
   const [addingCollab, setAddingCollab] = useState(false);
   const [selectedCollab, setSelectedCollab] = useState("");
+  const [removingCollabId, setRemovingCollabId] = useState(null);
 
   // Schedule meeting modal
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -264,6 +243,24 @@ export default function EmployeeTicketView() {
       toast.error(err.response?.data?.error || "Failed to add collaborator");
     } finally {
       setAddingCollab(false);
+    }
+  };
+
+  const handleRemoveCollaborator = async (employeeId) => {
+    if (!selectedTicket) return;
+    setRemovingCollabId(employeeId);
+    try {
+      await axios.delete(
+        `${BACKEND_URL}/tickets/${selectedTicket._id}/collaborators/${employeeId}`,
+        { headers }
+      );
+      toast.success("Collaborator removed");
+      fetchTickets();
+      fetchMessages(selectedTicket._id);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to remove collaborator");
+    } finally {
+      setRemovingCollabId(null);
     }
   };
 
@@ -454,11 +451,27 @@ export default function EmployeeTicketView() {
                     </span>
                   )}
                   {selectedTicket.collaborators?.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
                       · Collaborators:{" "}
-                      {selectedTicket.collaborators
-                        .map((c) => `${c.user_id?.first_name} ${c.user_id?.last_name}`)
-                        .join(", ")}
+                      {selectedTicket.collaborators.map((c, idx) => (
+                        <span key={c._id} className="inline-flex items-center gap-0.5">
+                          {c.user_id?.first_name} {c.user_id?.last_name}
+                          {isAssignedAgent &&
+                            selectedTicket.status !== "resolved" &&
+                            selectedTicket.status !== "closed" && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCollaborator(c._id)}
+                                disabled={removingCollabId === c._id}
+                                className="ml-0.5 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-600 transition-colors"
+                                title={`Remove ${c.user_id?.first_name}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          {idx < selectedTicket.collaborators.length - 1 && ","}
+                        </span>
+                      ))}
                     </span>
                   )}
                 </div>

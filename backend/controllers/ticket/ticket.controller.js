@@ -4,6 +4,7 @@ import { TicketMessage } from "../../models/TicketMessage.js";
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
 import Meeting from "../../models/Meeting.js";
+import { broadcastMeetingEvent } from "../../socket/socketServer.js";
 
 // Generate unique ticket number
 function generateTicketNumber() {
@@ -308,6 +309,58 @@ export const addCollaborator = async (req, res) => {
   }
 };
 
+// Remove a collaborator from a ticket (assigned customer_support agent only)
+export const removeCollaborator = async (req, res) => {
+  try {
+    const { ticketId, employeeId } = req.params;
+    const userId = req.user._id;
+
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    // Only the assigned agent can remove collaborators
+    const requestingEmployee = await Employee.findOne({ user_id: userId });
+    if (
+      !requestingEmployee ||
+      ticket.assigned_agent_id?.toString() !== requestingEmployee._id.toString()
+    ) {
+      return res.status(403).json({ error: "Only the assigned agent can remove collaborators" });
+    }
+
+    const idx = ticket.collaborators.findIndex(
+      (c) => c.toString() === employeeId
+    );
+    if (idx === -1) {
+      return res.status(404).json({ error: "Collaborator not found on this ticket" });
+    }
+
+    const collaborator = await Employee.findById(employeeId).populate(
+      "user_id",
+      "first_name last_name"
+    );
+
+    ticket.collaborators.splice(idx, 1);
+    await ticket.save();
+
+    const collabName = collaborator
+      ? `${collaborator.user_id.first_name} ${collaborator.user_id.last_name}`
+      : "A collaborator";
+    await TicketMessage.create({
+      ticket_id: ticket._id,
+      sender_id: userId,
+      content: `${collabName} was removed as a collaborator.`,
+      message_type: "system",
+    });
+
+    res.json({ message: "Collaborator removed successfully", ticket });
+  } catch (error) {
+    console.error("Remove collaborator error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Get tickets assigned to or collaborated on by current employee
 export const getAssignedTickets = async (req, res) => {
   try {
@@ -484,6 +537,31 @@ export const scheduleMeetingFromTicket = async (req, res) => {
     const customerUserId = ticket.customer_id?.user_id?._id;
     const participants = customerUserId ? [customerUserId] : [];
 
+    // Add collaborator employee user_ids as participants so the meeting
+    // appears in their calendar / meetings tab as well.
+    if (ticket.collaborators && ticket.collaborators.length > 0) {
+      const collabEmployees = await Employee.find({
+        _id: { $in: ticket.collaborators },
+      }).select("user_id");
+      for (const emp of collabEmployees) {
+        if (emp.user_id && !participants.some((p) => p.toString() === emp.user_id.toString())) {
+          participants.push(emp.user_id);
+        }
+      }
+    }
+
+    // Also add the assigned agent if they are not the host
+    if (ticket.assigned_agent_id) {
+      const assignedEmp = await Employee.findById(ticket.assigned_agent_id).select("user_id");
+      if (
+        assignedEmp?.user_id &&
+        assignedEmp.user_id.toString() !== userId.toString() &&
+        !participants.some((p) => p.toString() === assignedEmp.user_id.toString())
+      ) {
+        participants.push(assignedEmp.user_id);
+      }
+    }
+
     const meetingTitle = title || `Support: ${ticket.ticket_number}`;
     const scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
 
@@ -498,6 +576,13 @@ export const scheduleMeetingFromTicket = async (req, res) => {
       recording_enabled: false,
       open_to_everyone: false,
     });
+
+    // Populate and broadcast so every participant's MeetingModule updates in real-time
+    const populatedMeeting = await Meeting.findById(meeting._id)
+      .populate("host_id", "first_name last_name email")
+      .populate("participants", "first_name last_name email")
+      .lean();
+    broadcastMeetingEvent("created", populatedMeeting);
 
     // Post meeting system message in ticket chat
     const meetingMeta = JSON.stringify({
@@ -519,7 +604,7 @@ export const scheduleMeetingFromTicket = async (req, res) => {
       "first_name last_name user_type profile_picture"
     );
 
-    res.status(201).json({ meeting, message: populatedMsg });
+    res.status(201).json({ meeting: populatedMeeting, message: populatedMsg });
   } catch (error) {
     console.error("Schedule meeting from ticket error:", error);
     res.status(500).json({ error: error.message });

@@ -10,6 +10,7 @@ import {
   getInternalEmployees,
   getAllEmployees,
   addCollaborator,
+  removeCollaborator,
   getAssignedTickets,
   sendTicketMessage,
   getTicketMessages,
@@ -29,6 +30,7 @@ router.get("/my-tickets", verifyToken, getMyTickets);
 router.get("/assigned", verifyToken, getAssignedTickets);
 router.get("/all-employees", verifyToken, getAllEmployees);
 router.post("/:ticketId/collaborators", verifyToken, addCollaborator);
+router.delete("/:ticketId/collaborators/:employeeId", verifyToken, removeCollaborator);
 
 // Admin/permission-based routes
 router.get("/all", verifyToken, requirePermission("tickets:manage"), getAllTickets);
