@@ -962,7 +962,6 @@ const MeetingRoom = ({
   );
 };
 
-<<<<<<< HEAD
 // ---- Recording Playback Modal with Transcript & Meeting Notes ----
 const RecordingPlaybackModal = ({
   recordingModal,
@@ -1669,9 +1668,7 @@ const RecordingPlaybackModal = ({
 };
 
 const MeetingModule = ({ isVisible = true, onMeetingStateChange }) => {
-=======
-const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = false }) => {
->>>>>>> main
+
   const { socket, user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentMonth, setCurrentMonth] = useState(() => {

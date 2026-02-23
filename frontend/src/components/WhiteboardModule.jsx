@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { BACKEND_URL } from "@/config";
-import { useAuthContext } from "@/context/AuthContextProvider";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { BACKEND_URL } from "../../config";
+import { useAuthContext } from "../context/AuthContextProvider";
+import { Button } from "../components/ui/button";
+import { cn } from "../lib/utils";
 import {
   Plus,
   ArrowLeft,
