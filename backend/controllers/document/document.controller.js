@@ -67,6 +67,7 @@ export const listDocuments = async (req, res) => {
       .limit(200)
       .populate("owner", "first_name last_name email profile_picture")
       .populate("collaborators.user", "first_name last_name email profile_picture")
+      .populate("last_edited_by", "first_name last_name email profile_picture")
       .lean();
 
     const enriched = docs.map((doc) => {
@@ -96,6 +97,7 @@ export const getDocumentById = async (req, res) => {
     const doc = await Document.findById(id)
       .populate("owner", "first_name last_name email profile_picture")
       .populate("collaborators.user", "first_name last_name email profile_picture")
+      .populate("last_edited_by", "first_name last_name email profile_picture")
       .lean();
 
     if (!doc) return res.status(404).json({ error: "Document not found" });
@@ -130,7 +132,10 @@ export const updateDocument = async (req, res) => {
     }
 
     if (title   !== undefined) doc.title   = title;
-    if (content !== undefined) doc.content = content;
+    if (content !== undefined) {
+      doc.content = content;
+      doc.last_edited_by = userId;
+    }
 
     // Only owner/admin can toggle public visibility
     if (is_public !== undefined && isOwnerOrAdmin(doc, userId, req)) {
@@ -140,6 +145,7 @@ export const updateDocument = async (req, res) => {
     await doc.save();
     await doc.populate("owner", "first_name last_name email profile_picture");
     await doc.populate("collaborators.user", "first_name last_name email profile_picture");
+    await doc.populate("last_edited_by", "first_name last_name email profile_picture");
     res.json(doc);
   } catch (err) {
     console.error("updateDocument:", err);
@@ -362,6 +368,65 @@ export const searchUsers = async (req, res) => {
     res.json(users);
   } catch (err) {
     console.error("searchUsers:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Share-link access (no auth required) ─────────────────────────────────────
+
+/**
+ * GET /documents/share/:token
+ * Returns the document if the share_token is valid and the doc is public.
+ * No authentication required — anyone with the link can view.
+ */
+export const getDocumentByShareToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const doc = await Document.findOne({ share_token: token })
+      .populate("owner", "first_name last_name email profile_picture")
+      .populate("collaborators.user", "first_name last_name email profile_picture")
+      .populate("last_edited_by", "first_name last_name email profile_picture")
+      .lean();
+
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!doc.is_public) return res.status(403).json({ error: "This document is not publicly shared" });
+
+    res.json({ ...doc, my_access: "read" });
+  } catch (err) {
+    console.error("getDocumentByShareToken:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Auto-save (PATCH — partial update) ───────────────────────────────────────
+
+/**
+ * PATCH /documents/:id
+ * Lightweight save — only updates content and updated_at.
+ */
+export const autoSaveDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content, title } = req.body;
+    const userId = getUid(req);
+
+    const doc = await Document.findById(id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canWrite(doc, userId)) {
+      return res.status(403).json({ error: "Read-only access" });
+    }
+
+    if (content !== undefined) {
+      doc.content = content;
+      doc.last_edited_by = userId;
+    }
+    if (title !== undefined) doc.title = title;
+
+    await doc.save();
+    res.json({ success: true, updated_at: doc.updated_at });
+  } catch (err) {
+    console.error("autoSaveDocument:", err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -11,12 +11,17 @@ import {
   updateCollaboratorAccess,
   removeCollaborator,
   searchUsers,
+  getDocumentByShareToken,
+  autoSaveDocument,
 } from "../controllers/document/document.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// All routes require authentication
+// ── Public share-link access (no auth) ────────────────────────────────────────
+router.get("/share/:token", getDocumentByShareToken);
+
+// All routes below require authentication
 router.use(verifyToken);
 
 // ── User search (must be before /:id to avoid route collision) ────────────────
@@ -28,6 +33,7 @@ router.get("/",      listDocuments);
 router.post("/",     createDocument);
 router.get("/:id",   getDocumentById);
 router.put("/:id",   updateDocument);
+router.patch("/:id", autoSaveDocument);
 router.delete("/:id", deleteDocument);
 
 // ── Collaborator management ───────────────────────────────────────────────────

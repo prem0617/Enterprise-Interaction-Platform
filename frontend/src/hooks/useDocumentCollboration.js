@@ -5,7 +5,7 @@
  * Socket is created inside DocumentEditor and passed in here.
  *
  * Usage:
- *   const { collaborators, typingUsers, broadcastUpdate, broadcastTyping, registerRemoteUpdateHandler } =
+ *   const { collaborators, typingUsers, remoteCursors, broadcastUpdate, broadcastTyping, broadcastCursor, registerRemoteUpdateHandler } =
  *     useDocumentCollaboration(socket, docId, currentUserId, userName);
  *
  * @param {object|null} socket        - Socket.IO client from createSocketConnection
@@ -23,6 +23,9 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   // Users currently typing (excludes self): [{ userId, name, color }]
   const [typingUsers, setTypingUsers] = useState([]);
 
+  // Remote cursor positions: { [userId]: { name, color, cursor: { x, y, line, ch } } }
+  const [remoteCursors, setRemoteCursors] = useState({});
+
   // Editor registers this callback so we can push remote updates directly
   // into the contentEditable DOM without going through React state (avoids
   // cursor-jump on every remote keystroke)
@@ -31,6 +34,7 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   // Debounce timers
   const broadcastTimerRef = useRef(null);
   const typingTimerRef    = useRef(null);
+  const cursorTimerRef    = useRef(null);
 
   // ── 1. Join / Leave doc room ──────────────────────────────────────────────
   useEffect(() => {
@@ -49,6 +53,7 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
       // Clear any pending debounce timers on unmount
       clearTimeout(broadcastTimerRef.current);
       clearTimeout(typingTimerRef.current);
+      clearTimeout(cursorTimerRef.current);
     };
   }, [socket, docId, currentUserId, userName]);
 
@@ -74,10 +79,18 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
       setCollaborators(
         (list || []).filter((c) => String(c.userId) !== String(currentUserId))
       );
+      // Clean up cursors for users who left
+      setRemoteCursors((prev) => {
+        const activeIds = new Set((list || []).map((c) => String(c.userId)));
+        const next = {};
+        for (const [uid, val] of Object.entries(prev)) {
+          if (activeIds.has(uid)) next[uid] = val;
+        }
+        return next;
+      });
     };
 
     // Typing indicator from another user.
-    // FIX: server emits { userId, userName, color, isTyping } — destructure userName as name
     const handleTyping = ({ userId: typingId, userName: name, color, isTyping }) => {
       if (String(typingId) === String(currentUserId)) return;
       setTypingUsers((prev) => {
@@ -89,20 +102,51 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
       });
     };
 
+    // Remote cursor position
+    const handleCursor = ({ userId: cursorUserId, name, color, cursor }) => {
+      if (String(cursorUserId) === String(currentUserId)) return;
+      setRemoteCursors((prev) => ({
+        ...prev,
+        [cursorUserId]: { name, color, cursor, lastUpdate: Date.now() },
+      }));
+    };
+
     socket.on("doc-update",        handleDocUpdate);
     socket.on("doc-full-state",    handleFullState);
     socket.on("doc-collaborators", handleCollaborators);
     socket.on("doc-typing",        handleTyping);
+    socket.on("doc-cursor",        handleCursor);
 
     return () => {
       socket.off("doc-update",        handleDocUpdate);
       socket.off("doc-full-state",    handleFullState);
       socket.off("doc-collaborators", handleCollaborators);
       socket.off("doc-typing",        handleTyping);
+      socket.off("doc-cursor",        handleCursor);
     };
   }, [socket, docId, currentUserId]);
 
-  // ── 3. Outgoing helpers ───────────────────────────────────────────────────
+  // ── 3. Stale cursor cleanup ───────────────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRemoteCursors((prev) => {
+        const now = Date.now();
+        const next = {};
+        let changed = false;
+        for (const [uid, val] of Object.entries(prev)) {
+          if (now - val.lastUpdate < 30000) {
+            next[uid] = val;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── 4. Outgoing helpers ───────────────────────────────────────────────────
 
   /**
    * Register a callback that fires whenever a remote content update arrives.
@@ -141,12 +185,15 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   }, [socket, docId, userName]);
 
   /**
-   * Broadcast cursor position to other users (optional).
+   * Broadcast cursor position to other users. Throttled to 100ms.
    */
   const broadcastCursor = useCallback(
     (cursor) => {
       if (!socket?.connected || !docId) return;
-      socket.emit("doc-cursor", { docId, cursor });
+      clearTimeout(cursorTimerRef.current);
+      cursorTimerRef.current = setTimeout(() => {
+        socket.emit("doc-cursor", { docId, cursor });
+      }, 100);
     },
     [socket, docId]
   );
@@ -154,9 +201,10 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   return {
     collaborators,               // [{ userId, name, color }] — other live editors
     typingUsers,                 // [{ userId, name, color }] — currently typing
+    remoteCursors,               // { [userId]: { name, color, cursor } } — cursor positions
     registerRemoteUpdateHandler, // call once on editor mount
     broadcastUpdate,             // call on every input event
     broadcastTyping,             // call on every keydown/input event
-    broadcastCursor,             // optional: call on selectionchange
+    broadcastCursor,             // call on selectionchange for cursor tracking
   };
 }
