@@ -217,7 +217,7 @@ export default function EmployeeDashboard() {
           </div>
         )}
 
-        {activeTab === "files" && <DocumentsPage />}
+        {/* {activeTab === "files" && <DocumentsPage />} */}
 
         {activeTab === "attendance" && <AttendanceModule />}
 
@@ -228,7 +228,7 @@ export default function EmployeeDashboard() {
         />
 
         {/* WhiteboardModule is ALWAYS mounted — hidden via CSS when not on the whiteboard tab */}
-        <WhiteboardModule isVisible={activeTab === "whiteboard"} />
+        {/* <WhiteboardModule isVisible={activeTab === "whiteboard"} /> */}
 
         {activeTab === "tickets" && (
           <div className="flex-1 p-4 overflow-hidden">
