@@ -335,7 +335,7 @@ export default function AdminDashboard() {
             />
 
             {/* WhiteboardModule is ALWAYS mounted — hidden via CSS when not on the whiteboard tab */}
-            {/* <WhiteboardModule isVisible={currentPage === "whiteboard"} /> */}
+            <WhiteboardModule isVisible={currentPage === "whiteboard"} />
           </main>
         </div>
       </div>

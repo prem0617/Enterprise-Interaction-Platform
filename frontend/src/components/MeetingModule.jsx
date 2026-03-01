@@ -3343,7 +3343,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange , readOnly = fal
 
                     {isEnded && isParticipant(m) && (
                       <div className="mt-2">
-                        {/* <button
+                        <button
                           type="button"
                           onClick={() => {
                             setRecordingModal({ meetingId: m._id, meetingTitle: m.title });
@@ -3358,7 +3358,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange , readOnly = fal
                             <Video className="w-3 h-3" />
                           )}
                           View recordings
-                        </button> */}
+                        </button>
                       </div>
                     )}
 
