@@ -128,8 +128,7 @@ const ChatInterface = () => {
     setSearchingMessages(true);
     try {
       const response = await axios.get(
-        `${BACKEND_URL}/chat/channels/${
-          selectedChat._id
+        `${BACKEND_URL}/chat/channels/${selectedChat._id
         }/messages/search?query=${encodeURIComponent(query)}`,
         axiosConfig
       );
@@ -611,9 +610,8 @@ const ChatInterface = () => {
         _id: user?.id,
         first_name: user?.first_name || "You",
         last_name: user?.last_name || "",
-        full_name: `${user?.first_name || "You"} ${
-          user?.last_name || ""
-        }`.trim(),
+        full_name: `${user?.first_name || "You"} ${user?.last_name || ""
+          }`.trim(),
         email: user?.email || "",
       },
       seen_at: new Date(),
@@ -1059,8 +1057,7 @@ const ChatInterface = () => {
                     last_name: seen_by_user?.last_name || "User",
                     full_name:
                       seen_by_user?.full_name ||
-                      `${seen_by_user?.first_name || "Unknown"} ${
-                        seen_by_user?.last_name || "User"
+                      `${seen_by_user?.first_name || "Unknown"} ${seen_by_user?.last_name || "User"
                       }`,
                     email: seen_by_user?.email || "",
                   },
@@ -1276,17 +1273,15 @@ const ChatInterface = () => {
       return {
         name: chat.other_user?.full_name || "Unknown User",
         subtitle: chat.other_user?.email || "",
-        initials: `${chat.other_user?.first_name?.[0] || ""}${
-          chat.other_user?.last_name?.[0] || ""
-        }`,
+        initials: `${chat.other_user?.first_name?.[0] || ""}${chat.other_user?.last_name?.[0] || ""
+          }`,
         isGroup: false,
         profile_picture: chat.other_user?.profile_picture || null,
       };
     return {
       name: chat.name || "Group Chat",
-      subtitle: `${chat.member_count || 0} members${
-        chat.department ? ` \u00B7 ${chat.department?.name || ""}` : ""
-      }`,
+      subtitle: `${chat.member_count || 0} members${chat.department ? ` \u00B7 ${chat.department?.name || ""}` : ""
+        }`,
       initials: chat.name?.[0] || "G",
       isGroup: true,
       profile_picture: null,
@@ -1300,7 +1295,7 @@ const ChatInterface = () => {
     messages.find((m) => m._id === parentMessageId);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-zinc-950 overflow-hidden">
+    <div className="flex h-full bg-zinc-950 overflow-hidden">
       {/* Sidebar */}
       <div className="w-80 bg-zinc-950 border-r border-zinc-800/60 flex flex-col">
         <div className="p-3 border-b border-zinc-800/60">
@@ -1334,11 +1329,10 @@ const ChatInterface = () => {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === tab
+                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === tab
                     ? "bg-indigo-500/15 text-indigo-300 shadow-sm"
                     : "text-zinc-500 hover:text-zinc-300"
-                }`}
+                  }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -1393,17 +1387,15 @@ const ChatInterface = () => {
                     chat._id ?? `${chat.channel_type}-${chat.name ?? "chat"}`
                   }
                   onClick={() => selectChat(chat)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all border-b border-zinc-800/40 ${
-                    isActive
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all border-b border-zinc-800/40 ${isActive
                       ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
                       : "hover:bg-zinc-900/80"
-                  }`}
+                    }`}
                 >
                   <div className="relative flex-shrink-0">
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${
-                        displayInfo.isGroup ? "bg-zinc-800 text-zinc-400" : "bg-indigo-500/20 text-indigo-300"
-                      }`}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${displayInfo.isGroup ? "bg-zinc-800 text-zinc-400" : "bg-indigo-500/20 text-indigo-300"
+                        }`}
                     >
                       {displayInfo.isGroup ? (
                         <Users className="w-4 h-4" />
@@ -1426,11 +1418,10 @@ const ChatInterface = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <h3
-                        className={`text-sm truncate ${
-                          chat.unread_count > 0
+                        className={`text-sm truncate ${chat.unread_count > 0
                             ? "font-semibold text-zinc-100"
                             : "font-medium text-zinc-300"
-                        }`}
+                          }`}
                       >
                         {displayInfo.name}
                       </h3>
@@ -1446,7 +1437,7 @@ const ChatInterface = () => {
                       audioCall.callState !== "idle" &&
                       audioCall.remoteUser &&
                       String(chat.other_user._id) ===
-                        String(audioCall.remoteUser.id) && (
+                      String(audioCall.remoteUser.id) && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
                           <span className="text-[10px] font-medium text-emerald-400">
@@ -1467,11 +1458,10 @@ const ChatInterface = () => {
                     {chat.last_message && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <p
-                          className={`text-xs truncate flex-1 ${
-                            chat.unread_count > 0
+                          className={`text-xs truncate flex-1 ${chat.unread_count > 0
                               ? "text-zinc-200 font-medium"
                               : "text-zinc-500"
-                          }`}
+                            }`}
                         >
                           {chat.last_message.message_type === "file" ? "📎 File" : chat.last_message.content}
                         </p>
@@ -1495,339 +1485,330 @@ const ChatInterface = () => {
         <div className="flex-1 flex flex-col bg-zinc-900/50">
           {/* Chat Header */}
           <div className="relative">
-          <div className="h-14 px-4 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${
-                    selectedChat.channel_type === "group"
-                      ? "bg-zinc-800 text-zinc-400"
-                      : "bg-indigo-500/20 text-indigo-300"
-                  }`}
-                >
-                  {selectedChat.channel_type === "group" ? (
-                    <Users className="w-4 h-4" />
-                  ) : selectedChat.other_user?.profile_picture ? (
-                    <img
-                      src={selectedChat.other_user.profile_picture}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <>
-                      {selectedChat.other_user?.first_name?.[0]}
-                      {selectedChat.other_user?.last_name?.[0]}
-                    </>
-                  )}
+            <div className="h-14 px-4 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${selectedChat.channel_type === "group"
+                        ? "bg-zinc-800 text-zinc-400"
+                        : "bg-indigo-500/20 text-indigo-300"
+                      }`}
+                  >
+                    {selectedChat.channel_type === "group" ? (
+                      <Users className="w-4 h-4" />
+                    ) : selectedChat.other_user?.profile_picture ? (
+                      <img
+                        src={selectedChat.other_user.profile_picture}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <>
+                        {selectedChat.other_user?.first_name?.[0]}
+                        {selectedChat.other_user?.last_name?.[0]}
+                      </>
+                    )}
+                  </div>
+                  {selectedChat.channel_type === "direct" &&
+                    isUserOnline(selectedChat.other_user?._id) && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950">
+                        <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-40" />
+                      </div>
+                    )}
                 </div>
-                {selectedChat.channel_type === "direct" &&
-                  isUserOnline(selectedChat.other_user?._id) && (
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950">
-                      <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-40" />
-                    </div>
-                  )}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-100">
-                  {selectedChat.channel_type === "group"
-                    ? selectedChat.name
-                    : selectedChat.other_user?.full_name}
-                </h3>
-                <p className="text-xs">
-                  {selectedChat.channel_type === "group"
-                    ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${
-                        selectedChat.department
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">
+                    {selectedChat.channel_type === "group"
+                      ? selectedChat.name
+                      : selectedChat.other_user?.full_name}
+                  </h3>
+                  <p className="text-xs">
+                    {selectedChat.channel_type === "group"
+                      ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${selectedChat.department
                           ? ` · ${selectedChat.department?.name || ""}`
                           : ""
-                      }`}</span>
-                    : isUserOnline(selectedChat.other_user?._id)
-                    ? <span className="text-emerald-400 flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />Active now</span>
-                    : <span className="text-zinc-500">Offline</span>}
-                </p>
+                        }`}</span>
+                      : isUserOnline(selectedChat.other_user?._id)
+                        ? <span className="text-emerald-400 flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />Active now</span>
+                        : <span className="text-zinc-500">Offline</span>}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-1">
-              {/* Search Button */}
-              <button
-                onClick={() => setShowMessageSearch(!showMessageSearch)}
-                className={`p-1.5 rounded-lg transition-all ${
-                  showMessageSearch
-                    ? "bg-indigo-600 text-white"
-                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                }`}
-                title="Search messages"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-              <button
-                onClick={fetchChatSummary}
-                className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
-                title="Summarize unseen messages"
-              >
-                <Sparkles className="w-4 h-4" />
-              </button>
-              {selectedChat.channel_type === "direct" &&
-                selectedChat.other_user && (
-                  <>
-                    <button
-                      onClick={async () => {
-                        if (!isUserOnline(selectedChat.other_user._id)) {
-                          toast.error("User is offline", { duration: 1500 });
-                          return;
-                        }
-                        if (groupCall.groupCallState !== "idle") {
-                          toast.error("You are currently in a group call", {
-                            duration: 1500,
-                          });
-                          return;
-                        }
-                        if (
-                          videoCall.callState !== "idle" &&
-                          !(
-                            String(selectedChat.other_user._id) ===
-                            String(videoCall.remoteUser?.id)
-                          )
-                        ) {
-                          toast.error("You are already in a call", {
-                            duration: 1500,
-                          });
-                          return;
-                        }
-                        try {
-                          const callStatus = await checkUserCallStatusApi(
-                            selectedChat.other_user._id
-                          );
-                          if (callStatus.inCall) {
-                            toast.error(
-                              `${
-                                selectedChat.other_user.first_name ||
-                                "This person"
-                              } is on a call`,
-                              { duration: 1500 }
-                            );
-                            return;
-                          }
-                          audioCall.startCall(
-                            String(selectedChat.other_user._id),
-                            selectedChat.other_user.full_name ||
-                              `${selectedChat.other_user.first_name || ""} ${
-                                selectedChat.other_user.last_name || ""
-                              }`.trim()
-                          );
-                        } catch (error) {
-                          audioCall.startCall(
-                            String(selectedChat.other_user._id),
-                            selectedChat.other_user.full_name ||
-                              `${selectedChat.other_user.first_name || ""} ${
-                                selectedChat.other_user.last_name || ""
-                              }`.trim()
-                          );
-                        }
-                      }}
-                      disabled={
-                        audioCall.callState !== "idle" ||
-                        videoCall.callState !== "idle" ||
-                        !socket ||
-                        groupCall.groupCallState !== "idle" ||
-                        !isUserOnline(selectedChat.other_user._id)
-                      }
-                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
-                      title={
-                        !isUserOnline(selectedChat.other_user._id)
-                          ? "User is offline"
-                          : groupCall.groupCallState !== "idle"
-                          ? "You are in a group call"
-                          : videoCall.callState !== "idle"
-                          ? "You are in a video call"
-                          : audioCall.callState !== "idle"
-                          ? "You are in a call"
-                          : "Audio call"
-                      }
-                    >
-                      <Phone className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!isUserOnline(selectedChat.other_user._id)) {
-                          toast.error("User is offline", { duration: 1500 });
-                          return;
-                        }
-                        if (groupCall.groupCallState !== "idle") {
-                          toast.error("You are currently in a group call", {
-                            duration: 1500,
-                          });
-                          return;
-                        }
-                        if (
-                          audioCall.callState !== "idle" &&
-                          !(
-                            String(selectedChat.other_user._id) ===
-                            String(audioCall.remoteUser?.id)
-                          )
-                        ) {
-                          toast.error("You are already in a call", {
-                            duration: 1500,
-                          });
-                          return;
-                        }
-                        if (
-                          videoCall.callState !== "idle" &&
-                          !(
-                            String(selectedChat.other_user._id) ===
-                            String(videoCall.remoteUser?.id)
-                          )
-                        ) {
-                          toast.error("You are already in a call", {
-                            duration: 1500,
-                          });
-                          return;
-                        }
-                        try {
-                          const callStatus = await checkUserCallStatusApi(
-                            selectedChat.other_user._id
-                          );
-                          if (callStatus.inCall) {
-                            toast.error(
-                              `${
-                                selectedChat.other_user.first_name ||
-                                "This person"
-                              } is on a call`,
-                              { duration: 1500 }
-                            );
-                            return;
-                          }
-                          videoCall.startCall(
-                            String(selectedChat.other_user._id),
-                            selectedChat.other_user.full_name ||
-                              `${selectedChat.other_user.first_name || ""} ${
-                                selectedChat.other_user.last_name || ""
-                              }`.trim()
-                          );
-                        } catch (error) {
-                          console.error("Error checking call status:", error);
-                          videoCall.startCall(
-                            String(selectedChat.other_user._id),
-                            selectedChat.other_user.full_name ||
-                              `${selectedChat.other_user.first_name || ""} ${
-                                selectedChat.other_user.last_name || ""
-                              }`.trim()
-                          );
-                        }
-                      }}
-                      disabled={
-                        (audioCall.callState !== "idle" &&
-                          !(
-                            selectedChat.channel_type === "direct" &&
-                            selectedChat.other_user &&
-                            String(selectedChat.other_user._id) ===
-                              String(audioCall.remoteUser?.id)
-                          )) ||
-                        (videoCall.callState !== "idle" &&
-                          !(
-                            selectedChat.channel_type === "direct" &&
-                            selectedChat.other_user &&
-                            String(selectedChat.other_user._id) ===
-                              String(videoCall.remoteUser?.id)
-                          )) ||
-                        groupCall.groupCallState !== "idle" ||
-                        !isUserOnline(selectedChat.other_user._id)
-                      }
-                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
-                      title={
-                        !isUserOnline(selectedChat.other_user._id)
-                          ? "User is offline"
-                          : groupCall.groupCallState !== "idle"
-                          ? "You are in a group call"
-                          : videoCall.callState !== "idle" &&
-                            String(selectedChat.other_user._id) !==
-                              String(videoCall.remoteUser?.id)
-                          ? "You are in a video call"
-                          : audioCall.callState !== "idle" &&
-                            String(selectedChat.other_user._id) !==
-                              String(audioCall.remoteUser?.id)
-                          ? "You are in a call"
-                          : "Video call"
-                      }
-                    >
-                      <Video className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              {selectedChat.channel_type === "group" && (
-                <>
-                  <button
-                    onClick={() =>
-                      groupCall.startGroupCall(
-                        selectedChat._id,
-                        selectedChat.name
-                      )
-                    }
-                    disabled={
-                      groupCall.groupCallState !== "idle" ||
-                      audioCall.callState !== "idle" ||
-                      videoCall.callState !== "idle"
-                    }
-                    className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
-                    title="Start video call"
-                  >
-                    <Video className="w-4 h-4" />
-                  </button>
-                  {groupCall.groupCallState === "idle" &&
-                    !groupCallStatus?.active &&
-                    selectedChat.user_role === "admin" && (
+              <div className="flex items-center gap-1">
+                {/* Search Button */}
+                <button
+                  onClick={() => setShowMessageSearch(!showMessageSearch)}
+                  className={`p-1.5 rounded-lg transition-all ${showMessageSearch
+                      ? "bg-indigo-600 text-white"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                    }`}
+                  title="Search messages"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={fetchChatSummary}
+                  className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
+                  title="Summarize unseen messages"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </button>
+                {selectedChat.channel_type === "direct" &&
+                  selectedChat.other_user && (
+                    <>
                       <button
-                        onClick={() =>
-                          groupCall.startGroupCall(
-                            selectedChat._id,
-                            selectedChat.name
-                          )
-                        }
+                        onClick={async () => {
+                          if (!isUserOnline(selectedChat.other_user._id)) {
+                            toast.error("User is offline", { duration: 1500 });
+                            return;
+                          }
+                          if (groupCall.groupCallState !== "idle") {
+                            toast.error("You are currently in a group call", {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          if (
+                            videoCall.callState !== "idle" &&
+                            !(
+                              String(selectedChat.other_user._id) ===
+                              String(videoCall.remoteUser?.id)
+                            )
+                          ) {
+                            toast.error("You are already in a call", {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          try {
+                            const callStatus = await checkUserCallStatusApi(
+                              selectedChat.other_user._id
+                            );
+                            if (callStatus.inCall) {
+                              toast.error(
+                                `${selectedChat.other_user.first_name ||
+                                "This person"
+                                } is on a call`,
+                                { duration: 1500 }
+                              );
+                              return;
+                            }
+                            audioCall.startCall(
+                              String(selectedChat.other_user._id),
+                              selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""
+                                }`.trim()
+                            );
+                          } catch (error) {
+                            audioCall.startCall(
+                              String(selectedChat.other_user._id),
+                              selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""
+                                }`.trim()
+                            );
+                          }
+                        }}
                         disabled={
+                          audioCall.callState !== "idle" ||
+                          videoCall.callState !== "idle" ||
                           !socket ||
                           groupCall.groupCallState !== "idle" ||
-                          audioCall.callState !== "idle"
+                          !isUserOnline(selectedChat.other_user._id)
                         }
                         className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
+                        title={
+                          !isUserOnline(selectedChat.other_user._id)
+                            ? "User is offline"
+                            : groupCall.groupCallState !== "idle"
+                              ? "You are in a group call"
+                              : videoCall.callState !== "idle"
+                                ? "You are in a video call"
+                                : audioCall.callState !== "idle"
+                                  ? "You are in a call"
+                                  : "Audio call"
+                        }
                       >
                         <Phone className="w-4 h-4" />
                       </button>
-                    )}
+                      <button
+                        onClick={async () => {
+                          if (!isUserOnline(selectedChat.other_user._id)) {
+                            toast.error("User is offline", { duration: 1500 });
+                            return;
+                          }
+                          if (groupCall.groupCallState !== "idle") {
+                            toast.error("You are currently in a group call", {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          if (
+                            audioCall.callState !== "idle" &&
+                            !(
+                              String(selectedChat.other_user._id) ===
+                              String(audioCall.remoteUser?.id)
+                            )
+                          ) {
+                            toast.error("You are already in a call", {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          if (
+                            videoCall.callState !== "idle" &&
+                            !(
+                              String(selectedChat.other_user._id) ===
+                              String(videoCall.remoteUser?.id)
+                            )
+                          ) {
+                            toast.error("You are already in a call", {
+                              duration: 1500,
+                            });
+                            return;
+                          }
+                          try {
+                            const callStatus = await checkUserCallStatusApi(
+                              selectedChat.other_user._id
+                            );
+                            if (callStatus.inCall) {
+                              toast.error(
+                                `${selectedChat.other_user.first_name ||
+                                "This person"
+                                } is on a call`,
+                                { duration: 1500 }
+                              );
+                              return;
+                            }
+                            videoCall.startCall(
+                              String(selectedChat.other_user._id),
+                              selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""
+                                }`.trim()
+                            );
+                          } catch (error) {
+                            console.error("Error checking call status:", error);
+                            videoCall.startCall(
+                              String(selectedChat.other_user._id),
+                              selectedChat.other_user.full_name ||
+                              `${selectedChat.other_user.first_name || ""} ${selectedChat.other_user.last_name || ""
+                                }`.trim()
+                            );
+                          }
+                        }}
+                        disabled={
+                          (audioCall.callState !== "idle" &&
+                            !(
+                              selectedChat.channel_type === "direct" &&
+                              selectedChat.other_user &&
+                              String(selectedChat.other_user._id) ===
+                              String(audioCall.remoteUser?.id)
+                            )) ||
+                          (videoCall.callState !== "idle" &&
+                            !(
+                              selectedChat.channel_type === "direct" &&
+                              selectedChat.other_user &&
+                              String(selectedChat.other_user._id) ===
+                              String(videoCall.remoteUser?.id)
+                            )) ||
+                          groupCall.groupCallState !== "idle" ||
+                          !isUserOnline(selectedChat.other_user._id)
+                        }
+                        className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
+                        title={
+                          !isUserOnline(selectedChat.other_user._id)
+                            ? "User is offline"
+                            : groupCall.groupCallState !== "idle"
+                              ? "You are in a group call"
+                              : videoCall.callState !== "idle" &&
+                                String(selectedChat.other_user._id) !==
+                                String(videoCall.remoteUser?.id)
+                                ? "You are in a video call"
+                                : audioCall.callState !== "idle" &&
+                                  String(selectedChat.other_user._id) !==
+                                  String(audioCall.remoteUser?.id)
+                                  ? "You are in a call"
+                                  : "Video call"
+                        }
+                      >
+                        <Video className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                {selectedChat.channel_type === "group" && (
+                  <>
+                    <button
+                      onClick={() =>
+                        groupCall.startGroupCall(
+                          selectedChat._id,
+                          selectedChat.name
+                        )
+                      }
+                      disabled={
+                        groupCall.groupCallState !== "idle" ||
+                        audioCall.callState !== "idle" ||
+                        videoCall.callState !== "idle"
+                      }
+                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
+                      title="Start video call"
+                    >
+                      <Video className="w-4 h-4" />
+                    </button>
+                    {groupCall.groupCallState === "idle" &&
+                      !groupCallStatus?.active &&
+                      selectedChat.user_role === "admin" && (
+                        <button
+                          onClick={() =>
+                            groupCall.startGroupCall(
+                              selectedChat._id,
+                              selectedChat.name
+                            )
+                          }
+                          disabled={
+                            !socket ||
+                            groupCall.groupCallState !== "idle" ||
+                            audioCall.callState !== "idle"
+                          }
+                          className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </button>
+                      )}
+                    <button
+                      onClick={openChannelSettings}
+                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                {selectedChat?.member_count > 2 && (
                   <button
-                    onClick={openChannelSettings}
-                    className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
+                    onClick={() => leaveGroup(selectedChat._id)}
+                    className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
                   >
-                    <Settings className="w-4 h-4" />
+                    <Trash className="w-4 h-4" />
                   </button>
-                </>
-              )}
-              {selectedChat?.member_count > 2 && (
+                )}
                 <button
-                  onClick={() => leaveGroup(selectedChat._id)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Are you sure you want to clear all messages in this conversation? This cannot be undone."
+                      )
+                    ) {
+                      handleClearConversation();
+                    }
+                  }}
                   className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
+                  title="Clear conversation"
                 >
-                  <Trash className="w-4 h-4" />
+                  <Eraser className="w-4 h-4" />
                 </button>
-              )}
-              <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Are you sure you want to clear all messages in this conversation? This cannot be undone."
-                    )
-                  ) {
-                    handleClearConversation();
-                  }
-                }}
-                className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
-                title="Clear conversation"
-              >
-                <Eraser className="w-4 h-4" />
-              </button>
+              </div>
             </div>
-          </div>
-          {/* Header accent line */}
-          <div className="h-[2px] bg-gradient-to-r from-indigo-600/60 via-purple-500/40 to-transparent" />
+            {/* Header accent line */}
+            <div className="h-[2px] bg-gradient-to-r from-indigo-600/60 via-purple-500/40 to-transparent" />
           </div>
 
           {/* Message Search Bar */}
@@ -1913,10 +1894,10 @@ const ChatInterface = () => {
               groupCallStatus?.active &&
               selectedChat?._id &&
               String(selectedChat._id) ===
-                String(groupCallStatus.channelId))) &&
-          groupCall.groupCallState !== "waiting" &&
-          groupCall.groupCallState !== "active" &&
-          groupCall.groupCallState !== "joined" ? (
+              String(groupCallStatus.channelId))) &&
+            groupCall.groupCallState !== "waiting" &&
+            groupCall.groupCallState !== "active" &&
+            groupCall.groupCallState !== "joined" ? (
             <div className="px-4 pt-2">
               <GroupCallIncomingBanner
                 channelName={
@@ -1957,7 +1938,7 @@ const ChatInterface = () => {
                 onDismiss={
                   groupCall.groupCallState === "incoming"
                     ? groupCall.dismissIncoming
-                    : () => {}
+                    : () => { }
                 }
               />
             </div>
@@ -1969,8 +1950,8 @@ const ChatInterface = () => {
             style={{ overscrollBehavior: "contain" }}
           >
             {removedFromChannelId &&
-            selectedChat?._id &&
-            String(selectedChat._id) === String(removedFromChannelId) ? (
+              selectedChat?._id &&
+              String(selectedChat._id) === String(removedFromChannelId) ? (
               <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
                 <p className="text-base font-medium text-amber-400">
                   You are removed from this group
@@ -2004,8 +1985,7 @@ const ChatInterface = () => {
                     ? getParentMessage(message.parent_message_id)
                     : null;
                   const senderName = message.sender
-                    ? `${message.sender.first_name || ""} ${
-                        message.sender.last_name || ""
+                    ? `${message.sender.first_name || ""} ${message.sender.last_name || ""
                       }`.trim() || "User"
                     : "User";
 
@@ -2024,50 +2004,44 @@ const ChatInterface = () => {
                           searchedMessageRefs.current[message._id] = el;
                         }
                       }}
-                      className={`flex ${
-                        message.is_own ? "justify-end" : "justify-start"
-                      } ${isCurrentSearchResult ? "animate-pulse" : ""}`}
+                      className={`flex ${message.is_own ? "justify-end" : "justify-start"
+                        } ${isCurrentSearchResult ? "animate-pulse" : ""}`}
                     >
                       <div className="group relative max-w-md">
                         <div
-                          className={`px-3.5 py-2 rounded-xl text-sm transition-all ${
-                            message.is_own
+                          className={`px-3.5 py-2 rounded-xl text-sm transition-all ${message.is_own
                               ? "bg-indigo-600 text-white"
                               : "bg-zinc-800/80 border border-zinc-700/50 text-zinc-100"
-                          } ${
-                            isCurrentSearchResult
+                            } ${isCurrentSearchResult
                               ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-zinc-900"
                               : isSearchResult
-                              ? "ring-1 ring-yellow-400/50"
-                              : ""
-                          }`}
+                                ? "ring-1 ring-yellow-400/50"
+                                : ""
+                            }`}
                         >
                           {/* Rest of your existing message rendering... */}
                           {parentMessage && (
                             <div
-                              className={`mb-1.5 pl-2.5 border-l-2 ${
-                                message.is_own
+                              className={`mb-1.5 pl-2.5 border-l-2 ${message.is_own
                                   ? "border-white/40"
                                   : "border-indigo-400"
-                              } py-0.5`}
+                                } py-0.5`}
                             >
                               <p
-                                className={`text-[11px] font-medium ${
-                                  message.is_own
+                                className={`text-[11px] font-medium ${message.is_own
                                     ? "text-white/70"
                                     : "text-indigo-400"
-                                }`}
+                                  }`}
                               >
                                 {parentMessage.is_own
                                   ? "You"
                                   : parentMessage.sender?.first_name || "User"}
                               </p>
                               <p
-                                className={`text-[11px] truncate ${
-                                  message.is_own
+                                className={`text-[11px] truncate ${message.is_own
                                     ? "text-white/60"
                                     : "text-zinc-500"
-                                }`}
+                                  }`}
                               >
                                 {parentMessage.content}
                               </p>
@@ -2082,11 +2056,10 @@ const ChatInterface = () => {
                           <p className="leading-relaxed">{message.content}</p>
                           {renderFileAttachment(message)}
                           <div
-                            className={`flex items-center gap-1 justify-end mt-1 ${
-                              message.is_own
+                            className={`flex items-center gap-1 justify-end mt-1 ${message.is_own
                                 ? "text-indigo-200/60"
                                 : "text-zinc-500"
-                            }`}
+                              }`}
                           >
                             <span className="text-[10px]">
                               {formatTime(message.created_at)}
@@ -2152,57 +2125,57 @@ const ChatInterface = () => {
             selectedChat?._id &&
             String(selectedChat._id) === String(removedFromChannelId)
           ) && (
-            <div className="px-4 pt-3 pb-1 border-t border-zinc-800/60 bg-zinc-950">
-              {!socketConnected && (
-                <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
-                  <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-                  Connecting to chat...
-                </div>
-              )}
-              <form onSubmit={sendMessage} className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                  onClick={() => setShowFileUpload(true)}
-                  disabled={!socketConnected}
-                  title="Send file"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </Button>
+              <div className="px-4 pt-3 pb-1 border-t border-zinc-800/60 bg-zinc-950">
+                {!socketConnected && (
+                  <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                    Connecting to chat...
+                  </div>
+                )}
+                <form onSubmit={sendMessage} className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    onClick={() => setShowFileUpload(true)}
+                    disabled={!socketConnected}
+                    title="Send file"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </Button>
 
-                <Input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={
-                    !socketConnected
-                      ? "Connecting..."
-                      : replyingTo
-                      ? "Type your reply..."
-                      : "Type a message..."
-                  }
-                  disabled={sendingMessage || !socketConnected}
-                  className="flex-1 bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={
-                    !newMessage.trim() || sendingMessage || !socketConnected
-                  }
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
-                >
-                  {sendingMessage ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
-              </form>
-            </div>
-          )}
+                  <Input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder={
+                      !socketConnected
+                        ? "Connecting..."
+                        : replyingTo
+                          ? "Type your reply..."
+                          : "Type a message..."
+                    }
+                    disabled={sendingMessage || !socketConnected}
+                    className="flex-1 bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={
+                      !newMessage.trim() || sendingMessage || !socketConnected
+                    }
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
+                  >
+                    {sendingMessage ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </form>
+              </div>
+            )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center bg-zinc-900/30">
@@ -2215,7 +2188,7 @@ const ChatInterface = () => {
           <p className="text-sm text-zinc-500 mb-4">
             Choose a chat or start a new one
           </p>
-          <Button 
+          <Button
             onClick={() => setShowSearchModal(true)}
             className="bg-indigo-600 hover:bg-indigo-500 text-white"
           >
@@ -2404,20 +2377,20 @@ const ChatInterface = () => {
       )}
       {(groupCall.groupCallState === "active" ||
         groupCall.groupCallState === "joined") && (
-        <GroupVideoCallBar
-          channelName={groupCall.activeChannelName}
-          participants={groupCall.participants}
-          localStream={groupCall.localStream}
-          remoteStreams={groupCall.remoteStreams}
-          isMuted={groupCall.isMuted}
-          isVideoOff={groupCall.isVideoOff}
-          onToggleMute={groupCall.toggleMute}
-          onToggleVideo={groupCall.toggleVideo}
-          onHangUp={groupCall.leaveGroupCall}
-          currentUserId={user?.id}
-          isConnecting={groupCall.groupCallState === "waiting"}
-        />
-      )}
+          <GroupVideoCallBar
+            channelName={groupCall.activeChannelName}
+            participants={groupCall.participants}
+            localStream={groupCall.localStream}
+            remoteStreams={groupCall.remoteStreams}
+            isMuted={groupCall.isMuted}
+            isVideoOff={groupCall.isVideoOff}
+            onToggleMute={groupCall.toggleMute}
+            onToggleVideo={groupCall.toggleVideo}
+            onHangUp={groupCall.leaveGroupCall}
+            currentUserId={user?.id}
+            isConnecting={groupCall.groupCallState === "waiting"}
+          />
+        )}
       <FileUploadModal
         show={showFileUpload}
         onClose={() => setShowFileUpload(false)}
@@ -2507,7 +2480,7 @@ const ChatInterface = () => {
           </div>
         </div>
       )}
-      
+
     </div>
   );
 };

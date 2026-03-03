@@ -2869,7 +2869,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     >
       {/* ---- Guest waiting in lobby ---- */}
       {showLobby && (
-        <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4 bg-zinc-950 rounded-xl border border-zinc-800">
+        <div className="w-full h-full flex flex-col items-center justify-center px-4 bg-zinc-950 rounded-xl border border-zinc-800">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
             <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
             <h2 className="text-lg font-semibold text-white mb-2">Waiting to join</h2>
@@ -2912,7 +2912,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
 
       {/* ---- Main view (calendar + meeting list) ---- */}
       {showMainView && (
-        <div className="w-full h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden px-4 sm:px-6 lg:px-8 py-6">
+        <div className="w-full h-full flex flex-col overflow-hidden px-4 sm:px-6 lg:px-8 py-6">
           {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
           {showInstantMeetingDialog && !readOnly && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">

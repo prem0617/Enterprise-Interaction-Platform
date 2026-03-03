@@ -147,16 +147,16 @@ export default function AdminDashboard() {
           )}
         >
           {/* Brand Header */}
-          <div className="h-16 flex items-center px-4 gap-3 border-b border-white/[0.06]">
+          <div className={cn("h-16 flex items-center gap-3 border-b border-white/[0.06]", sidebarCollapsed ? "justify-center" : "px-6")}>
             <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20">
               <Hexagon className="size-4 text-white" />
             </div>
             {!sidebarCollapsed && (
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold tracking-tight truncate">
+              <div className="flex flex-col justify-center h-16 min-w-0">
+                <span className="text-sm font-semibold tracking-tight truncate leading-tight">
                   Enterprise
                 </span>
-                <span className="text-[10px] text-zinc-500 font-medium -mt-0.5">
+                <span className="text-[10px] text-zinc-500 font-medium leading-none">
                   Admin Portal
                 </span>
               </div>
@@ -191,7 +191,8 @@ export default function AdminDashboard() {
                 >
                   <div
                     className={cn(
-                      "flex items-center justify-center flex-shrink-0",
+                      "w-9 flex items-center justify-start flex-shrink-0",
+                      sidebarCollapsed && "justify-center w-auto",
                       isActive && "drop-shadow-[0_0_6px_rgba(99,102,241,0.4)]"
                     )}
                   >
@@ -209,7 +210,7 @@ export default function AdminDashboard() {
           {/* Collapse Toggle */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-20 size-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors z-10"
+            className="absolute -right-3 top-5 size-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors z-10"
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {sidebarCollapsed ? (
