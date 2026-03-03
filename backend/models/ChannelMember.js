@@ -21,6 +21,10 @@ const channelMemberSchema = new Schema(
       type: Date,
       default: Date.now,
     },
+    cleared_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -164,15 +164,8 @@ export default function AdminDashboard() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1">
-            <p
-              className={cn(
-                "text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2",
-                sidebarCollapsed ? "text-center" : "px-3"
-              )}
-            >
-              {sidebarCollapsed ? "•" : "Menu"}
-            </p>
+          <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
+    
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;

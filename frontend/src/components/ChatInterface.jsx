@@ -22,6 +22,7 @@ import {
   FileText,
   Image as ImageIcon,
   Sparkles,
+  Pencil,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -49,6 +50,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import FileUploadModal from "./FileUploadModal";
+import FilePreviewModal from "./FilePreviewModal";
 
 const ChatInterface = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,6 +90,10 @@ const ChatInterface = () => {
   const searchTimeoutRef = useRef(null);
   const selectedChatRef = useRef(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [previewMessage, setPreviewMessage] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editContent, setEditContent] = useState("");
+  const [deleteConfirmMessage, setDeleteConfirmMessage] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -748,14 +754,22 @@ const ChatInterface = () => {
   const handleReply = (message) => setReplyingTo(message);
   const cancelReply = () => setReplyingTo(null);
 
-  const handleDeleteMessage = async (messageId) => {
+  const handleDeleteMessage = async (messageId, deleteForEveryone = false) => {
     try {
       await axios.delete(
         `${BACKEND_URL}/direct_chat/messages/${messageId}`,
-        axiosConfig
+        { ...axiosConfig, data: { deleteForEveryone } }
       );
-      setMessages((prev) => prev.filter((m) => m._id !== messageId));
-      toast.success("Message deleted");
+      if (deleteForEveryone) {
+        // Socket will handle removal for all users
+      } else {
+        // Remove locally for this user only
+        setMessages((prev) => prev.filter((m) => m._id !== messageId));
+      }
+      setDeleteConfirmMessage(null);
+      toast.success(
+        deleteForEveryone ? "Message deleted for everyone" : "Message deleted for you"
+      );
       await fetchDirectChats();
       await getUserChannel();
     } catch (error) {
@@ -771,13 +785,39 @@ const ChatInterface = () => {
         axiosConfig
       );
       setMessages([]);
-      toast.success("Conversation cleared");
+      toast.success("Conversation cleared for you");
       await fetchDirectChats();
       await getUserChannel();
     } catch (error) {
       toast.error(
         error.response?.data?.error || "Failed to clear conversation"
       );
+    }
+  };
+
+  const handleEditMessage = (message) => {
+    setEditingMessage(message);
+    setEditContent(message.content);
+    setReplyingTo(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setEditContent("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMessage || !editContent.trim()) return;
+    try {
+      await axios.put(
+        `${BACKEND_URL}/direct_chat/messages/${editingMessage._id}`,
+        { content: editContent.trim() },
+        axiosConfig
+      );
+      // Socket event will update the message for everyone
+      handleCancelEdit();
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Failed to edit message");
     }
   };
 
@@ -968,39 +1008,41 @@ const ChatInterface = () => {
               src={fileUrl}
               alt={message.file_name || "Attachment"}
               className="max-w-xs max-h-64 rounded cursor-pointer"
-              onClick={() => window.open(fileUrl, "_blank")}
+              onClick={() => setPreviewMessage(message)}
               onError={(e) => {
                 console.error("Image failed to load:", fileUrl);
                 e.target.style.display = "none";
               }}
             />
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                // For images, open in new tab
-                window.open(fileUrl, "_blank");
-              }}
-              className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Download"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewMessage(message);
+                }}
+                className="p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                title="Preview"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(fileUrl, "_blank");
+                }}
+                className="p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : (
           <div
-            onClick={() => {
-              console.log("📥 Opening file:", {
-                name: message.file_name,
-                type: message.file_type,
-                url: fileUrl,
-                originalUrl: message.file_url,
-              });
-              window.open(fileUrl, "_blank");
-            }}
-            className="flex items-center gap-2 p-2 bg-zinc-800/60 rounded cursor-pointer hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-2 p-2 bg-zinc-800/60 rounded cursor-pointer hover:bg-zinc-800 transition-colors group"
           >
             <FileText className="w-4 h-4 flex-shrink-0 text-indigo-400" />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" onClick={() => setPreviewMessage(message)}>
               <span className="text-sm block truncate text-zinc-200">
                 {message.file_name || "Download File"}
               </span>
@@ -1010,7 +1052,20 @@ const ChatInterface = () => {
                 </span>
               )}
             </div>
-            <Download className="w-4 h-4 ml-auto flex-shrink-0 text-zinc-400" />
+            <button
+              onClick={(e) => { e.stopPropagation(); setPreviewMessage(message); }}
+              className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-indigo-400 transition-colors"
+              title="Preview"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); window.open(fileUrl, "_blank"); }}
+              className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              title="Download"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>
@@ -1164,13 +1219,17 @@ const ChatInterface = () => {
       getUserChannel();
     };
 
-    const handleConversationCleared = (data) => {
+    const handleMessageEdited = (data) => {
       const currentChat = selectedChatRef.current;
       if (currentChat && String(currentChat._id) === String(data.channel_id)) {
-        setMessages([]);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === data._id
+              ? { ...m, content: data.content, is_edited: true, edited_at: data.edited_at }
+              : m
+          )
+        );
       }
-      fetchDirectChats();
-      getUserChannel();
     };
 
     socket.on("channel_name_changed", handleChannelNameUpdate);
@@ -1181,7 +1240,7 @@ const ChatInterface = () => {
     socket.on("leavechannel", handleLeaveChannel);
     socket.on("online-users-updated", handleOnlineUsersUpdate);
     socket.on("message_deleted", handleMessageDeleted);
-    socket.on("conversation_cleared", handleConversationCleared);
+    socket.on("message_edited", handleMessageEdited);
 
     socket.emit("request-online-users");
 
@@ -1198,7 +1257,7 @@ const ChatInterface = () => {
       socket.off("online-users-updated", handleOnlineUsersUpdate);
       socket.off("channel_name_changed", handleChannelNameUpdate);
       socket.off("message_deleted", handleMessageDeleted);
-      socket.off("conversation_cleared", handleConversationCleared);
+      socket.off("message_edited", handleMessageEdited);
       clearInterval(onlineInterval);
     };
   }, [socket]);
@@ -1330,8 +1389,8 @@ const ChatInterface = () => {
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === tab
-                    ? "bg-indigo-500/15 text-indigo-300 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-300"
+                  ? "bg-indigo-500/15 text-indigo-300 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300"
                   }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1388,8 +1447,8 @@ const ChatInterface = () => {
                   }
                   onClick={() => selectChat(chat)}
                   className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all border-b border-zinc-800/40 ${isActive
-                      ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
-                      : "hover:bg-zinc-900/80"
+                    ? "bg-indigo-500/10 border-l-2 border-l-indigo-500"
+                    : "hover:bg-zinc-900/80"
                     }`}
                 >
                   <div className="relative flex-shrink-0">
@@ -1419,8 +1478,8 @@ const ChatInterface = () => {
                     <div className="flex items-center gap-1.5">
                       <h3
                         className={`text-sm truncate ${chat.unread_count > 0
-                            ? "font-semibold text-zinc-100"
-                            : "font-medium text-zinc-300"
+                          ? "font-semibold text-zinc-100"
+                          : "font-medium text-zinc-300"
                           }`}
                       >
                         {displayInfo.name}
@@ -1459,8 +1518,8 @@ const ChatInterface = () => {
                       <div className="flex items-center gap-1 mt-0.5">
                         <p
                           className={`text-xs truncate flex-1 ${chat.unread_count > 0
-                              ? "text-zinc-200 font-medium"
-                              : "text-zinc-500"
+                            ? "text-zinc-200 font-medium"
+                            : "text-zinc-500"
                             }`}
                         >
                           {chat.last_message.message_type === "file" ? "📎 File" : chat.last_message.content}
@@ -1490,8 +1549,8 @@ const ChatInterface = () => {
                 <div className="relative">
                   <div
                     className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${selectedChat.channel_type === "group"
-                        ? "bg-zinc-800 text-zinc-400"
-                        : "bg-indigo-500/20 text-indigo-300"
+                      ? "bg-zinc-800 text-zinc-400"
+                      : "bg-indigo-500/20 text-indigo-300"
                       }`}
                   >
                     {selectedChat.channel_type === "group" ? (
@@ -1525,8 +1584,8 @@ const ChatInterface = () => {
                   <p className="text-xs">
                     {selectedChat.channel_type === "group"
                       ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${selectedChat.department
-                          ? ` · ${selectedChat.department?.name || ""}`
-                          : ""
+                        ? ` · ${selectedChat.department?.name || ""}`
+                        : ""
                         }`}</span>
                       : isUserOnline(selectedChat.other_user?._id)
                         ? <span className="text-emerald-400 flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />Active now</span>
@@ -1540,8 +1599,8 @@ const ChatInterface = () => {
                 <button
                   onClick={() => setShowMessageSearch(!showMessageSearch)}
                   className={`p-1.5 rounded-lg transition-all ${showMessageSearch
-                      ? "bg-indigo-600 text-white"
-                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                     }`}
                   title="Search messages"
                 >
@@ -2010,8 +2069,8 @@ const ChatInterface = () => {
                       <div className="group relative max-w-md">
                         <div
                           className={`px-3.5 py-2 rounded-xl text-sm transition-all ${message.is_own
-                              ? "bg-indigo-600 text-white"
-                              : "bg-zinc-800/80 border border-zinc-700/50 text-zinc-100"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-zinc-800/80 border border-zinc-700/50 text-zinc-100"
                             } ${isCurrentSearchResult
                               ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-zinc-900"
                               : isSearchResult
@@ -2023,14 +2082,14 @@ const ChatInterface = () => {
                           {parentMessage && (
                             <div
                               className={`mb-1.5 pl-2.5 border-l-2 ${message.is_own
-                                  ? "border-white/40"
-                                  : "border-indigo-400"
+                                ? "border-white/40"
+                                : "border-indigo-400"
                                 } py-0.5`}
                             >
                               <p
                                 className={`text-[11px] font-medium ${message.is_own
-                                    ? "text-white/70"
-                                    : "text-indigo-400"
+                                  ? "text-white/70"
+                                  : "text-indigo-400"
                                   }`}
                               >
                                 {parentMessage.is_own
@@ -2039,8 +2098,8 @@ const ChatInterface = () => {
                               </p>
                               <p
                                 className={`text-[11px] truncate ${message.is_own
-                                    ? "text-white/60"
-                                    : "text-zinc-500"
+                                  ? "text-white/60"
+                                  : "text-zinc-500"
                                   }`}
                               >
                                 {parentMessage.content}
@@ -2057,13 +2116,16 @@ const ChatInterface = () => {
                           {renderFileAttachment(message)}
                           <div
                             className={`flex items-center gap-1 justify-end mt-1 ${message.is_own
-                                ? "text-indigo-200/60"
-                                : "text-zinc-500"
+                              ? "text-indigo-200/60"
+                              : "text-zinc-500"
                               }`}
                           >
                             <span className="text-[10px]">
                               {formatTime(message.created_at)}
                             </span>
+                            {message.is_edited && (
+                              <span className="text-[10px] italic">edited</span>
+                            )}
                             {message.is_own &&
                               (message.seen_count > 0 ? (
                                 <button
@@ -2083,7 +2145,32 @@ const ChatInterface = () => {
                               ))}
                           </div>
                         </div>
-                        {/* Rest of message actions... */}
+                        {/* Message Actions (hover) */}
+                        <div className={`absolute top-0 ${message.is_own ? 'right-full mr-1' : 'left-full ml-1'} opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5`}>
+                          <button
+                            onClick={() => handleReply(message)}
+                            className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                            title="Reply"
+                          >
+                            <Reply className="w-3.5 h-3.5" />
+                          </button>
+                          {message.is_own && message.message_type !== 'file' && (
+                            <button
+                              onClick={() => handleEditMessage(message)}
+                              className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDeleteConfirmMessage(message)}
+                            className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -2093,8 +2180,27 @@ const ChatInterface = () => {
             )}
           </div>
 
+          {/* Edit Bar */}
+          {editingMessage && (
+            <div className="px-4 py-2 bg-zinc-900/80 border-t border-zinc-800/60 flex items-center justify-between">
+              <div className="flex-1 flex items-start gap-2">
+                <Pencil className="w-3.5 h-3.5 text-indigo-400 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-zinc-200">Editing message</p>
+                  <p className="text-xs text-zinc-500 truncate">{editingMessage.content}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCancelEdit}
+                className="p-1 hover:bg-zinc-800 rounded transition"
+              >
+                <X className="w-3.5 h-3.5 text-zinc-500" />
+              </button>
+            </div>
+          )}
+
           {/* Reply Bar */}
-          {replyingTo && (
+          {replyingTo && !editingMessage && (
             <div className="px-4 py-2 bg-zinc-900/80 border-t border-zinc-800/60 flex items-center justify-between">
               <div className="flex-1 flex items-start gap-2">
                 <Reply className="w-3.5 h-3.5 text-indigo-400 mt-0.5 flex-shrink-0" />
@@ -2125,50 +2231,64 @@ const ChatInterface = () => {
             selectedChat?._id &&
             String(selectedChat._id) === String(removedFromChannelId)
           ) && (
-              <div className="px-4 pt-3 pb-1 border-t border-zinc-800/60 bg-zinc-950">
+              <div className="px-4 pt-3 pb-1 mb-2 border-t border-zinc-800/60 bg-zinc-950">
                 {!socketConnected && (
                   <div className="mb-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
                     <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
                     Connecting to chat...
                   </div>
                 )}
-                <form onSubmit={sendMessage} className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                    onClick={() => setShowFileUpload(true)}
-                    disabled={!socketConnected}
-                    title="Send file"
-                  >
-                    <Paperclip className="w-4 h-4" />
-                  </Button>
+                <form onSubmit={editingMessage ? (e) => { e.preventDefault(); handleSaveEdit(); } : sendMessage} className="flex items-center gap-2">
+                  {!editingMessage && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                      onClick={() => setShowFileUpload(true)}
+                      disabled={!socketConnected}
+                      title="Send file"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </Button>
+                  )}
 
                   <Input
                     type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    value={editingMessage ? editContent : newMessage}
+                    onChange={(e) => editingMessage ? setEditContent(e.target.value) : setNewMessage(e.target.value)}
                     placeholder={
-                      !socketConnected
-                        ? "Connecting..."
-                        : replyingTo
-                          ? "Type your reply..."
-                          : "Type a message..."
+                      editingMessage
+                        ? "Edit your message..."
+                        : !socketConnected
+                          ? "Connecting..."
+                          : replyingTo
+                            ? "Type your reply..."
+                            : "Type a message..."
                     }
                     disabled={sendingMessage || !socketConnected}
                     className="flex-1 bg-zinc-900/80 border-zinc-800 placeholder:text-zinc-600 focus:border-indigo-500/50"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape' && editingMessage) handleCancelEdit();
+                    }}
                   />
                   <Button
                     type="submit"
                     size="icon"
                     disabled={
-                      !newMessage.trim() || sendingMessage || !socketConnected
+                      editingMessage
+                        ? !editContent.trim()
+                        : !newMessage.trim() || sendingMessage || !socketConnected
                     }
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
+                    className={editingMessage
+                      ? "bg-green-600 hover:bg-green-500 text-white disabled:opacity-40"
+                      : "bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
+                    }
                   >
                     {sendingMessage ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : editingMessage ? (
+                      <Check className="w-4 h-4" />
                     ) : (
                       <Send className="w-4 h-4" />
                     )}
@@ -2481,6 +2601,57 @@ const ChatInterface = () => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmMessage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setDeleteConfirmMessage(null)}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-white mb-1">Delete message?</h3>
+            <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
+              {deleteConfirmMessage.is_own
+                ? "Choose how you want to delete this message."
+                : "This message will be removed from your view."}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleDeleteMessage(deleteConfirmMessage._id, false)}
+                className="w-full py-2.5 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors text-left flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4 text-zinc-400" />
+                Delete for me
+              </button>
+              {deleteConfirmMessage.is_own && (
+                <button
+                  onClick={() => handleDeleteMessage(deleteConfirmMessage._id, true)}
+                  className="w-full py-2.5 px-4 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm font-medium transition-colors text-left flex items-center gap-2 border border-red-500/20"
+                >
+                  <Trash className="w-4 h-4" />
+                  Delete for everyone
+                </button>
+              )}
+              <button
+                onClick={() => setDeleteConfirmMessage(null)}
+                className="w-full py-2 px-4 text-zinc-500 text-sm hover:text-zinc-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Preview Modal */}
+      {previewMessage && (
+        <FilePreviewModal
+          message={previewMessage}
+          onClose={() => setPreviewMessage(null)}
+        />
+      )}
     </div>
   );
 };

@@ -6,6 +6,90 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import { cloudinary } from "../../config/cloudinary.js";
+import { PDFParse } from "pdf-parse";
+import mammoth from "mammoth";
+
+// ─── Text extraction helper ──────────────────────────────────────
+const MAX_EXTRACTED_TEXT = 50 * 1024; // 50 KB cap
+
+const TEXT_EXTENSIONS = new Set([
+  ".txt", ".csv", ".md", ".markdown",
+  ".py", ".js", ".jsx", ".ts", ".tsx",
+  ".rs", ".cpp", ".c", ".h", ".hpp",
+  ".java", ".go", ".rb", ".sh", ".bash",
+  ".html", ".css", ".scss", ".json",
+  ".xml", ".yaml", ".yml", ".toml",
+  ".sql", ".r", ".swift", ".kt",
+  ".php", ".lua", ".pl", ".ex", ".exs",
+]);
+
+function getExtension(filename) {
+  if (!filename) return "";
+  const idx = filename.lastIndexOf(".");
+  return idx >= 0 ? filename.slice(idx).toLowerCase() : "";
+}
+
+/**
+ * Fetch the file from Cloudinary and extract its text content.
+ * Returns null if extraction is not possible / not supported.
+ */
+async function extractTextFromFile(fileUrl, mimeType, fileName) {
+  try {
+    const ext = getExtension(fileName);
+
+    // ── PDF ──
+    if (mimeType === "application/pdf" || ext === ".pdf") {
+      const correctedUrl = fileUrl.includes("/image/upload/")
+        ? fileUrl.replace("/image/upload/", "/raw/upload/")
+        : fileUrl;
+      const res = await fetch(correctedUrl);
+      if (!res.ok) return null;
+      const arrayBuf = await res.arrayBuffer();
+      const parser = new PDFParse({ data: new Uint8Array(arrayBuf) });
+      await parser.load();
+      const text = await parser.getText();
+      return (text || "").slice(0, MAX_EXTRACTED_TEXT) || null;
+    }
+
+    // ── DOCX ──
+    if (
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      ext === ".docx"
+    ) {
+      const correctedUrl = fileUrl.includes("/image/upload/")
+        ? fileUrl.replace("/image/upload/", "/raw/upload/")
+        : fileUrl;
+      const res = await fetch(correctedUrl);
+      if (!res.ok) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const result = await mammoth.extractRawText({ buffer });
+      return (result.value || "").slice(0, MAX_EXTRACTED_TEXT) || null;
+    }
+
+    // ── Plain text / code files ──
+    if (
+      mimeType?.startsWith("text/") ||
+      mimeType === "application/json" ||
+      mimeType === "application/xml" ||
+      mimeType === "application/x-yaml" ||
+      mimeType === "application/javascript" ||
+      TEXT_EXTENSIONS.has(ext)
+    ) {
+      const correctedUrl = fileUrl.includes("/image/upload/")
+        ? fileUrl.replace("/image/upload/", "/raw/upload/")
+        : fileUrl;
+      const res = await fetch(correctedUrl);
+      if (!res.ok) return null;
+      const text = await res.text();
+      return text.slice(0, MAX_EXTRACTED_TEXT) || null;
+    }
+
+    return null; // unsupported type
+  } catch (err) {
+    console.error("Text extraction failed (non-fatal):", err.message);
+    return null;
+  }
+}
 
 // Search users for direct chat
 export const searchUsers = async (req, res) => {
@@ -172,7 +256,7 @@ export const startDirectChat = async (req, res) => {
         channel_id: existingChat._id,
       }).populate("user_id", "first_name last_name email user_type profile_picture");
 
-    return res.json({
+      return res.json({
         message: "Direct chat already exists",
         is_new: false,
         channel: populatedChat,
@@ -296,15 +380,15 @@ export const getDirectChats = async (req, res) => {
           created_at: channel.created_at,
           other_user: otherMember
             ? {
-                _id: otherMember.user_id._id,
-                first_name: otherMember.user_id.first_name,
-                last_name: otherMember.user_id.last_name,
-                full_name: `${otherMember.user_id.first_name} ${otherMember.user_id.last_name}`,
-                email: otherMember.user_id.email,
-                user_type: otherMember.user_id.user_type,
-                status: otherMember.user_id.status,
-                profile_picture: otherMember.user_id.profile_picture,
-              }
+              _id: otherMember.user_id._id,
+              first_name: otherMember.user_id.first_name,
+              last_name: otherMember.user_id.last_name,
+              full_name: `${otherMember.user_id.first_name} ${otherMember.user_id.last_name}`,
+              email: otherMember.user_id.email,
+              user_type: otherMember.user_id.user_type,
+              status: otherMember.user_id.status,
+              profile_picture: otherMember.user_id.profile_picture,
+            }
             : null,
           last_message: lastMessage,
           unread_count: unreadCount,
@@ -444,10 +528,18 @@ export const getMessages = async (req, res) => {
     const query = {
       channel_id: channelId,
       deleted_at: null,
+      deleted_for: { $ne: currentUserId },
     };
 
+    // If the user has cleared the conversation, only show messages after that point
+    if (membership.cleared_at) {
+      query.created_at = { $gt: membership.cleared_at };
+    }
+
     if (before) {
-      query.created_at = { $lt: new Date(before) };
+      query.created_at = query.created_at
+        ? { ...query.created_at, $lt: new Date(before) }
+        : { $lt: new Date(before) };
     }
 
     const messages = await Message.find(query)
@@ -488,21 +580,22 @@ export const getMessages = async (req, res) => {
         file_type: msg.file_type || null,
         file_size: msg.file_size || null,
         cloudinary_public_id: msg.cloudinary_public_id || null,
+        extracted_text: msg.extracted_text || null,
         // End of file fields
         parent_message_id: msg.parent_message_id?._id || null,
         parent_message: msg.parent_message_id
           ? {
-              _id: msg.parent_message_id._id,
-              content: msg.parent_message_id.content,
-              sender_id: msg.parent_message_id.sender_id._id,
-              sender: {
-                _id: msg.parent_message_id.sender_id._id,
-                first_name: msg.parent_message_id.sender_id.first_name,
-                last_name: msg.parent_message_id.sender_id.last_name,
-                full_name: `${msg.parent_message_id.sender_id.first_name} ${msg.parent_message_id.sender_id.last_name}`,
-              },
-              created_at: msg.parent_message_id.created_at,
-            }
+            _id: msg.parent_message_id._id,
+            content: msg.parent_message_id.content,
+            sender_id: msg.parent_message_id.sender_id._id,
+            sender: {
+              _id: msg.parent_message_id.sender_id._id,
+              first_name: msg.parent_message_id.sender_id.first_name,
+              last_name: msg.parent_message_id.sender_id.last_name,
+              full_name: `${msg.parent_message_id.sender_id.first_name} ${msg.parent_message_id.sender_id.last_name}`,
+            },
+            created_at: msg.parent_message_id.created_at,
+          }
           : null,
         created_at: msg.created_at,
         updated_at: msg.updated_at,
@@ -618,18 +711,18 @@ export const sendMessage = async (req, res) => {
       parent_message_id: populatedMessage.parent_message_id?._id || null,
       parent_message: populatedMessage.parent_message_id
         ? {
-            _id: populatedMessage.parent_message_id._id,
-            content: populatedMessage.parent_message_id.content,
-            sender_id: populatedMessage.parent_message_id.sender_id._id,
-            sender: {
-              _id: populatedMessage.parent_message_id.sender_id._id,
-              first_name:
-                populatedMessage.parent_message_id.sender_id.first_name,
-              last_name: populatedMessage.parent_message_id.sender_id.last_name,
-              full_name: `${populatedMessage.parent_message_id.sender_id.first_name} ${populatedMessage.parent_message_id.sender_id.last_name}`,
-            },
-            created_at: populatedMessage.parent_message_id.created_at,
-          }
+          _id: populatedMessage.parent_message_id._id,
+          content: populatedMessage.parent_message_id.content,
+          sender_id: populatedMessage.parent_message_id.sender_id._id,
+          sender: {
+            _id: populatedMessage.parent_message_id.sender_id._id,
+            first_name:
+              populatedMessage.parent_message_id.sender_id.first_name,
+            last_name: populatedMessage.parent_message_id.sender_id.last_name,
+            full_name: `${populatedMessage.parent_message_id.sender_id.first_name} ${populatedMessage.parent_message_id.sender_id.last_name}`,
+          },
+          created_at: populatedMessage.parent_message_id.created_at,
+        }
         : null,
       created_at: populatedMessage.created_at,
       updated_at: populatedMessage.updated_at,
@@ -721,6 +814,7 @@ export const editMessage = async (req, res) => {
 
     // Update message
     message.content = content.trim();
+    message.edited_at = new Date();
     message.updated_at = new Date();
     await message.save();
 
@@ -730,25 +824,42 @@ export const editMessage = async (req, res) => {
       "first_name last_name email user_type"
     );
 
+    const editedData = {
+      _id: populatedMessage._id,
+      content: populatedMessage.content,
+      channel_id: message.channel_id.toString(),
+      sender_id: populatedMessage.sender_id._id,
+      sender: {
+        _id: populatedMessage.sender_id._id,
+        first_name: populatedMessage.sender_id.first_name,
+        last_name: populatedMessage.sender_id.last_name,
+        full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
+        email: populatedMessage.sender_id.email,
+        user_type: populatedMessage.sender_id.user_type,
+      },
+      created_at: populatedMessage.created_at,
+      updated_at: populatedMessage.updated_at,
+      edited_at: populatedMessage.edited_at,
+      is_edited: true,
+    };
+
+    // Broadcast to all channel members
+    const channelMembers = await ChannelMember.find({
+      channel_id: message.channel_id,
+    });
+    channelMembers.forEach((member) => {
+      const memberSocketId = getReceiverSocketId(member.user_id.toString());
+      if (memberSocketId) {
+        io.to(memberSocketId).emit("message_edited", {
+          ...editedData,
+          is_own: member.user_id.toString() === currentUserId,
+        });
+      }
+    });
+
     res.json({
       message: "Message updated successfully",
-      data: {
-        _id: populatedMessage._id,
-        content: populatedMessage.content,
-        sender_id: populatedMessage.sender_id._id,
-        sender: {
-          _id: populatedMessage.sender_id._id,
-          first_name: populatedMessage.sender_id.first_name,
-          last_name: populatedMessage.sender_id.last_name,
-          full_name: `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`,
-          email: populatedMessage.sender_id.email,
-          user_type: populatedMessage.sender_id.user_type,
-        },
-        created_at: populatedMessage.created_at,
-        updated_at: populatedMessage.updated_at,
-        is_edited: true,
-        is_own: true,
-      },
+      data: { ...editedData, is_own: true },
     });
   } catch (error) {
     console.error("Edit message error:", error);
@@ -756,11 +867,12 @@ export const editMessage = async (req, res) => {
   }
 };
 
-// Delete a message
+// Delete a message (supports "for me" and "for everyone")
 export const deleteMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
     const currentUserId = req.userId;
+    const { deleteForEveryone } = req.body || {};
 
     // Find message
     const message = await Message.findById(messageId);
@@ -768,38 +880,50 @@ export const deleteMessage = async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    // Verify user is the sender
-    if (message.sender_id.toString() !== currentUserId) {
-      return res
-        .status(403)
-        .json({ error: "You can only delete your own messages" });
-    }
-
-    // Check if already deleted
+    // Check if already deleted for everyone
     if (message.deleted_at) {
       return res.status(400).json({ error: "Message already deleted" });
     }
 
-    // Soft delete
-    message.deleted_at = new Date();
-    await message.save();
-
-    // Notify all channel members about the deletion in real-time
-    const channelMembers = await ChannelMember.find({
-      channel_id: message.channel_id,
-    });
-    channelMembers.forEach((member) => {
-      const memberSocketId = getReceiverSocketId(member.user_id.toString());
-      if (memberSocketId) {
-        io.to(memberSocketId).emit("message_deleted", {
-          message_id: messageId,
-          channel_id: message.channel_id.toString(),
-        });
+    if (deleteForEveryone) {
+      // Only sender can delete for everyone
+      if (message.sender_id.toString() !== currentUserId) {
+        return res
+          .status(403)
+          .json({ error: "You can only delete your own messages for everyone" });
       }
-    });
+
+      // Soft delete for everyone
+      message.deleted_at = new Date();
+      await message.save();
+
+      // Notify all channel members about the deletion in real-time
+      const channelMembers = await ChannelMember.find({
+        channel_id: message.channel_id,
+      });
+      channelMembers.forEach((member) => {
+        const memberSocketId = getReceiverSocketId(member.user_id.toString());
+        if (memberSocketId) {
+          io.to(memberSocketId).emit("message_deleted", {
+            message_id: messageId,
+            channel_id: message.channel_id.toString(),
+            deleted_for_everyone: true,
+          });
+        }
+      });
+    } else {
+      // Delete only for the current user
+      if (!message.deleted_for) message.deleted_for = [];
+      if (!message.deleted_for.includes(currentUserId)) {
+        message.deleted_for.push(currentUserId);
+        await message.save();
+      }
+    }
 
     res.json({
-      message: "Message deleted successfully",
+      message: deleteForEveryone
+        ? "Message deleted for everyone"
+        : "Message deleted for you",
       message_id: messageId,
     });
   } catch (error) {
@@ -808,7 +932,7 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
-// Clear all messages in a conversation (soft delete all)
+// Clear all messages in a conversation (per-user: only clears for the requesting user)
 export const clearConversation = async (req, res) => {
   try {
     const { channelId } = req.params;
@@ -831,26 +955,13 @@ export const clearConversation = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Soft delete all non-deleted messages in this channel
-    const result = await Message.updateMany(
-      { channel_id: channelId, deleted_at: null },
-      { $set: { deleted_at: new Date() } }
-    );
-
-    // Notify all channel members about the conversation being cleared
-    const channelMembers = await ChannelMember.find({ channel_id: channelId });
-    channelMembers.forEach((member) => {
-      const memberSocketId = getReceiverSocketId(member.user_id.toString());
-      if (memberSocketId) {
-        io.to(memberSocketId).emit("conversation_cleared", {
-          channel_id: channelId,
-        });
-      }
-    });
+    // Set cleared_at on the user's membership — messages before this are hidden for this user only
+    membership.cleared_at = new Date();
+    await membership.save();
 
     res.json({
-      message: "Conversation cleared successfully",
-      deleted_count: result.modifiedCount,
+      message: "Conversation cleared for you",
+      cleared_at: membership.cleared_at,
     });
   } catch (error) {
     console.error("Clear conversation error:", error);
@@ -1115,6 +1226,16 @@ export const uploadFileMessage = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
+    // Extract text content from the uploaded file (non-blocking, never fails the upload)
+    let extractedText = null;
+    try {
+      extractedText = await extractTextFromFile(
+        req.file.path,
+        req.file.mimetype,
+        req.file.originalname
+      );
+    } catch (_) { /* extraction is best-effort */ }
+
     // Create the message with file data
     const newMessage = new Message({
       channel_id: channelId,
@@ -1126,6 +1247,7 @@ export const uploadFileMessage = async (req, res) => {
       file_type: req.file.mimetype,
       file_size: req.file.size,
       cloudinary_public_id: req.file.filename,
+      extracted_text: extractedText,
     });
 
     await newMessage.save();
@@ -1146,6 +1268,7 @@ export const uploadFileMessage = async (req, res) => {
       file_type: newMessage.file_type,
       file_size: newMessage.file_size,
       cloudinary_public_id: newMessage.cloudinary_public_id,
+      extracted_text: newMessage.extracted_text || null,
       created_at: newMessage.created_at,
       updated_at: newMessage.updated_at,
       sender: {

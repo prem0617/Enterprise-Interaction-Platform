@@ -40,6 +40,10 @@ const messageSchema = new Schema(
     cloudinary_public_id: {
       type: String,
     },
+    extracted_text: {
+      type: String,
+      default: null,
+    },
     parent_message_id: {
       type: Schema.Types.ObjectId,
       ref: "Message",
@@ -50,6 +54,12 @@ const messageSchema = new Schema(
     deleted_at: {
       type: Date,
     },
+    deleted_for: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     // New field for tracking who has seen the message
     seen_by: [
       {

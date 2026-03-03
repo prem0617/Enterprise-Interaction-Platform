@@ -36,6 +36,25 @@ const FileUploadModal = ({ show, onClose, selectedChat, onFileSent }) => {
       "application/vnd.ms-powerpoint",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "text/plain",
+      "text/csv",
+      "text/markdown",
+      "text/x-python",
+      "text/x-c",
+      "text/x-c++src",
+      "text/x-csrc",
+      "text/x-rustsrc",
+      "text/javascript",
+      "application/javascript",
+      "text/x-java-source",
+      "text/x-go",
+      "text/x-ruby",
+      "text/html",
+      "text/css",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "application/x-yaml",
+      "text/yaml",
     ],
     other: ["application/zip", "application/x-rar-compressed"],
   };
@@ -210,7 +229,7 @@ const FileUploadModal = ({ show, onClose, selectedChat, onFileSent }) => {
                 type="file"
                 onChange={handleFileSelect}
                 className="hidden"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,.md,.py,.js,.jsx,.ts,.tsx,.rs,.cpp,.c,.h,.hpp,.java,.go,.rb,.sh,.html,.css,.scss,.json,.xml,.yaml,.yml,.toml,.sql,.swift,.kt,.php,.lua"
               />
             </div>
           ) : (
