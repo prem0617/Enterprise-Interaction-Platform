@@ -31,8 +31,12 @@ import {
   Download,
   ZoomIn,
   ZoomOut,
-  Palette,
   Pen,
+  Hand,
+  Wifi,
+  WifiOff,
+  MoveRight,
+  Link2,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -41,8 +45,11 @@ import {
 
 const TOOLS = {
   SELECT: "select",
+  HAND: "hand",
   PEN: "pen",
   LINE: "line",
+  ARROW: "arrow",
+  CONNECTOR: "connector",
   RECT: "rect",
   ELLIPSE: "ellipse",
   TEXT: "text",
@@ -54,6 +61,16 @@ const DEFAULT_COLORS = [
   "#ef4444", "#f97316", "#eab308", "#22c55e",
   "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4",
 ];
+
+// Generate a stable color from a user id string
+function userColor(userId) {
+  let hash = 0;
+  for (let i = 0; i < (userId || "x").length; i++) {
+    hash = (userId.charCodeAt(i) * 31 + hash) | 0;
+  }
+  const hue = ((hash >>> 0) % 360);
+  return `hsl(${hue}, 70%, 60%)`;
+}
 
 let nextId = 1;
 function genId() {
@@ -93,7 +110,58 @@ function pointNearEllipse(px, py, el, threshold = 6) {
   return val <= (1 + threshold / Math.max(rx, ry)) ** 2;
 }
 
-function hitTest(px, py, el) {
+// Get anchor point on an element's boundary for connectors
+function getElementAnchor(el, targetX, targetY) {
+  if (!el) return null;
+  if (el.tool === TOOLS.PEN && el.points?.length) {
+    const minX = Math.min(...el.points.map((p) => p[0]));
+    const maxX = Math.max(...el.points.map((p) => p[0]));
+    const minY = Math.min(...el.points.map((p) => p[1]));
+    const maxY = Math.max(...el.points.map((p) => p[1]));
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const w = maxX - minX || 40;
+    const h = maxY - minY || 30;
+    const x = minX;
+    const y = minY;
+    const midX = x + w / 2;
+    const midY = y + h / 2;
+    const dx = targetX - midX;
+    const dy = targetY - midY;
+    const slope = Math.abs(dy / (dx || 0.001));
+    const hSlope = h / (w || 1);
+    if (slope > hSlope) {
+      return { x: midX, y: dy >= 0 ? y + h : y };
+    }
+    return { x: dx >= 0 ? x + w : x, y: midY };
+  }
+  const cx = (el.x || 0) + (el.w || 0) / 2;
+  const cy = (el.y || 0) + (el.h || 30) / 2;
+  if (el.tool === TOOLS.ELLIPSE) {
+    const rx = Math.abs(el.w || 0) / 2;
+    const ry = Math.abs(el.h || 0) / 2;
+    if (rx === 0 || ry === 0) return { x: el.x, y: el.y };
+    const angle = Math.atan2(targetY - cy, targetX - cx);
+    return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
+  }
+  // Rect, text, pen bbox
+  const x = Math.min(el.x, (el.x || 0) + (el.w || 200));
+  const y = Math.min(el.y, (el.y || 0) + (el.h || 30));
+  const w = Math.abs(el.w || 200);
+  const h = Math.abs(el.h || 30);
+  const midX = x + w / 2;
+  const midY = y + h / 2;
+  const dx = targetX - midX;
+  const dy = targetY - midY;
+  const slope = Math.abs(dy / (dx || 0.001));
+  const hSlope = h / (w || 1);
+  if (slope > hSlope) {
+    return { x: midX, y: dy >= 0 ? y + h : y };
+  }
+  return { x: dx >= 0 ? x + w : x, y: midY };
+}
+
+function hitTest(px, py, el, allElements = []) {
   switch (el.tool) {
     case TOOLS.PEN: {
       for (let i = 1; i < el.points.length; i++) {
@@ -103,7 +171,17 @@ function hitTest(px, py, el) {
       return false;
     }
     case TOOLS.LINE:
+    case TOOLS.ARROW:
       return pointNearLine(px, py, el.x, el.y, el.x + el.w, el.y + el.h, el.strokeWidth + 4);
+    case TOOLS.CONNECTOR: {
+      const fromEl = allElements.find((e) => e.id === el.fromId);
+      const toEl = allElements.find((e) => e.id === el.toId);
+      if (!fromEl || !toEl) return false;
+      const from = getElementAnchor(fromEl, toEl.x + (toEl.w || 0) / 2, toEl.y + (toEl.h || 30) / 2);
+      const to = getElementAnchor(toEl, fromEl.x + (fromEl.w || 0) / 2, fromEl.y + (fromEl.h || 30) / 2);
+      if (!from || !to) return false;
+      return pointNearLine(px, py, from.x, from.y, to.x, to.y, (el.strokeWidth || 2) + 4);
+    }
     case TOOLS.RECT:
       return pointInRect(px, py, el);
     case TOOLS.ELLIPSE:
@@ -116,7 +194,7 @@ function hitTest(px, py, el) {
 }
 
 // ─── Render one element to canvas ───────────────────────────────
-function drawElement(ctx, el) {
+function drawElement(ctx, el, allElements = []) {
   ctx.save();
   ctx.strokeStyle = el.color || "#ffffff";
   ctx.fillStyle = el.color || "#ffffff";
@@ -143,11 +221,45 @@ function drawElement(ctx, el) {
       ctx.stroke();
       break;
     }
+    case TOOLS.ARROW:
+    case TOOLS.CONNECTOR: {
+      let ax, ay, bx, by;
+      if (el.tool === TOOLS.CONNECTOR) {
+        const fromEl = allElements.find((e) => e.id === el.fromId);
+        const toEl = allElements.find((e) => e.id === el.toId);
+        if (!fromEl || !toEl) break;
+        const from = getElementAnchor(fromEl, toEl.x + (toEl.w || 0) / 2, toEl.y + (toEl.h || 30) / 2);
+        const to = getElementAnchor(toEl, fromEl.x + (fromEl.w || 0) / 2, fromEl.y + (fromEl.h || 30) / 2);
+        if (!from || !to) break;
+        ax = from.x; ay = from.y;
+        bx = to.x; by = to.y;
+      } else {
+        ax = el.x; ay = el.y;
+        bx = el.x + el.w; by = el.y + el.h;
+      }
+      const angle = Math.atan2(by - ay, bx - ax);
+      const hw = Math.max(8, (el.strokeWidth || 2) * 4);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx - hw * Math.cos(angle - Math.PI / 6), by - hw * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(bx - hw * Math.cos(angle + Math.PI / 6), by - hw * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
     case TOOLS.RECT: {
+      // Stroke only — transparent fill
       ctx.strokeRect(el.x, el.y, el.w, el.h);
-      if (el.fill) {
-        ctx.globalAlpha = 0.1;
-        ctx.fillRect(el.x, el.y, el.w, el.h);
+      // If the shape has a text label, render it centred
+      if (el.label) {
+        ctx.font = `${el.fontSize || 14}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(el.label, el.x + el.w / 2, el.y + el.h / 2);
       }
       break;
     }
@@ -159,21 +271,104 @@ function drawElement(ctx, el) {
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
       ctx.stroke();
-      if (el.fill) {
-        ctx.globalAlpha = 0.1;
-        ctx.fill();
+      // Text label centred inside ellipse
+      if (el.label) {
+        ctx.font = `${el.fontSize || 14}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(el.label, cx, cy);
       }
       break;
     }
     case TOOLS.TEXT: {
-      ctx.font = `${el.fontSize || 16}px Inter, system-ui, sans-serif`;
-      ctx.fillText(el.text || "", el.x, el.y + (el.fontSize || 16));
+      const fs = el.fontSize || 16;
+      ctx.font = `${fs}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      // Multi-line support
+      const lines = (el.text || "").split("\n");
+      lines.forEach((line, i) => {
+        ctx.fillText(line, el.x, el.y + i * (fs + 4));
+      });
       break;
     }
     default:
       break;
   }
   ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ONLINE USERS PANEL — shown on all sides via overlay
+   ═══════════════════════════════════════════════════════════════ */
+
+function OnlineUsersPanel({ liveCollaborators, currentUser }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const allUsers = useMemo(() => {
+    const myId = currentUser ? String(currentUser.id || currentUser._id || "") : "";
+    const me = currentUser
+      ? [{ userId: myId, name: currentUser.name || "You", isMe: true }]
+      : [];
+    // De-duplicate: remove collaborator entries that are actually us
+    const others = liveCollaborators.filter((c) => String(c.userId) !== myId);
+    return [...me, ...others];
+  }, [liveCollaborators, currentUser]);
+
+  return (
+    <div className="absolute top-16 right-3 z-30 flex flex-col items-end gap-2 pointer-events-none select-none">
+      {/* Panel card */}
+      <div className="pointer-events-auto bg-zinc-900/95 backdrop-blur border border-zinc-700/60 rounded-xl shadow-2xl overflow-hidden w-52">
+        {/* Header */}
+        <button
+          className="w-full flex items-center justify-between px-3 py-2 hover:bg-zinc-800/60 transition-colors"
+          onClick={() => setCollapsed((c) => !c)}
+        >
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <span className="text-xs font-semibold text-white">
+              {allUsers.length} {allUsers.length === 1 ? "person" : "people"} online
+            </span>
+          </div>
+          <span className="text-zinc-500 text-[10px] ml-1">{collapsed ? "▼" : "▲"}</span>
+        </button>
+
+        {/* User list */}
+        {!collapsed && (
+          <div className="border-t border-zinc-800 divide-y divide-zinc-800/60 max-h-64 overflow-y-auto">
+            {allUsers.map((u) => (
+              <div key={u.userId} className="flex items-center gap-2.5 px-3 py-2">
+                {/* Avatar */}
+                <div
+                  className="h-7 w-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white shadow"
+                  style={{
+                    backgroundColor: u.isMe ? "#6366f1" : userColor(u.userId),
+                  }}
+                >
+                  {(u.name || "?").charAt(0).toUpperCase()}
+                </div>
+
+                {/* Name */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-white truncate leading-tight">
+                    {u.name}
+                  </p>
+                  {u.isMe ? (
+                    <p className="text-[10px] text-indigo-400 leading-tight">You</p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-400 leading-tight flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-emerald-400 inline-block" />
+                      Live
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -185,7 +380,9 @@ function DrawingCanvas({
   onElementsChange,
   remoteCursors,
   canvasState,
-  onCursorMove, // Add this prop
+  onCursorMove,
+  liveCollaborators,
+  currentUser,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -194,12 +391,12 @@ function DrawingCanvas({
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Viewport / camera
-  const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });
-  const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  // ─── Camera stored ONLY in a ref to avoid render-loop ──────
+  // We also keep a state copy just to display zoom% in the toolbar.
+  const cameraRef = useRef({ x: 0, y: 0, zoom: 1 });
+  const [zoomDisplay, setZoomDisplay] = useState(100);
 
-  // Drawing state refs (avoid re-renders during draw)
+  // Drawing state refs
   const isDrawing = useRef(false);
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
@@ -213,25 +410,56 @@ function DrawingCanvas({
 
   // Selection
   const [selectedId, setSelectedId] = useState(null);
+  const selectedIdRef = useRef(null);
+  selectedIdRef.current = selectedId;
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  // Text input
+  // Text input (null | { x, y } for new, or { x, y, id, initialText } for edit)
   const [textInput, setTextInput] = useState(null);
   const textInputRef = useRef(null);
+  const textCancelledRef = useRef(false);
+
+  // Connector: first click stores element id, second creates connector
+  const [connectorFromId, setConnectorFromId] = useState(null);
+  const connectorFromIdRef = useRef(null);
+  connectorFromIdRef.current = connectorFromId;
 
   // Space-bar panning
   const spaceDown = useRef(false);
 
-  // ─── Screen ↔ World coords ──────────────────────────────────
-  const screenToWorld = useCallback(
-    (sx, sy) => {
-      const c = cameraRef.current;
-      return [(sx - c.x) / c.zoom, (sy - c.y) / c.zoom];
-    },
-    []
-  );
+  // Tool ref so mouse handlers always have current value without stale closure
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
 
-  // ─── Render loop ────────────────────────────────────────────
+  // ─── Computed cursor ────────────────────────────────────────
+  const [cursorStyle, setCursorStyle] = useState("crosshair");
+
+  const updateCursor = useCallback((currentTool, panning) => {
+    if (panning || spaceDown.current) { setCursorStyle("grabbing"); return; }
+    switch (currentTool) {
+      case TOOLS.SELECT: setCursorStyle("default"); break;
+      case TOOLS.HAND: setCursorStyle("grab"); break;
+      case TOOLS.TEXT: setCursorStyle("text"); break;
+      case TOOLS.CONNECTOR: setCursorStyle("crosshair"); break;
+      default: setCursorStyle("crosshair");
+    }
+  }, []);
+
+  useEffect(() => {
+    updateCursor(tool, false);
+  }, [tool, updateCursor]);
+
+  // ─── Screen ↔ World coords ──────────────────────────────────
+  const screenToWorld = useCallback((sx, sy) => {
+    const c = cameraRef.current;
+    return [(sx - c.x) / c.zoom, (sy - c.y) / c.zoom];
+  }, []);
+
+  // ─── Render ─────────────────────────────────────────────────
+  const rafRef = useRef(null);
+  const remoteCursorsRef = useRef(remoteCursors);
+  remoteCursorsRef.current = remoteCursors;
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -267,29 +495,47 @@ function DrawingCanvas({
     }
     ctx.stroke();
 
-    // Draw all elements
+    // Elements
     const els = elementsRef.current;
-    for (let i = 0; i < els.length; i++) {
-      drawElement(ctx, els[i]);
-    }
+    for (let i = 0; i < els.length; i++) drawElement(ctx, els[i], els);
 
-    // Draw element being created
-    if (currentElement.current) {
-      drawElement(ctx, currentElement.current);
-    }
+    // In-progress element
+    if (currentElement.current) drawElement(ctx, currentElement.current, els);
 
     // Selection highlight
-    if (selectedId) {
-      const sel = els.find((e) => e.id === selectedId);
+    const selId = selectedIdRef.current;
+    if (selId) {
+      const sel = els.find((e) => e.id === selId);
       if (sel) {
         ctx.save();
         ctx.strokeStyle = "#6366f1";
         ctx.lineWidth = 2 / c.zoom;
         ctx.setLineDash([6 / c.zoom, 4 / c.zoom]);
-        if (sel.tool === TOOLS.PEN && sel.points) {
+        if (sel.tool === TOOLS.PEN && sel.points?.length) {
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          sel.points.forEach(([px, py]) => { minX = Math.min(minX, px); minY = Math.min(minY, py); maxX = Math.max(maxX, px); maxY = Math.max(maxY, py); });
+          sel.points.forEach(([px, py]) => {
+            minX = Math.min(minX, px); minY = Math.min(minY, py);
+            maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+          });
           ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8);
+        } else if (sel.tool === TOOLS.CONNECTOR) {
+          const fromEl = els.find((e) => e.id === sel.fromId);
+          const toEl = els.find((e) => e.id === sel.toId);
+          if (fromEl && toEl) {
+            const toCx = (toEl.x || 0) + (toEl.w || 0) / 2;
+            const toCy = (toEl.y || 0) + (toEl.h || 30) / 2;
+            const fromCx = (fromEl.x || 0) + (fromEl.w || 0) / 2;
+            const fromCy = (fromEl.y || 0) + (fromEl.h || 30) / 2;
+            const from = getElementAnchor(fromEl, toCx, toCy);
+            const to = getElementAnchor(toEl, fromCx, fromCy);
+            if (from && to) {
+              const minX = Math.min(from.x, to.x) - 4;
+              const minY = Math.min(from.y, to.y) - 4;
+              const w = Math.abs(to.x - from.x) + 8;
+              const h = Math.abs(to.y - from.y) + 8;
+              ctx.strokeRect(minX, minY, w, h);
+            }
+          }
         } else {
           ctx.strokeRect((sel.x || 0) - 4, (sel.y || 0) - 4, (sel.w || 200) + 8, (sel.h || 30) + 8);
         }
@@ -297,32 +543,77 @@ function DrawingCanvas({
       }
     }
 
-    // Remote cursors
-    if (remoteCursors) {
-      Object.entries(remoteCursors).forEach(([uid, cur]) => {
-        if (!cur) return;
+    // Connector "from" highlight (source element when creating connector)
+    const connFromId = connectorFromIdRef.current;
+    if (connFromId) {
+      const connFrom = els.find((e) => e.id === connFromId);
+      if (connFrom) {
         ctx.save();
-        ctx.fillStyle = cur.color || "#6366f1";
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = 2 / c.zoom;
+        ctx.setLineDash([4 / c.zoom, 4 / c.zoom]);
+        if (connFrom.tool === TOOLS.PEN && connFrom.points?.length) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          connFrom.points.forEach(([px, py]) => {
+            minX = Math.min(minX, px); minY = Math.min(minY, py);
+            maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+          });
+          ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8);
+        } else {
+          ctx.strokeRect((connFrom.x || 0) - 4, (connFrom.y || 0) - 4, (connFrom.w || 200) + 8, (connFrom.h || 30) + 8);
+        }
+        ctx.restore();
+      }
+    }
+
+    // Remote cursors (in world space)
+    const cursors = remoteCursorsRef.current;
+    if (cursors) {
+      Object.entries(cursors).forEach(([uid, cur]) => {
+        if (!cur) return;
+        const col = cur.color || userColor(uid);
+        ctx.save();
+        ctx.fillStyle = col;
+        // Arrow pointer shape
         ctx.beginPath();
         ctx.moveTo(cur.x, cur.y);
-        ctx.lineTo(cur.x, cur.y + 18);
-        ctx.lineTo(cur.x + 12, cur.y + 12);
+        ctx.lineTo(cur.x + 0, cur.y + 18 / c.zoom);
+        ctx.lineTo(cur.x + 5 / c.zoom, cur.y + 13 / c.zoom);
+        ctx.lineTo(cur.x + 9 / c.zoom, cur.y + 20 / c.zoom);
+        ctx.lineTo(cur.x + 11 / c.zoom, cur.y + 19 / c.zoom);
+        ctx.lineTo(cur.x + 7 / c.zoom, cur.y + 12 / c.zoom);
+        ctx.lineTo(cur.x + 12 / c.zoom, cur.y + 12 / c.zoom);
         ctx.closePath();
         ctx.fill();
-        ctx.font = `${11 / c.zoom}px Inter, system-ui, sans-serif`;
-        ctx.fillStyle = "rgba(99,102,241,0.9)";
-        const labelW = ctx.measureText(cur.name || "?").width + 8;
-        ctx.fillRect(cur.x + 14, cur.y + 10, labelW, 16 / c.zoom);
+        // Name label
+        const fontSize = 11 / c.zoom;
+        ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+        const name = cur.name || "?";
+        const labelW = ctx.measureText(name).width + 8 / c.zoom;
+        const labelH = 16 / c.zoom;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.roundRect(cur.x + 13 / c.zoom, cur.y + 10 / c.zoom, labelW, labelH, 3 / c.zoom);
+        ctx.fill();
         ctx.fillStyle = "#fff";
-        ctx.fillText(cur.name || "?", cur.x + 18, cur.y + 10 + 12 / c.zoom);
+        ctx.fillText(name, cur.x + 17 / c.zoom, cur.y + 10 / c.zoom + fontSize);
         ctx.restore();
       });
     }
 
     ctx.restore();
-  }, [canvasState, selectedId, remoteCursors]);
+  }, [canvasState]);
 
-  // Resize canvas to container
+  // Request animation frame render loop
+  const scheduleRender = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      render();
+      rafRef.current = null;
+    });
+  }, [render]);
+
+  // Resize
   useEffect(() => {
     const resize = () => {
       const canvas = canvasRef.current;
@@ -331,17 +622,15 @@ function DrawingCanvas({
       const rect = container.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
-      render();
+      scheduleRender();
     };
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, [render]);
+  }, [scheduleRender]);
 
-  // Re-render when elements change
-  useEffect(() => {
-    render();
-  }, [elements, render, remoteCursors, selectedId]);
+  // Re-render on data changes
+  useEffect(() => { scheduleRender(); }, [elements, remoteCursors, selectedId, connectorFromId, scheduleRender]);
 
   // ─── Push undo snapshot ─────────────────────────────────────
   const pushUndo = useCallback(() => {
@@ -374,172 +663,235 @@ function DrawingCanvas({
   // ─── Keyboard shortcuts ────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (textInput) return; // Don't intercept when typing text
-      if (e.code === "Space") { spaceDown.current = true; e.preventDefault(); }
+      if (textInput) return;
+      if (e.code === "Space") { spaceDown.current = true; updateCursor(toolRef.current, false); e.preventDefault(); }
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); handleUndo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); handleRedo(); }
-      if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedId && !textInput) {
-          e.preventDefault();
-          pushUndo();
-          onElementsChange(elementsRef.current.filter((el) => el.id !== selectedId));
-          setSelectedId(null);
-        }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedIdRef.current && !textInput) {
+        e.preventDefault();
+        pushUndo();
+        onElementsChange(elementsRef.current.filter((el) => el.id !== selectedIdRef.current));
+        setSelectedId(null);
       }
-      // Tool shortcuts
       if (e.key === "v" || e.key === "1") setTool(TOOLS.SELECT);
-      if (e.key === "p" || e.key === "2") setTool(TOOLS.PEN);
-      if (e.key === "l" || e.key === "3") setTool(TOOLS.LINE);
-      if (e.key === "r" || e.key === "4") setTool(TOOLS.RECT);
-      if (e.key === "o" || e.key === "5") setTool(TOOLS.ELLIPSE);
-      if (e.key === "t" || e.key === "6") setTool(TOOLS.TEXT);
-      if (e.key === "e" || e.key === "7") setTool(TOOLS.ERASER);
+      if (e.key === "h" || e.key === "2") setTool(TOOLS.HAND);
+      if (e.key === "p" || e.key === "3") setTool(TOOLS.PEN);
+      if (e.key === "l" || e.key === "4") setTool(TOOLS.LINE);
+      if (e.key === "a" || e.key === "5") setTool(TOOLS.ARROW);
+      if (e.key === "c" || e.key === "0") setTool(TOOLS.CONNECTOR);
+      if (e.key === "r" || e.key === "6") setTool(TOOLS.RECT);
+      if (e.key === "o" || e.key === "7") setTool(TOOLS.ELLIPSE);
+      if (e.key === "t" || e.key === "8") setTool(TOOLS.TEXT);
+      if (e.key === "e" || e.key === "9") setTool(TOOLS.ERASER);
     };
     const handleKeyUp = (e) => {
-      if (e.code === "Space") spaceDown.current = false;
+      if (e.code === "Space") { spaceDown.current = false; updateCursor(toolRef.current, isPanning.current); }
     };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
-  }, [handleUndo, handleRedo, selectedId, textInput, pushUndo, onElementsChange]);
+  }, [handleUndo, handleRedo, textInput, pushUndo, onElementsChange, updateCursor]);
 
-  // ─── Mouse handlers ────────────────────────────────────────
+  // ─── Mouse helpers ─────────────────────────────────────────
   const getMousePos = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return [e.clientX - rect.left, e.clientY - rect.top];
   }, []);
 
-  const handleMouseDown = useCallback(
-    (e) => {
-      const [sx, sy] = getMousePos(e);
-      const [wx, wy] = screenToWorld(sx, sy);
+  // ─── Mouse down ────────────────────────────────────────────
+  const handleMouseDown = useCallback((e) => {
+    const [sx, sy] = getMousePos(e);
+    const [wx, wy] = screenToWorld(sx, sy);
+    const activeTool = toolRef.current;
 
-      // Middle-mouse or space+left: pan
-      if (e.button === 1 || (e.button === 0 && spaceDown.current)) {
-        isPanning.current = true;
-        panStart.current = { x: sx - cameraRef.current.x, y: sy - cameraRef.current.y };
+    // Pan: middle-mouse, space+left, or HAND tool
+    if (e.button === 1 || (e.button === 0 && (spaceDown.current || activeTool === TOOLS.HAND))) {
+      isPanning.current = true;
+      panStart.current = { x: sx - cameraRef.current.x, y: sy - cameraRef.current.y };
+      updateCursor(activeTool, true);
+      e.preventDefault();
+      return;
+    }
+
+    if (e.button !== 0) return;
+
+    // CONNECTOR: first click selects source, second click on target creates connector
+    if (activeTool === TOOLS.CONNECTOR) {
+      const els = elementsRef.current;
+      let found = null;
+      for (let i = els.length - 1; i >= 0; i--) {
+        const e = els[i];
+        if (e.tool === TOOLS.CONNECTOR) continue; // don't select connectors as endpoints
+        if (hitTest(wx, wy, e, els)) { found = e; break; }
+      }
+      if (connectorFromIdRef.current) {
+        if (found && found.id !== connectorFromIdRef.current) {
+          pushUndo();
+          const newConnector = {
+            id: genId(),
+            tool: TOOLS.CONNECTOR,
+            fromId: connectorFromIdRef.current,
+            toId: found.id,
+            color,
+            strokeWidth,
+            opacity: 1,
+          };
+          onElementsChange([...els, newConnector]);
+          setConnectorFromId(null);
+        } else {
+          setConnectorFromId(null);
+        }
+      } else if (found) {
+        setConnectorFromId(found.id);
+      }
+      return;
+    }
+
+    if (activeTool === TOOLS.SELECT) {
+      const els = elementsRef.current;
+      let found = null;
+      for (let i = els.length - 1; i >= 0; i--) {
+        if (hitTest(wx, wy, els[i], els)) { found = els[i]; break; }
+      }
+      if (found) {
+        setSelectedId(found.id);
+        dragOffset.current = { x: wx - (found.x || found.points?.[0]?.[0] || 0), y: wy - (found.y || found.points?.[0]?.[1] || 0) };
+        isDrawing.current = true;
+      } else {
+        setSelectedId(null);
+      }
+      return;
+    }
+
+    if (activeTool === TOOLS.TEXT) {
+      setTextInput({ x: wx, y: wy });
+      return;
+    }
+
+    if (activeTool === TOOLS.ERASER) {
+      const els = elementsRef.current;
+      for (let i = els.length - 1; i >= 0; i--) {
+        if (hitTest(wx, wy, els[i], els)) {
+          pushUndo();
+          onElementsChange(els.filter((_, idx) => idx !== i));
+          return;
+        }
+      }
+      return;
+    }
+
+    pushUndo();
+    isDrawing.current = true;
+
+    if (activeTool === TOOLS.PEN) {
+      currentElement.current = { id: genId(), tool: TOOLS.PEN, points: [[wx, wy]], color, strokeWidth, opacity: 1 };
+    } else if (activeTool === TOOLS.LINE) {
+      currentElement.current = { id: genId(), tool: TOOLS.LINE, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, opacity: 1 };
+    } else if (activeTool === TOOLS.ARROW) {
+      currentElement.current = { id: genId(), tool: TOOLS.ARROW, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, opacity: 1 };
+    } else if (activeTool === TOOLS.RECT) {
+      currentElement.current = { id: genId(), tool: TOOLS.RECT, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, opacity: 1 };
+    } else if (activeTool === TOOLS.ELLIPSE) {
+      currentElement.current = { id: genId(), tool: TOOLS.ELLIPSE, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, opacity: 1 };
+    }
+  }, [color, strokeWidth, screenToWorld, getMousePos, pushUndo, onElementsChange, updateCursor]);
+
+  // ─── Mouse move ────────────────────────────────────────────
+  const handleMouseMove = useCallback((e) => {
+    const [sx, sy] = getMousePos(e);
+    const [wx, wy] = screenToWorld(sx, sy);
+    const activeTool = toolRef.current;
+
+    if (onCursorMove) onCursorMove(wx, wy);
+
+    // Panning — update cameraRef directly, no setState → scheduleRender
+    if (isPanning.current) {
+      cameraRef.current = {
+        ...cameraRef.current,
+        x: sx - panStart.current.x,
+        y: sy - panStart.current.y,
+      };
+      scheduleRender();
+      return;
+    }
+
+    if (!isDrawing.current) return;
+
+    // Dragging a selected element (connectors are anchored, skip drag)
+    if (activeTool === TOOLS.SELECT && selectedIdRef.current) {
+      const sel = elementsRef.current.find((e) => e.id === selectedIdRef.current);
+      if (sel?.tool === TOOLS.CONNECTOR) return; // connectors don't move
+      const newX = wx - dragOffset.current.x;
+      const newY = wy - dragOffset.current.y;
+      const updated = elementsRef.current.map((el) => {
+        if (el.id !== selectedIdRef.current) return el;
+        if (el.tool === TOOLS.PEN) {
+          const dx = newX - (el.points[0]?.[0] || 0);
+          const dy = newY - (el.points[0]?.[1] || 0);
+          return { ...el, points: el.points.map(([px, py]) => [px + dx, py + dy]) };
+        }
+        return { ...el, x: newX, y: newY };
+      });
+      onElementsChange(updated);
+      return;
+    }
+
+    const cur = currentElement.current;
+    if (!cur) return;
+
+    if (cur.tool === TOOLS.PEN) {
+      cur.points.push([wx, wy]);
+    } else {
+      cur.w = wx - cur.x;
+      cur.h = wy - cur.y;
+    }
+    scheduleRender();
+  }, [screenToWorld, getMousePos, scheduleRender, onElementsChange, onCursorMove]);
+
+  // ─── Double-click: create or edit text ─────────────────────
+  const handleDoubleClick = useCallback((e) => {
+    const [sx, sy] = getMousePos(e);
+    const [wx, wy] = screenToWorld(sx, sy);
+    const activeTool = toolRef.current;
+    const els = elementsRef.current;
+
+    // Double-click on existing TEXT element → edit it
+    if (activeTool === TOOLS.SELECT || activeTool === TOOLS.TEXT) {
+      let found = null;
+      for (let i = els.length - 1; i >= 0; i--) {
+        if (els[i].tool === TOOLS.TEXT && hitTest(wx, wy, els[i], els)) {
+          found = els[i];
+          break;
+        }
+      }
+      if (found) {
+        setTextInput({
+          x: found.x,
+          y: found.y,
+          id: found.id,
+          initialText: found.text || "",
+        });
         e.preventDefault();
         return;
       }
+    }
 
-      if (e.button !== 0) return;
+    // Double-click on empty space with SELECT or TEXT → create new text
+    if (activeTool === TOOLS.SELECT || activeTool === TOOLS.TEXT) {
+      setTextInput({ x: wx, y: wy });
+      e.preventDefault();
+    }
+  }, [screenToWorld, getMousePos]);
 
-      if (tool === TOOLS.SELECT) {
-        // Check hit on elements in reverse order (top-most first)
-        const els = elementsRef.current;
-        let found = null;
-        for (let i = els.length - 1; i >= 0; i--) {
-          if (hitTest(wx, wy, els[i])) { found = els[i]; break; }
-        }
-        if (found) {
-          setSelectedId(found.id);
-          dragOffset.current = { x: wx - (found.x || found.points?.[0]?.[0] || 0), y: wy - (found.y || found.points?.[0]?.[1] || 0) };
-          isDrawing.current = true;
-        } else {
-          setSelectedId(null);
-        }
-        return;
-      }
-
-      if (tool === TOOLS.TEXT) {
-        setTextInput({ x: wx, y: wy });
-        return;
-      }
-
-      if (tool === TOOLS.ERASER) {
-        const els = elementsRef.current;
-        for (let i = els.length - 1; i >= 0; i--) {
-          if (hitTest(wx, wy, els[i])) {
-            pushUndo();
-            onElementsChange(els.filter((_, idx) => idx !== i));
-            return;
-          }
-        }
-        return;
-      }
-
-      pushUndo();
-      isDrawing.current = true;
-
-      if (tool === TOOLS.PEN) {
-        currentElement.current = {
-          id: genId(), tool: TOOLS.PEN, points: [[wx, wy]], color, strokeWidth, opacity: 1,
-        };
-      } else if (tool === TOOLS.LINE) {
-        currentElement.current = {
-          id: genId(), tool: TOOLS.LINE, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, opacity: 1,
-        };
-      } else if (tool === TOOLS.RECT) {
-        currentElement.current = {
-          id: genId(), tool: TOOLS.RECT, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, fill: true, opacity: 1,
-        };
-      } else if (tool === TOOLS.ELLIPSE) {
-        currentElement.current = {
-          id: genId(), tool: TOOLS.ELLIPSE, x: wx, y: wy, w: 0, h: 0, color, strokeWidth, fill: true, opacity: 1,
-        };
-      }
-    },
-    [tool, color, strokeWidth, screenToWorld, getMousePos, pushUndo, onElementsChange]
-  );
-
-  const handleMouseMove = useCallback(
-    (e) => {
-      const [sx, sy] = getMousePos(e);
-      const [wx, wy] = screenToWorld(sx, sy);
-
-      // Emit cursor to remote users
-      if (onCursorMove) onCursorMove(wx, wy);
-
-      // Panning
-      if (isPanning.current) {
-        setCamera({ ...cameraRef.current, x: sx - panStart.current.x, y: sy - panStart.current.y });
-        return;
-      }
-
-      if (!isDrawing.current) {
-        // Eraser hover: check for hits
-        if (tool === TOOLS.ERASER) {
-          const canvas = canvasRef.current;
-          if (canvas) canvas.style.cursor = "crosshair";
-        }
-        return;
-      }
-
-      // Select tool: drag selected element
-      if (tool === TOOLS.SELECT && selectedId) {
-        const newX = wx - dragOffset.current.x;
-        const newY = wy - dragOffset.current.y;
-        const updated = elementsRef.current.map((el) => {
-          if (el.id !== selectedId) return el;
-          if (el.tool === TOOLS.PEN) {
-            const dx = newX - (el.points[0]?.[0] || 0);
-            const dy = newY - (el.points[0]?.[1] || 0);
-            return { ...el, points: el.points.map(([px, py]) => [px + dx, py + dy]) };
-          }
-          return { ...el, x: newX, y: newY };
-        });
-        onElementsChange(updated);
-        return;
-      }
-
-      const cur = currentElement.current;
-      if (!cur) return;
-
-      if (cur.tool === TOOLS.PEN) {
-        cur.points.push([wx, wy]);
-      } else {
-        cur.w = wx - cur.x;
-        cur.h = wy - cur.y;
-      }
-      render();
-    },
-    [tool, screenToWorld, getMousePos, render, selectedId, onElementsChange]
-  );
-
+  // ─── Mouse up ──────────────────────────────────────────────
   const handleMouseUp = useCallback(() => {
-    isPanning.current = false;
+    if (isPanning.current) {
+      isPanning.current = false;
+      updateCursor(toolRef.current, false);
+      return;
+    }
 
-    if (tool === TOOLS.SELECT && isDrawing.current && selectedId) {
+    if (toolRef.current === TOOLS.SELECT && isDrawing.current && selectedIdRef.current) {
       isDrawing.current = false;
       return;
     }
@@ -550,59 +902,83 @@ function DrawingCanvas({
     if (currentElement.current) {
       const newEl = { ...currentElement.current };
       currentElement.current = null;
-      // Don't add tiny accidental elements
       if (newEl.tool === TOOLS.PEN && newEl.points.length < 2) return;
-      if ((newEl.tool === TOOLS.LINE || newEl.tool === TOOLS.RECT || newEl.tool === TOOLS.ELLIPSE) && Math.abs(newEl.w || 0) < 2 && Math.abs(newEl.h || 0) < 2) return;
+      if ((newEl.tool === TOOLS.LINE || newEl.tool === TOOLS.ARROW || newEl.tool === TOOLS.RECT || newEl.tool === TOOLS.ELLIPSE) && Math.abs(newEl.w || 0) < 2 && Math.abs(newEl.h || 0) < 2) return;
       onElementsChange([...elementsRef.current, newEl]);
     }
-  }, [tool, selectedId, onElementsChange]);
+  }, [onElementsChange, updateCursor]);
 
-  // ─── Mouse wheel: zoom ────────────────────────────────────
-  const handleWheel = useCallback((e) => {
-    e.preventDefault();
-    const c = cameraRef.current;
-    const [sx, sy] = getMousePos(e);
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(5, Math.max(0.1, c.zoom * factor));
-    const wx = (sx - c.x) / c.zoom;
-    const wy = (sy - c.y) / c.zoom;
-    setCamera({
-      zoom: newZoom,
-      x: sx - wx * newZoom,
-      y: sy - wy * newZoom,
-    });
-  }, [getMousePos]);
+  // ─── Wheel zoom — must be non-passive ─────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault(); // Requires non-passive listener
+
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+
+      const c = cameraRef.current;
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newZoom = Math.min(8, Math.max(0.05, c.zoom * factor));
+
+      // Zoom towards the cursor position
+      const wx = (sx - c.x) / c.zoom;
+      const wy = (sy - c.y) / c.zoom;
+
+      cameraRef.current = {
+        zoom: newZoom,
+        x: sx - wx * newZoom,
+        y: sy - wy * newZoom,
+      };
+
+      setZoomDisplay(Math.round(newZoom * 100));
+      scheduleRender();
+    };
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [scheduleRender]);
 
   // ─── Commit text ──────────────────────────────────────────
-  const commitText = useCallback(
-    (text) => {
-      if (text && text.trim()) {
-        pushUndo();
-        const newEl = {
-          id: genId(),
-          tool: TOOLS.TEXT,
-          x: textInput.x,
-          y: textInput.y,
-          w: text.length * 10,
-          h: 24,
-          text: text.trim(),
-          color,
-          fontSize: 16,
-          opacity: 1,
-        };
-        onElementsChange([...elementsRef.current, newEl]);
-      }
-      setTextInput(null);
-    },
-    [textInput, color, pushUndo, onElementsChange]
-  );
+  const commitText = useCallback((text) => {
+    const els = elementsRef.current;
+    if (textInput?.id) {
+      // Edit mode: update existing text element
+      pushUndo();
+      const updated = els.map((el) =>
+        el.id === textInput.id
+          ? { ...el, text: text?.trim() || "", w: Math.max(100, (text?.length || 0) * 10), h: 24 }
+          : el
+      );
+      onElementsChange(updated);
+    } else if (text && text.trim()) {
+      // New text
+      pushUndo();
+      const newEl = {
+        id: genId(),
+        tool: TOOLS.TEXT,
+        x: textInput.x,
+        y: textInput.y,
+        w: Math.max(100, text.length * 10),
+        h: 24,
+        text: text.trim(),
+        color,
+        fontSize: 16,
+        opacity: 1,
+      };
+      onElementsChange([...els, newEl]);
+    }
+    setTextInput(null);
+  }, [textInput, color, pushUndo, onElementsChange]);
 
-  // Focus text input when it appears
   useEffect(() => {
     if (textInput && textInputRef.current) textInputRef.current.focus();
   }, [textInput]);
 
-  // Export as PNG
+  // ─── Export PNG ───────────────────────────────────────────
   const handleExport = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -612,39 +988,52 @@ function DrawingCanvas({
     link.click();
   }, []);
 
-  // ─── Cursor style ─────────────────────────────────────────
-  const cursorStyle = useMemo(() => {
-    if (spaceDown.current) return "grab";
-    switch (tool) {
-      case TOOLS.SELECT: return "default";
-      case TOOLS.PEN: return "crosshair";
-      case TOOLS.LINE: return "crosshair";
-      case TOOLS.RECT: return "crosshair";
-      case TOOLS.ELLIPSE: return "crosshair";
-      case TOOLS.TEXT: return "text";
-      case TOOLS.ERASER: return "crosshair";
-      default: return "default";
-    }
-  }, [tool]);
+  // ─── Zoom controls ───────────────────────────────────────
+  const zoomBy = useCallback((factor) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const c = cameraRef.current;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const newZoom = Math.min(8, Math.max(0.05, c.zoom * factor));
+    const wx = (cx - c.x) / c.zoom;
+    const wy = (cy - c.y) / c.zoom;
+    cameraRef.current = { zoom: newZoom, x: cx - wx * newZoom, y: cy - wy * newZoom };
+    setZoomDisplay(Math.round(newZoom * 100));
+    scheduleRender();
+  }, [scheduleRender]);
+
+  const resetZoom = useCallback(() => {
+    cameraRef.current = { x: 0, y: 0, zoom: 1 };
+    setZoomDisplay(100);
+    scheduleRender();
+  }, [scheduleRender]);
 
   const toolButtons = [
-    { id: TOOLS.SELECT, icon: MousePointer2, label: "Select (V)", shortcut: "V" },
-    { id: TOOLS.PEN, icon: Pen, label: "Pen (P)", shortcut: "P" },
-    { id: TOOLS.LINE, icon: Minus, label: "Line (L)", shortcut: "L" },
-    { id: TOOLS.RECT, icon: Square, label: "Rectangle (R)", shortcut: "R" },
-    { id: TOOLS.ELLIPSE, icon: Circle, label: "Ellipse (O)", shortcut: "O" },
-    { id: TOOLS.TEXT, icon: Type, label: "Text (T)", shortcut: "T" },
-    { id: TOOLS.ERASER, icon: Eraser, label: "Eraser (E)", shortcut: "E" },
+    { id: TOOLS.SELECT, icon: MousePointer2, label: "Select (V)" },
+    { id: TOOLS.HAND, icon: Hand, label: "Pan (H)" },
+    { id: TOOLS.PEN, icon: Pen, label: "Pen (P)" },
+    { id: TOOLS.LINE, icon: Minus, label: "Line (L)" },
+    { id: TOOLS.ARROW, icon: MoveRight, label: "Arrow (A)" },
+    { id: TOOLS.CONNECTOR, icon: Link2, label: "Connector (C)" },
+    { id: TOOLS.RECT, icon: Square, label: "Rectangle (R)" },
+    { id: TOOLS.ELLIPSE, icon: Circle, label: "Ellipse (O)" },
+    { id: TOOLS.TEXT, icon: Type, label: "Text (T)" },
+    { id: TOOLS.ERASER, icon: Eraser, label: "Eraser (E)" },
   ];
 
   return (
-    <div ref={containerRef} className="relative flex-1 min-h-0 bg-[#121218] overflow-hidden">
-      {/* ─── Toolbar ──────────────────────────────────────── */}
+    <div ref={containerRef} className="relative flex-1 min-h-0 bg-[#121218] overflow-hidden select-none">
+
+      {/* ── Online Users Panel ────────────────────────────── */}
+      <OnlineUsersPanel liveCollaborators={liveCollaborators} currentUser={currentUser} />
+
+      {/* ── Toolbar ──────────────────────────────────────── */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-zinc-900/95 backdrop-blur border border-zinc-700/60 rounded-xl px-2 py-1.5 shadow-2xl">
         {toolButtons.map((tb) => (
           <button
             key={tb.id}
-            onClick={() => { setTool(tb.id); setSelectedId(null); }}
+            onClick={() => { setTool(tb.id); setSelectedId(null); setConnectorFromId(null); }}
             title={tb.label}
             className={cn(
               "p-2 rounded-lg transition-all",
@@ -656,9 +1045,10 @@ function DrawingCanvas({
             <tb.icon className="h-4 w-4" />
           </button>
         ))}
+
         <div className="w-px h-6 bg-zinc-700 mx-1" />
 
-        {/* Color */}
+        {/* Color picker */}
         <div className="relative">
           <button
             onClick={() => setShowColorPicker(!showColorPicker)}
@@ -711,22 +1101,28 @@ function DrawingCanvas({
 
         <div className="w-px h-6 bg-zinc-700 mx-1" />
 
-        {/* Undo/Redo */}
-        <button onClick={handleUndo} title="Undo (Ctrl+Z)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-30" disabled={undoStack.length === 0}>
+        {/* Undo / Redo */}
+        <button onClick={handleUndo} disabled={undoStack.length === 0} title="Undo (Ctrl+Z)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-30">
           <Undo2 className="h-4 w-4" />
         </button>
-        <button onClick={handleRedo} title="Redo (Ctrl+Y)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-30" disabled={redoStack.length === 0}>
+        <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-30">
           <Redo2 className="h-4 w-4" />
         </button>
 
         <div className="w-px h-6 bg-zinc-700 mx-1" />
 
-        {/* Zoom controls */}
-        <button onClick={() => setCamera((c) => ({ ...c, zoom: Math.min(5, c.zoom * 1.2) }))} title="Zoom In" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white">
+        {/* Zoom */}
+        <button onClick={() => zoomBy(1.25)} title="Zoom In (+)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white">
           <ZoomIn className="h-4 w-4" />
         </button>
-        <span className="text-[10px] text-zinc-500 w-8 text-center">{Math.round(camera.zoom * 100)}%</span>
-        <button onClick={() => setCamera((c) => ({ ...c, zoom: Math.max(0.1, c.zoom / 1.2) }))} title="Zoom Out" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white">
+        <button
+          onClick={resetZoom}
+          title="Reset Zoom (100%)"
+          className="text-[10px] text-zinc-400 hover:text-white w-10 text-center hover:bg-zinc-800 rounded-lg py-1 transition-colors"
+        >
+          {zoomDisplay}%
+        </button>
+        <button onClick={() => zoomBy(0.8)} title="Zoom Out (-)" className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white">
           <ZoomOut className="h-4 w-4" />
         </button>
 
@@ -736,27 +1132,51 @@ function DrawingCanvas({
         </button>
       </div>
 
-      {/* Text input overlay */}
+      {/* ── Tool hints ───────────────────────────────── */}
+      {tool === TOOLS.HAND && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-zinc-900/90 border border-zinc-700 rounded-full px-3 py-1.5 text-xs text-zinc-400 pointer-events-none flex items-center gap-2">
+          <Hand className="h-3.5 w-3.5 text-indigo-400" />
+          Click and drag to pan · Scroll to zoom · Space+drag also works
+        </div>
+      )}
+      {tool === TOOLS.CONNECTOR && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-zinc-900/90 border border-zinc-700 rounded-full px-3 py-1.5 text-xs text-zinc-400 pointer-events-none flex items-center gap-2">
+          <Link2 className="h-3.5 w-3.5 text-emerald-400" />
+          {connectorFromId ? "Click another shape to connect" : "Click a shape to start connecting"}
+        </div>
+      )}
+
+      {/* ── Text input overlay ───────────────────────────── */}
       {textInput && (
         <input
           ref={textInputRef}
           type="text"
-          className="absolute z-30 bg-transparent border border-indigo-500 text-white outline-none px-1 text-sm"
+          defaultValue={textInput.initialText ?? ""}
+          className="absolute z-30 bg-zinc-900/95 border border-indigo-500 text-white outline-none px-2 py-1 text-sm rounded min-w-[120px]"
           style={{
             left: textInput.x * cameraRef.current.zoom + cameraRef.current.x,
             top: textInput.y * cameraRef.current.zoom + cameraRef.current.y,
             fontSize: 16 * cameraRef.current.zoom,
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commitText(e.target.value);
-            if (e.key === "Escape") setTextInput(null);
+            if (e.key === "Enter") {
+              textCancelledRef.current = false;
+              commitText(e.target.value);
+            }
+            if (e.key === "Escape") {
+              textCancelledRef.current = true;
+              setTextInput(null);
+            }
           }}
-          onBlur={(e) => commitText(e.target.value)}
-          placeholder="Type here..."
+          onBlur={(e) => {
+            if (!textCancelledRef.current) commitText(e.target.value);
+            textCancelledRef.current = false;
+          }}
+          placeholder="Type here…"
         />
       )}
 
-      {/* Canvas */}
+      {/* ── Canvas ───────────────────────────────────────── */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
@@ -765,7 +1185,7 @@ function DrawingCanvas({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
+        onDoubleClick={handleDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       />
     </div>
@@ -779,6 +1199,20 @@ function DrawingCanvas({
 export default function WhiteboardModule({ isVisible = true }) {
   const { user, socket } = useAuthContext();
   const token = localStorage.getItem("token");
+
+  // Resolve a display name from the user object regardless of user type
+  // (admin uses .name/.username, employee uses .name, customer uses .name)
+  const getDisplayName = useCallback((u) => {
+    if (!u) return "User";
+    return (
+      u.name ||
+      u.username ||
+      u.fullName ||
+      u.firstName ||
+      (u.email ? u.email.split("@")[0] : null) ||
+      "User"
+    );
+  }, []);
 
   const [view, setView] = useState("list");
   const [whiteboards, setWhiteboards] = useState([]);
@@ -853,22 +1287,19 @@ export default function WhiteboardModule({ isVisible = true }) {
   };
 
   // ─── Open whiteboard ──────────────────────────────────
-  const openWhiteboard = useCallback(
-    async (wb) => {
-      try {
-        const { data } = await api.get(`/${wb._id}`);
-        setActiveWhiteboard(data);
-        setElements(data.elements || []);
-        setView("editor");
-        if (socket) {
-          socket.emit("whiteboard-join", { whiteboardId: data._id, userName: user?.name || "Unknown" });
-        }
-      } catch (err) {
-        toast.error("Failed to open whiteboard");
-      }
-    },
-    [api, socket, user]
-  );
+  const openWhiteboard = useCallback(async (wb) => {
+    try {
+      const { data } = await api.get(`/${wb._id}`);
+      setActiveWhiteboard(data);
+      setElements(data.elements || []);
+      setView("editor");
+      // NOTE: whiteboard-join is emitted in the socket listeners useEffect
+      // (after listeners are registered) to avoid the race condition where
+      // the backend broadcasts collaborators before we are listening.
+    } catch (err) {
+      toast.error("Failed to open whiteboard");
+    }
+  }, [api]);
 
   // ─── Leave editor ─────────────────────────────────────
   const leaveEditor = useCallback(() => {
@@ -884,85 +1315,91 @@ export default function WhiteboardModule({ isVisible = true }) {
   }, [activeWhiteboard, socket]);
 
   // ─── Save to DB (debounced) ───────────────────────────
-  const saveContent = useCallback(
-    async (els) => {
-      if (!activeWhiteboard) return;
-      try {
-        await api.put(`/${activeWhiteboard._id}/content`, { elements: els });
-      } catch (err) {
-        console.error("Auto-save failed:", err);
-      }
-    },
-    [activeWhiteboard, api]
-  );
+  const saveContent = useCallback(async (els) => {
+    if (!activeWhiteboard) return;
+    try {
+      await api.put(`/${activeWhiteboard._id}/content`, { elements: els });
+    } catch (err) {
+      console.error("Auto-save failed:", err);
+    }
+  }, [activeWhiteboard, api]);
 
-  // ─── Handle element changes (from canvas) ─────────────
-  const handleElementsChange = useCallback(
-    (newElements) => {
-      setElements(newElements);
+  // ─── Handle element changes ───────────────────────────
+  const handleElementsChange = useCallback((newElements) => {
+    setElements(newElements);
 
-      if (isRemoteRef.current) {
-        isRemoteRef.current = false;
-        return;
-      }
+    if (isRemoteRef.current) {
+      isRemoteRef.current = false;
+      return;
+    }
 
-      // Broadcast to other collaborators
-      if (socket && activeWhiteboard) {
-        socket.emit("whiteboard-update", { whiteboardId: activeWhiteboard._id, elements: newElements });
-      }
+    if (socket && activeWhiteboard) {
+      socket.emit("whiteboard-update", { whiteboardId: activeWhiteboard._id, elements: newElements });
+    }
 
-      // Debounced save
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => saveContent(newElements), 2000);
-    },
-    [socket, activeWhiteboard, saveContent]
-  );
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => saveContent(newElements), 2000);
+  }, [socket, activeWhiteboard, saveContent]);
 
   // ─── Socket listeners ─────────────────────────────────
   useEffect(() => {
     if (!socket || !activeWhiteboard) return;
 
+    // Derive myId the same way the socket handshake sends it, so the filter
+    // correctly excludes ourselves from the collaborators list.
+    const myId = String(user?.id || user?._id || "");
+
     const handleRemoteUpdate = ({ whiteboardId, elements: remoteEls, senderId }) => {
       if (whiteboardId !== activeWhiteboard._id) return;
-      if (senderId === user?._id) return;
+      if (String(senderId) === myId) return;
       isRemoteRef.current = true;
       setElements(remoteEls);
     };
 
     const handleCollaborators = ({ whiteboardId, collaborators }) => {
       if (whiteboardId !== activeWhiteboard._id) return;
-      setLiveCollaborators(collaborators.filter((c) => c.userId !== user?._id));
+      // Filter out self using string comparison (MongoDB ObjectId safe)
+      setLiveCollaborators(
+        collaborators.filter((c) => String(c.userId) !== myId)
+      );
     };
 
     const handleCursor = ({ whiteboardId, userId, userName, cursor }) => {
       if (whiteboardId !== activeWhiteboard._id) return;
-      if (userId === user?._id) return;
-      setRemoteCursors((prev) => ({ ...prev, [userId]: { ...cursor, name: userName, color: `hsl(${(userId?.charCodeAt(0) || 0) * 40 % 360}, 70%, 60%)` } }));
+      if (String(userId) === myId) return;
+      setRemoteCursors((prev) => ({
+        ...prev,
+        [userId]: { ...cursor, name: userName, color: userColor(userId) },
+      }));
     };
 
     socket.on("whiteboard-update", handleRemoteUpdate);
     socket.on("whiteboard-collaborators", handleCollaborators);
     socket.on("whiteboard-cursor", handleCursor);
 
+    // Emit join AFTER listeners are registered so we don't miss the
+    // initial collaborators broadcast the backend sends on join.
+    socket.emit("whiteboard-join", {
+      whiteboardId: activeWhiteboard._id,
+      userName: getDisplayName(user),
+    });
+
     return () => {
       socket.off("whiteboard-update", handleRemoteUpdate);
       socket.off("whiteboard-collaborators", handleCollaborators);
       socket.off("whiteboard-cursor", handleCursor);
     };
-  }, [socket, activeWhiteboard, user]);
+  }, [socket, activeWhiteboard, user, getDisplayName]);
 
   // ─── Send cursor position ─────────────────────────────
-  const handleCursorMove = useCallback(
-    (wx, wy) => {
-      if (!socket || !activeWhiteboard) return;
-      socket.emit("whiteboard-cursor", {
-        whiteboardId: activeWhiteboard._id,
-        cursor: { x: wx, y: wy },
-        userName: user?.name || "Unknown",
-      });
-    },
-    [socket, activeWhiteboard, user]
-  );
+  const handleCursorMove = useCallback((wx, wy) => {
+    if (!socket || !activeWhiteboard) return;
+    socket.emit("whiteboard-cursor", {
+      whiteboardId: activeWhiteboard._id,
+      cursor: { x: wx, y: wy },
+      userName: getDisplayName(user),
+    });
+  }, [socket, activeWhiteboard, user, getDisplayName]);
 
   // ─── Helpers ──────────────────────────────────────────
   const handleArchive = async (id, e) => {
@@ -1015,13 +1452,13 @@ export default function WhiteboardModule({ isVisible = true }) {
   };
 
   // ════════════════════════════════════════════════════════
-  // ─── RENDER ────────────────────────────────────────────
+  // ─── RENDER ─────────────────────────────────────────────
   // ════════════════════════════════════════════════════════
 
   return (
     <div className={cn("flex-1 flex flex-col min-h-0", !isVisible && "hidden")}>
       {view === "list" ? (
-        /* ─── LIST VIEW ──────────────────────────────────── */
+        /* ─── LIST VIEW ─────────────────────────────────── */
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Header */}
           <div className="flex-shrink-0 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur px-6 py-4">
@@ -1066,11 +1503,7 @@ export default function WhiteboardModule({ isVisible = true }) {
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleJoinByCode()}
                 />
-                <Button
-                  size="sm"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  onClick={handleJoinByCode}
-                >
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleJoinByCode}>
                   Join
                 </Button>
               </div>
@@ -1199,7 +1632,7 @@ export default function WhiteboardModule({ isVisible = true }) {
           </div>
         </div>
       ) : (
-        /* ─── EDITOR VIEW ──────────────────────────────── */
+        /* ─── EDITOR VIEW ───────────────────────────────── */
         <div className="flex-1 flex flex-col min-h-0">
           {/* Editor Header */}
           <div className="flex-shrink-0 h-12 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur flex items-center justify-between px-4 z-10">
@@ -1218,30 +1651,33 @@ export default function WhiteboardModule({ isVisible = true }) {
                 <span className="font-mono">{activeWhiteboard?.session_code}</span>
               </button>
             </div>
+
+            {/* Live indicator in header */}
             <div className="flex items-center gap-2">
-              {liveCollaborators.length > 0 && (
-                <div className="flex items-center gap-1.5 mr-2">
-                  <Users className="h-3.5 w-3.5 text-emerald-400" />
-                  <div className="flex -space-x-1.5">
-                    {liveCollaborators.slice(0, 5).map((c) => (
-                      <div key={c.userId} className="h-6 w-6 rounded-full bg-indigo-600 border-2 border-zinc-950 flex items-center justify-center text-[10px] font-bold text-white" title={c.name}>
-                        {c.name?.charAt(0)?.toUpperCase() || "?"}
-                      </div>
-                    ))}
-                  </div>
-                  {liveCollaborators.length > 5 && <span className="text-xs text-zinc-400">+{liveCollaborators.length - 5}</span>}
-                  <span className="text-xs text-emerald-400 ml-1">{liveCollaborators.length} online</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5">
+                {liveCollaborators.length > 0 ? (
+                  <Wifi className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5 text-zinc-600" />
+                )}
+                <span className="text-xs text-zinc-400">
+                  {liveCollaborators.length > 0
+                    ? `${liveCollaborators.length + 1} collaborating`
+                    : "Only you"}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Custom Drawing Canvas */}
+          {/* Drawing Canvas with built-in online panel */}
           <DrawingCanvas
             elements={elements}
             onElementsChange={handleElementsChange}
             remoteCursors={remoteCursors}
             canvasState={activeWhiteboard?.canvas_state}
+            onCursorMove={handleCursorMove}
+            liveCollaborators={liveCollaborators}
+            currentUser={user}
           />
         </div>
       )}
