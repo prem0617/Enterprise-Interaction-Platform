@@ -103,16 +103,16 @@ function App() {
         />
 
         <Route
+          path="/documents/share/:token"
+          element={<DocumentEditor />}
+        />
+        <Route
           path="/documents/:id"
           element={
             <SharedProtectedRoute>
               <DocumentEditor />
             </SharedProtectedRoute>
           }
-        />
-        <Route
-          path="/documents/share/:token"
-          element={<DocumentEditor />}
         />
 
         {/* ADMIN PROTECTED */}

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { Message } from "../../models/Message.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
+import Document from "../../models/Document.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -113,6 +114,55 @@ Given a transcript of messages a user has not yet read, provide a concise and cl
     });
   } catch (error) {
     console.error("Chat summary error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const documentQA = async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const { question } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ error: "Question is required" });
+    }
+
+    const doc = await Document.findById(document_id);
+    if (!doc) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+
+    // Strip HTML tags for cleaner context
+    const textContent = (doc.content || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 12000); // Limit context length
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful document assistant. Answer questions about the following document content accurately and concisely. If the answer cannot be found in the document, say so clearly. Use markdown formatting for better readability.`,
+        },
+        {
+          role: "user",
+          content: `Document title: "${doc.title || "Untitled"}"\n\nDocument content:\n${textContent}\n\nQuestion: ${question.trim()}`,
+        },
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+    });
+
+    const answer = completion.choices[0]?.message?.content?.trim();
+    return res.status(200).json({ answer });
+  } catch (error) {
+    console.error("Document QA error:", error);
     res.status(500).json({ error: error.message });
   }
 };

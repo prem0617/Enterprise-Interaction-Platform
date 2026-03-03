@@ -450,6 +450,19 @@ const S = `
   .de-editor table{border-collapse:collapse;width:100%;margin:12px 0}
   .de-editor th,.de-editor td{border:1px solid #e2e8f0;padding:8px 12px;text-align:left}
   .de-editor th{background:#f8fafc;font-weight:600}
+  .de-editor img{max-width:100%;height:auto;border-radius:6px;margin:12px 0;display:block}
+  .de-editor sub{vertical-align:sub;font-size:smaller}
+  .de-editor sup{vertical-align:super;font-size:smaller}
+
+  /* Find bar */
+  .de-find-bar{display:flex;align-items:center;gap:6px;padding:6px 14px;background:#161b27;border-bottom:1px solid rgba(255,255,255,.07)}
+  .de-find-input{background:#0d0e14;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e2e8f0;font-family:'Inter',sans-serif;font-size:12px;padding:5px 10px;outline:none;width:180px}
+  .de-find-input:focus{border-color:#60a5fa}
+  .de-find-input::placeholder{color:#475569}
+  .de-find-btn{display:flex;align-items:center;justify-content:center;background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-family:'Inter',sans-serif;transition:all .15s}
+  .de-find-btn:hover{background:#1e2535;color:#e2e8f0}
+  .de-find-close{display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:none;border:none;color:#475569;cursor:pointer;border-radius:6px}
+  .de-find-close:hover{background:#1e2535;color:#e2e8f0}
 
   /* Footer */
   .de-footer{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#161b27;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 18px;font-size:12px;color:#94a3b8;backdrop-filter:blur(12px);z-index:10;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
@@ -491,6 +504,16 @@ const Ic = {
   warn: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>,
   print: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>,
   table: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /></svg>,
+  image: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>,
+  indent: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" y1="6" x2="11" y2="6" /><line x1="21" y1="12" x2="11" y2="12" /><line x1="21" y1="18" x2="11" y2="18" /><polyline points="4 8 8 12 4 16" /></svg>,
+  outdent: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" y1="6" x2="11" y2="6" /><line x1="21" y1="12" x2="11" y2="12" /><line x1="21" y1="18" x2="11" y2="18" /><polyline points="8 8 4 12 8 16" /></svg>,
+  highlight: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>,
+  superscript: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19l8-8" /><path d="M12 19l-8-8" /><path d="M20 9h-4c0-1.5.44-2 1.5-2.5S20 5.33 20 4c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07" /></svg>,
+  subscript: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 16l8-8" /><path d="M12 16l-8-8" /><path d="M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07" /></svg>,
+  download: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>,
+  find: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>,
+  chatbot: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="9.01" y2="10" /><line x1="15" y1="10" x2="15.01" y2="10" /></svg>,
+  send: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>,
 };
 
 export default function DocumentEditor() {
@@ -528,23 +551,41 @@ export default function DocumentEditor() {
   const [saveStatus, setSaveStatus] = useState("idle");
   const [wordCount, setWordCount] = useState(0);
   const [textColor, setTextColor] = useState("#000000");
+  const [highlightColor, setHighlightColor] = useState("#ffff00");
   const [showShare, setShowShare] = useState(false);
+  const [showFind, setShowFind] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const highlightRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [askAIPopover, setAskAIPopover] = useState({ show: false, x: 0, y: 0, text: "" });
+  const chatEndRef = useRef(null);
 
   const isReadOnly = myAccess === "read";
   const isOwner = myAccess === "owner";
   const tb = isReadOnly;
 
   useEffect(() => {
-    if (id) {
-      axios.get(`${BACKEND_URL}/documents/${id}`, { headers: authHeader() })
-        .then(res => { setDoc(res.data); setMyAccess(res.data.my_access ?? "read"); })
-        .catch(console.error);
-    } else if (token) {
+    // Determine which URL to call based on the route match
+    if (token) {
       axios.get(`${BACKEND_URL}/documents/share/${token}`) // No auth required for public link
         .then(res => { setDoc(res.data); setMyAccess(res.data.my_access ?? "read"); })
         .catch(err => {
           console.error(err);
-          // Optional: handle error/redirect logic here if link is invalid
+          setErrorMsg(err.response?.data?.error || "Invalid or private share link");
+        });
+    } else if (id) {
+      axios.get(`${BACKEND_URL}/documents/${id}`, { headers: authHeader() })
+        .then(res => { setDoc(res.data); setMyAccess(res.data.my_access ?? "read"); })
+        .catch(err => {
+          console.error(err);
+          setErrorMsg(err.response?.data?.error || "Failed to load document");
         });
     }
   }, [id, token]);
@@ -571,15 +612,6 @@ export default function DocumentEditor() {
     });
   }, [registerRemoteUpdateHandler]);
 
-  const handleInput = useCallback(() => {
-    if (isRemoteRef.current || isReadOnly) return;
-    const html = editorRef.current?.innerHTML || "";
-    setWordCount(countWords(html));
-    setSaveStatus("idle");
-    broadcastUpdate(html);
-    broadcastTyping();
-  }, [broadcastUpdate, broadcastTyping, isReadOnly]);
-
   const save = useCallback(async () => {
     if (isReadOnly) return;
     setSaveStatus("saving");
@@ -587,9 +619,22 @@ export default function DocumentEditor() {
       const content = editorRef.current?.innerHTML || "";
       await axios.put(`${BACKEND_URL}/documents/${id}`, { content, title: doc?.title }, { headers: authHeader() });
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (err) { console.error(err); setSaveStatus("idle"); }
   }, [id, doc?.title, isReadOnly]);
+
+  const handleInput = useCallback(() => {
+    if (isRemoteRef.current || isReadOnly) return;
+    const html = editorRef.current?.innerHTML || "";
+    setWordCount(countWords(html));
+    setSaveStatus("Unsaved changes");
+    broadcastUpdate(html);
+    broadcastTyping();
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      save();
+    }, 1500);
+  }, [broadcastUpdate, broadcastTyping, isReadOnly, save]);
 
   useEffect(() => {
     const onKey = e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); } };
@@ -611,6 +656,200 @@ export default function DocumentEditor() {
     handleInput();
   };
   const insertLink = () => { const url = prompt("Enter URL:"); if (url) exec("createLink", url); };
+
+  const insertTable = () => {
+    if (isReadOnly) return;
+    const rows = parseInt(prompt("Number of rows:", "3"), 10);
+    const cols = parseInt(prompt("Number of columns:", "3"), 10);
+    if (!rows || !cols || rows < 1 || cols < 1) return;
+    let html = "<table>";
+    for (let r = 0; r < rows; r++) {
+      html += "<tr>";
+      for (let c = 0; c < cols; c++) {
+        html += r === 0 ? `<th>Header ${c + 1}</th>` : "<td>&nbsp;</td>";
+      }
+      html += "</tr>";
+    }
+    html += "</table><p><br></p>";
+    exec("insertHTML", html);
+  };
+
+  const insertImage = () => {
+    if (isReadOnly) return;
+    imageInputRef.current?.click();
+  };
+
+  const handleImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be less than 5MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      editorRef.current?.focus();
+      document.execCommand("insertHTML", false, `<img src="${reader.result}" alt="${file.name}" style="max-width:100%" /><p><br></p>`);
+      handleInput();
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !editorRef.current) {
+      setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+      return;
+    }
+
+    if (!editorRef.current.contains(selection.anchorNode)) {
+      setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (text.length > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setAskAIPopover({
+        show: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 10,
+        text
+      });
+    } else {
+      setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", handleSelection);
+    return () => document.removeEventListener("selectionchange", handleSelection);
+  }, [handleSelection]);
+
+  const askQuestion = async (directQuestion = null) => {
+    const q = typeof directQuestion === "string" ? directQuestion : chatInput;
+    if (!q.trim() || chatLoading || !id) return;
+    if (typeof directQuestion !== "string") setChatInput("");
+    setShowChat(true);
+    setChatMessages(prev => [...prev, { role: "user", content: q }]);
+    setChatLoading(true);
+    try {
+      const res = await axios.post(
+        `${BACKEND_URL}/ai/documents/${id}/qa`,
+        { question: q },
+        { headers: authHeader() }
+      );
+      setChatMessages(prev => [...prev, { role: "assistant", content: res.data.answer }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Sorry, I couldn't process your question. Please try again." }]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  };
+
+  const handleAskAI = (selText) => {
+    setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+    askQuestion(`Explain this from the document:\n"${selText}"\n`);
+  };
+
+  const downloadDocx = () => {
+    try {
+      const html = editorRef.current?.innerHTML || "";
+      const title = doc?.title || "document";
+      const wrappedHtml = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<!--[if gte mso 9]>
+<xml>
+  <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+  </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  @page { size: A4; margin: 2.54cm; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.6; color: #333; }
+  h1 { font-size: 24pt; font-weight: bold; color: #0f172a; margin: 0 0 14pt; }
+  h2 { font-size: 18pt; font-weight: bold; color: #1e293b; margin: 18pt 0 10pt; }
+  h3 { font-size: 14pt; font-weight: bold; color: #334155; margin: 14pt 0 8pt; }
+  p { margin: 0 0 8pt; }
+  table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+  th { background: #f5f5f5; font-weight: bold; }
+  blockquote { margin: 12pt 0; padding: 8pt 16pt; border-left: 3px solid #3b82f6; color: #555; font-style: italic; }
+  code { font-family: 'Courier New', monospace; font-size: 10pt; background: #f1f5f9; padding: 1px 4px; }
+  img { max-width: 100%; }
+  ul { list-style-type: disc; padding-left: 24pt; }
+  ol { list-style-type: decimal; padding-left: 24pt; }
+  a { color: #2563eb; text-decoration: underline; }
+</style>
+</head>
+<body>
+${html}
+</body>
+</html>`;
+      const blob = new Blob([wrappedHtml], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Failed to generate document. Please try again.");
+    }
+  };
+
+  const handleFindReplace = () => {
+    if (!findText || !editorRef.current) return;
+    const html = editorRef.current.innerHTML;
+    const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "gi");
+    editorRef.current.innerHTML = html.replace(regex, replaceText);
+    handleInput();
+    setFindText("");
+    setReplaceText("");
+  };
+
+  const handleFindHighlight = () => {
+    if (!findText || !editorRef.current) return;
+    // Use browser's find — simple visual highlight approach
+    window.find(findText, false, false, true, false, false, false);
+  };
+
+  if (errorMsg) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", backgroundColor: "#0f172a", fontFamily: "sans-serif" }}>
+      <div style={{ padding: "40px", backgroundColor: "#1e293b", borderRadius: "12px", textAlign: "center", border: "1px solid #334155", boxShadow: "0 10px 25px rgba(0,0,0,0.5)" }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 48, height: 48, color: "#ef4444", margin: "0 auto 16px" }}>
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <h2 style={{ margin: "0 0 8px 0", color: "#f8fafc", fontSize: "20px" }}>Cannot access document</h2>
+        <p style={{ margin: 0, color: "#94a3b8", fontSize: "14px" }}>{errorMsg}</p>
+        <button
+          onClick={() => navigate('/')}
+          style={{ marginTop: "24px", padding: "8px 16px", backgroundColor: "#3b82f6", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "500" }}
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    </div>
+  );
 
   if (!doc) return (
     <div className="de-loading">
@@ -668,18 +907,45 @@ export default function DocumentEditor() {
             </div>
           )}
           {!isReadOnly && (
-            <>
-              <div className="de-save-status">
-                <div className={`de-status-dot ${saveStatus}`} />
-                <span>{statusText}</span>
-              </div>
-              <button className="de-save-btn" onClick={save} disabled={saveStatus === "saving"}>
-                {saveStatus === "saving" ? "Saving…" : "Save"}
-              </button>
-            </>
+            <button
+              className="de-tb-btn"
+              title="Download as DOC"
+              onClick={downloadDocx}
+              style={{ color: "#94a3b8", padding: "6px 10px", borderRadius: 8, marginLeft: "auto" }}
+            >
+              {Ic.download}
+              <span style={{ fontSize: 11, marginLeft: 4, fontWeight: 500 }}>DOC</span>
+            </button>
+          )}
+          {isReadOnly && token && user && (doc?.owner === currentUserId || doc?.collaborators?.some(c => c.userId === currentUserId && (c.role === "editor" || c.role === "owner"))) && (
+            <button
+              className="de-save-btn"
+              style={{ marginLeft: "auto", display: "flex", gap: "6px", alignItems: "center", background: "#3b82f6" }}
+              onClick={() => {
+                navigate(`/documents/${doc._id}`);
+                window.location.reload();
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
+              Edit Document
+            </button>
           )}
           <button className="de-share-btn" onClick={() => setShowShare(true)}>
             {Ic.share} Share
+          </button>
+          <button
+            className="de-tb-btn"
+            title="AI Document Assistant"
+            onClick={() => setShowChat(c => !c)}
+            style={{
+              color: showChat ? "#60a5fa" : "#94a3b8",
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: showChat ? "rgba(96,165,250,.12)" : "none",
+              border: showChat ? "1px solid rgba(96,165,250,.25)" : "1px solid transparent",
+            }}
+          >
+            {Ic.chatbot}
           </button>
         </div>
       </div>
@@ -805,18 +1071,168 @@ export default function DocumentEditor() {
             <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>Tx</span>
           </button>
         </div>
+        {/* Table / Image */}
+        <div className="de-tb-group">
+          <button className="de-tb-btn" title="Insert table" disabled={tb} onClick={insertTable}>{Ic.table}</button>
+          <button className="de-tb-btn" title="Insert image" disabled={tb} onClick={insertImage}>{Ic.image}</button>
+        </div>
+        {/* Indent / Outdent */}
+        <div className="de-tb-group">
+          <button className="de-tb-btn" title="Outdent" disabled={tb} onClick={() => exec("outdent")}>{Ic.outdent}</button>
+          <button className="de-tb-btn" title="Indent" disabled={tb} onClick={() => exec("indent")}>{Ic.indent}</button>
+        </div>
+        {/* Superscript / Subscript */}
+        <div className="de-tb-group">
+          <button className="de-tb-btn" title="Superscript" disabled={tb} onClick={() => exec("superscript")}>{Ic.superscript}</button>
+          <button className="de-tb-btn" title="Subscript" disabled={tb} onClick={() => exec("subscript")}>{Ic.subscript}</button>
+        </div>
+        {/* Highlight */}
+        <div className="de-tb-group">
+          <div className="de-color-wrap" title="Highlight color" style={{ opacity: tb ? .35 : 1, cursor: tb ? "not-allowed" : "pointer", flexDirection: "column", gap: 1 }}
+            onClick={() => !tb && highlightRef.current?.click()}>
+            <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, color: "#cbd5e1", fontFamily: "Inter,sans-serif" }}>H</span>
+            <div className="de-color-swatch" style={{ background: highlightColor }} />
+            <input ref={highlightRef} type="color" style={{ display: "none" }} value={highlightColor}
+              onChange={e => { setHighlightColor(e.target.value); exec("hiliteColor", e.target.value); }} />
+          </div>
+        </div>
+        {/* Find */}
+        <div className="de-tb-group">
+          <button className="de-tb-btn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFind(f => !f)}>{Ic.find}</button>
+        </div>
       </div>
 
-      {/* Page */}
-      <div className="de-page-area">
-        <div className="de-page">
-          <div ref={editorRef} className="de-editor"
-            contentEditable={!isReadOnly}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            spellCheck
+      {/* Find & Replace Bar */}
+      {showFind && (
+        <div className="de-find-bar">
+          <input
+            className="de-find-input"
+            placeholder="Find…"
+            value={findText}
+            onChange={e => setFindText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleFindHighlight(); if (e.key === "Escape") setShowFind(false); }}
+            autoFocus
           />
+          <button className="de-find-btn" onClick={handleFindHighlight}>Find</button>
+          <input
+            className="de-find-input"
+            placeholder="Replace with…"
+            value={replaceText}
+            onChange={e => setReplaceText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleFindReplace(); if (e.key === "Escape") setShowFind(false); }}
+          />
+          <button className="de-find-btn" onClick={handleFindReplace}>Replace All</button>
+          <button className="de-find-close" onClick={() => setShowFind(false)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
+      )}
+
+      {/* Ask AI Popover */}
+      {askAIPopover.show && !isReadOnly && (
+        <button
+          onClick={() => handleAskAI(askAIPopover.text)}
+          className="fixed z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 border border-slate-700/50 rounded-lg shadow-xl shadow-black/20 hover:bg-slate-800 transition-all cursor-pointer"
+          style={{ left: askAIPopover.x, top: askAIPopover.y, transform: "translate(-50%, -100%)" }}
+          onMouseDown={e => e.preventDefault()}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="9.01" y2="10" /><line x1="15" y1="10" x2="15.01" y2="10" /></svg>
+          <span>Ask AI</span>
+        </button>
+      )}
+
+      {/* Page + Chat layout */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+        {/* Page */}
+        <div className="de-page-area" style={{ flex: 1 }}>
+          <div className="de-page">
+            <div ref={editorRef} className="de-editor"
+              contentEditable={!isReadOnly}
+              suppressContentEditableWarning
+              onInput={handleInput}
+              spellCheck
+            />
+          </div>
+        </div>
+
+        {/* Q&A Chatbot Panel - Flattened Integrated Styling */}
+        {showChat && (
+          <div className="w-[340px] bg-[#0f172a] border-l border-[#1e293b] flex flex-col flex-shrink-0 h-full relative z-30">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-400">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="9.01" y2="10" /><line x1="15" y1="10" x2="15.01" y2="10" /></svg>
+                </div>
+                <div className="text-[13px] font-semibold text-slate-200">AI Assistant</div>
+              </div>
+              <button
+                className="text-slate-400 hover:text-slate-100 hover:bg-slate-800 p-1.5 rounded-md transition-colors cursor-pointer"
+                onClick={() => setShowChat(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            {/* Chat Area */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+              {chatMessages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center px-4 text-slate-400 mt-[-20px]">
+                  <div className="w-12 h-12 rounded-full border border-[#334155] bg-[#1e293b] flex items-center justify-center mb-3">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-indigo-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="9.01" y2="10" /><line x1="15" y1="10" x2="15.01" y2="10" /></svg>
+                  </div>
+                  <div className="text-[14px] font-medium text-slate-200 mb-1.5">Ask about this document</div>
+                  <div className="text-[12px] leading-relaxed">Select text in the editor to ask specific questions, or type below.</div>
+                </div>
+              )}
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[90%] px-3.5 py-2.5 text-[13px] leading-relaxed break-words ${msg.role === "user"
+                    ? "bg-indigo-600 text-white rounded-xl rounded-tr-sm"
+                    : "bg-[#1e293b] text-slate-200 rounded-xl rounded-tl-sm border border-[#334155]"
+                    }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex w-full justify-start">
+                  <div className="px-4 py-3 rounded-xl bg-[#1e293b] border border-[#334155] rounded-tl-sm flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" style={{ animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input Area */}
+            <div className="p-3 border-t border-[#1e293b] bg-[#0f172a]">
+              <div className="flex items-end gap-2 bg-[#1e293b] rounded-xl border border-[#334155] p-1.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/30 transition-all">
+                <textarea
+                  className="flex-1 bg-transparent px-2.5 py-1.5 text-slate-200 text-[13px] outline-none placeholder:text-slate-500 resize-none min-h-[36px] max-h-[120px]"
+                  placeholder="Ask a question..."
+                  rows={1}
+                  value={chatInput}
+                  onChange={e => {
+                    setChatInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuestion(); } }}
+                  disabled={chatLoading}
+                />
+                <button
+                  className="flex items-center justify-center w-[32px] h-[32px] shrink-0 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer mb-0.5"
+                  onClick={() => askQuestion()}
+                  disabled={chatLoading || !chatInput.trim()}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 ml-0.5"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                </button>
+              </div>
+              <div className="text-center mt-2 pb-1 text-[10px] text-slate-500">AI can make mistakes. Verify important info.</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -827,10 +1243,21 @@ export default function DocumentEditor() {
         )}
         <div className="de-footer-sep" />
         {isReadOnly
-          ? <span style={{ color: "#e37400" }}>View only</span>
-          : <span style={{ color: "#94a3b8" }}>Ctrl+S to save</span>
+          ? <span style={{ color: "#f59e0b" }}>View only</span>
+          : <span style={{ color: saveStatus === "Unsaved changes" ? "#fbbf24" : saveStatus === "saving" ? "#60a5fa" : "#34d399" }}>
+            {saveStatus === "Unsaved changes" ? "Unsaved changes" : saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "All changes saved" : "Saved"}
+          </span>
         }
       </div>
+
+      {/* Hidden image file input */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={handleImageFileChange}
+      />
 
       {/* Share panel */}
       {showShare && (
