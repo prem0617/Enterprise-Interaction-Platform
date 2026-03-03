@@ -171,6 +171,9 @@ const STATUS_FILTERS = [
 ];
 
 // ======================== Meeting Room Component ========================
+const SpeechRecognitionAPI = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+const HAS_SPEECH_RECOGNITION = !!SpeechRecognitionAPI;
+
 const MeetingRoom = ({
   activeMeeting,
   roomParticipants,
@@ -190,6 +193,8 @@ const MeetingRoom = ({
   onUploadRecordings,
   lobbyRequests = [],
   onAdmitToLobby,
+  liveCaptions = [],
+  onEmitCaption,
 }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState("chat"); // "chat" | "participants"
@@ -197,7 +202,45 @@ const MeetingRoom = ({
   const [pinnedUserId, setPinnedUserId] = useState(null);
   const [lobbyBoxOpen, setLobbyBoxOpen] = useState(false);
   const [uploadingRecordings, setUploadingRecordings] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(false);
   const containerRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Live captions via Web Speech API: transcribe local mic, emit to room
+  useEffect(() => {
+    if (!captionsOn || !onEmitCaption || !HAS_SPEECH_RECOGNITION || meetingCall.isMuted) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+        recognitionRef.current = null;
+      }
+      return;
+    }
+    const Recognition = SpeechRecognitionAPI;
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (e) => {
+      let final = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += transcript;
+        else interim += transcript;
+      }
+      if (final.trim()) onEmitCaption(final.trim());
+    };
+    recognition.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      console.warn("[LIVE_CAPTIONS] Speech recognition error:", e.error);
+    };
+    recognition.start();
+    recognitionRef.current = recognition;
+    return () => {
+      try { recognition.stop(); } catch (_) {}
+      recognitionRef.current = null;
+    };
+  }, [captionsOn, onEmitCaption, meetingCall.isMuted]);
 
   const handleRecordingToggle = async () => {
     if (meetingCall.isRecording) {
@@ -359,6 +402,7 @@ const MeetingRoom = ({
       if (e.key === "v" || e.key === "V") meetingCall.toggleVideo();
       if (e.key === "s" || e.key === "S") meetingCall.toggleScreenShare();
       if (e.key === "h" || e.key === "H") meetingCall.toggleHandRaise();
+      if (e.key === "c" || e.key === "C") HAS_SPEECH_RECOGNITION && setCaptionsOn((c) => !c);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -601,7 +645,7 @@ const MeetingRoom = ({
         {/* ---- Main content area ---- */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Video area */}
-          <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="relative flex-1 flex flex-col min-h-0 min-w-0">
             <div className="flex-1 p-2 min-h-0 flex gap-2">
               {pinnedTile ? (
                 <>
@@ -631,6 +675,20 @@ const MeetingRoom = ({
                 </div>
               )}
             </div>
+
+            {/* Live caption overlay */}
+            {liveCaptions.length > 0 && (
+              <div className="absolute bottom-16 left-2 right-2 max-h-24 overflow-y-auto rounded-lg bg-black/75 px-3 py-2 text-sm text-white backdrop-blur-sm">
+                <div className="space-y-1">
+                  {liveCaptions.slice(-8).map((c, i) => (
+                    <p key={`${c.userId}-${c.timestamp}-${i}`} className="leading-relaxed">
+                      <span className="font-medium text-indigo-300">{c.name}:</span>{" "}
+                      {c.text}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ---- Bottom control bar ---- */}
             <div className="h-16 flex-shrink-0 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-sm flex items-center justify-center px-4">
@@ -703,6 +761,26 @@ const MeetingRoom = ({
                     }`}
                 >
                   <Hand className="w-5 h-5" />
+                </button>
+
+                {/* Live captions */}
+                <button
+                  type="button"
+                  onClick={() => setCaptionsOn((c) => !c)}
+                  title={
+                    captionsOn
+                      ? "Turn off live captions"
+                      : HAS_SPEECH_RECOGNITION
+                        ? "Turn on live captions (uses your mic)"
+                        : "Live captions not supported in this browser"
+                  }
+                  disabled={!HAS_SPEECH_RECOGNITION}
+                  className={`p-3 rounded-full transition-colors ${captionsOn
+                    ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
+                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    }`}
+                >
+                  <Captions className="w-5 h-5" />
                 </button>
 
                 {/* Recording (host only) */}
@@ -1691,6 +1769,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   const [recordingsByMeeting, setRecordingsByMeeting] = useState({});
   const [loadingRecordingsId, setLoadingRecordingsId] = useState(null);
   const [recordingModal, setRecordingModal] = useState(null); // { meetingId, meetingTitle }
+  const [liveCaptions, setLiveCaptions] = useState([]); // { userId, name, text, timestamp }[]
 
   // Tick every 15s so time-dependent UI (e.g. "Start meeting" button) updates without refresh
   const [nowTick, setNowTick] = useState(Date.now());
@@ -1932,6 +2011,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     const handleEnded = (payload) => {
       const currentMeetingId = activeMeetingIdRef.current;
       if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
+      setLiveCaptions([]);
       toast("Meeting ended by host", { icon: "ℹ️" });
       if (localMediaStream) {
         localMediaStream.getTracks().forEach((t) => t.stop());
@@ -1960,8 +2040,17 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
       setLobbyRequests((prev) => prev.filter((r) => r.userId !== payload.userId));
     };
 
+    const handleCaption = (payload) => {
+      if (!activeMeetingIdRef.current || String(payload.meetingId) !== activeMeetingIdRef.current) return;
+      setLiveCaptions((prev) => {
+        const next = [...prev, { userId: payload.userId, name: payload.name, text: payload.text, timestamp: payload.timestamp }];
+        return next.slice(-50); // keep last 50
+      });
+    };
+
     socket.on("meeting-participants", handleParticipants);
     socket.on("meeting-message", handleMessage);
+    socket.on("meeting-caption", handleCaption);
     socket.on("meeting-ended", handleEnded);
     socket.on("meeting-lobby-request", handleLobbyRequest);
     socket.on("meeting-lobby-left", handleLobbyLeft);
@@ -1969,6 +2058,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     return () => {
       socket.off("meeting-participants", handleParticipants);
       socket.off("meeting-message", handleMessage);
+      socket.off("meeting-caption", handleCaption);
       socket.off("meeting-ended", handleEnded);
       socket.off("meeting-lobby-request", handleLobbyRequest);
       socket.off("meeting-lobby-left", handleLobbyLeft);
@@ -2618,6 +2708,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     setRoomParticipants([]);
     setChatMessages([]);
     setChatInput("");
+    setLiveCaptions([]);
   };
 
   // Notify parent about active meeting state changes (includes call controls)
@@ -2789,6 +2880,14 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     }
   };
 
+  const handleEmitCaption = useCallback((text) => {
+    if (!activeMeeting || !socket || !text?.trim()) return;
+    socket.emit("meeting-caption", {
+      meetingId: activeMeeting._id,
+      text: text.trim(),
+    });
+  }, [activeMeeting, socket]);
+
   // ---- In-meeting chat ----
   const handleSendChat = (e) => {
     e.preventDefault();
@@ -2907,6 +3006,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           onUploadRecordings={handleUploadRecordings}
           lobbyRequests={lobbyRequests}
           onAdmitToLobby={handleAdmitToLobby}
+          liveCaptions={liveCaptions}
+          onEmitCaption={handleEmitCaption}
         />
       )}
 

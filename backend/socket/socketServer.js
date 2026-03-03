@@ -1221,6 +1221,23 @@ io.on("connection", async (socket) => {
     });
   });
 
+  socket.on("meeting-caption", (data) => {
+    const { meetingId, text } = data || {};
+    if (!meetingId || !socket.userId || !text || typeof text !== "string") return;
+    const key = String(meetingId);
+    if (!activeMeetings[key]) return;
+    const trimmed = String(text).trim().slice(0, 500);
+    if (!trimmed) return;
+    const name = activeMeetings[key][socket.userId]?.name || "User";
+    io.to(`meeting:${key}`).emit("meeting-caption", {
+      meetingId: key,
+      userId: socket.userId,
+      name,
+      text: trimmed,
+      timestamp: Date.now(),
+    });
+  });
+
   socket.on("meeting-end", (data) => {
     const { meetingId } = data || {};
     if (!meetingId || !socket.userId) return;
