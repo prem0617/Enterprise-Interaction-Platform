@@ -1,4 +1,5 @@
 import Meeting from "../../models/Meeting.js";
+import MeetingRecording from "../../models/MeetingRecording.js";
 import { scheduleRemindersForMeeting, clearRemindersForMeeting } from "../../services/meetingReminderService.js";
 import { broadcastMeetingEvent } from "../../socket/socketServer.js";
 
@@ -151,6 +152,19 @@ export const getMyMeetings = async (req, res) => {
       .populate("host_id", "first_name last_name email")
       .populate("participants", "first_name last_name email")
       .lean();
+
+    // Add recording_count for each meeting (only show View recordings when > 0)
+    if (meetings.length > 0) {
+      const meetingIds = meetings.map((m) => m._id);
+      const counts = await MeetingRecording.aggregate([
+        { $match: { meeting_id: { $in: meetingIds } } },
+        { $group: { _id: "$meeting_id", count: { $sum: 1 } } },
+      ]);
+      const countMap = Object.fromEntries(counts.map((c) => [String(c._id), c.count]));
+      meetings.forEach((m) => {
+        m.recording_count = countMap[String(m._id)] || 0;
+      });
+    }
 
     return res.json({ data: meetings });
   } catch (error) {
@@ -327,6 +341,8 @@ export const updateMeeting = async (req, res) => {
       .populate("host_id", "first_name last_name email")
       .populate("participants", "first_name last_name email")
       .lean();
+    const recCount = await MeetingRecording.countDocuments({ meeting_id: meeting._id });
+    updated.recording_count = recCount;
     broadcastMeetingEvent("updated", updated);
 
     return res.json({ data: updated });

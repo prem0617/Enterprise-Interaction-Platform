@@ -1,6 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Building2, ArrowRight } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { useAuthContext } from "@/context/AuthContextProvider"; // Import the ho
 
 export default function EmployeeLogin() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
   const { setUser } = useAuthContext(); // Get setUser from context
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -40,7 +42,7 @@ export default function EmployeeLogin() {
 
       // Navigate after a small delay to ensure socket connects
       setTimeout(() => {
-        navigate("/");
+        navigate(returnTo && returnTo.startsWith("/") ? returnTo : "/", { replace: true });
       }, 100);
     } catch (error) {
       setError(error.response?.data?.error || "Invalid credentials");

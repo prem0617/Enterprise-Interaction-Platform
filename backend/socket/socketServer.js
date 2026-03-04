@@ -1222,18 +1222,20 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("meeting-caption", (data) => {
-    const { meetingId, text } = data || {};
+    const { meetingId, text, sourceLang } = data || {};
     if (!meetingId || !socket.userId || !text || typeof text !== "string") return;
     const key = String(meetingId);
     if (!activeMeetings[key]) return;
     const trimmed = String(text).trim().slice(0, 500);
     if (!trimmed) return;
     const name = activeMeetings[key][socket.userId]?.name || "User";
+    const lang = ["en", "hi", "de", "nl"].includes(String(sourceLang)) ? sourceLang : "en";
     io.to(`meeting:${key}`).emit("meeting-caption", {
       meetingId: key,
       userId: socket.userId,
       name,
       text: trimmed,
+      sourceLang: lang,
       timestamp: Date.now(),
     });
   });

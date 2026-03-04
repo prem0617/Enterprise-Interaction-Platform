@@ -203,8 +203,68 @@ const MeetingRoom = ({
   const [lobbyBoxOpen, setLobbyBoxOpen] = useState(false);
   const [uploadingRecordings, setUploadingRecordings] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
+  const [captionSpeakLang, setCaptionSpeakLang] = useState("en"); // recognition: en | hi | de | nl; display always English
+  const [captionLangMenuOpen, setCaptionLangMenuOpen] = useState(false);
+  const [tick, setTick] = useState(Date.now()); // for 10s caption expiry
+  const [translatedTexts, setTranslatedTexts] = useState({}); // key -> translated
   const containerRef = useRef(null);
   const recognitionRef = useRef(null);
+  const translationCacheRef = useRef({});
+
+  // Recognition language (what you speak). Captions always display in English for everyone.
+  const RECOGNITION_LANG_MAP = { en: "en-US", hi: "hi-IN", de: "de-DE", nl: "nl-NL" };
+  const CAPTION_SPEAK_LANGS = [
+    { value: "en", label: "English" },
+    { value: "hi", label: "हिन्दी" },
+    { value: "de", label: "Deutsch" },
+    { value: "nl", label: "Nederlands" },
+  ];
+
+  // Tick every second for 10s caption expiry
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Translate caption to English via MyMemory API (free, no key). Improves accuracy by batching phrases.
+  const translateText = useCallback(async (text, fromLang, toLang) => {
+    if (!text?.trim() || fromLang === toLang) return text;
+    const trimmed = text.trim().slice(0, 450); // MyMemory limit
+    const cacheKey = `${fromLang}|${toLang}|${trimmed}`;
+    if (translationCacheRef.current[cacheKey]) return translationCacheRef.current[cacheKey];
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${fromLang}|${toLang}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const translated = data?.responseData?.translatedText?.trim() || trimmed;
+      translationCacheRef.current[cacheKey] = translated;
+      return translated;
+    } catch {
+      return trimmed;
+    }
+  }, []);
+
+  // Captions visible for 10 seconds only
+  const visibleCaptions = useMemo(() => {
+    const now = Date.now();
+    return liveCaptions.filter((c) => now - c.timestamp < 10000);
+  }, [liveCaptions, tick]);
+
+  // Always translate non-English captions to English for display
+  const DISPLAY_LANG = "en";
+  const requestedTranslationsRef = useRef(new Set());
+  useEffect(() => {
+    visibleCaptions.forEach((c) => {
+      const from = c.sourceLang || "en";
+      if (from === DISPLAY_LANG) return;
+      const key = `${c.userId}-${c.timestamp}`;
+      if (requestedTranslationsRef.current.has(key)) return;
+      requestedTranslationsRef.current.add(key);
+      translateText(c.text, from, DISPLAY_LANG).then((tr) => {
+        setTranslatedTexts((prev) => ({ ...prev, [key]: tr }));
+      });
+    });
+  }, [visibleCaptions, translateText]);
 
   // Live captions via Web Speech API: transcribe local mic, emit to room
   useEffect(() => {
@@ -219,7 +279,7 @@ const MeetingRoom = ({
     const recognition = new Recognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = RECOGNITION_LANG_MAP[captionSpeakLang] || "en-US";
     recognition.onresult = (e) => {
       let final = "";
       let interim = "";
@@ -228,7 +288,7 @@ const MeetingRoom = ({
         if (e.results[i].isFinal) final += transcript;
         else interim += transcript;
       }
-      if (final.trim()) onEmitCaption(final.trim());
+      if (final.trim()) onEmitCaption(final.trim(), captionSpeakLang);
     };
     recognition.onerror = (e) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
@@ -240,7 +300,7 @@ const MeetingRoom = ({
       try { recognition.stop(); } catch (_) {}
       recognitionRef.current = null;
     };
-  }, [captionsOn, onEmitCaption, meetingCall.isMuted]);
+  }, [captionsOn, onEmitCaption, meetingCall.isMuted, captionSpeakLang]);
 
   const handleRecordingToggle = async () => {
     if (meetingCall.isRecording) {
@@ -676,16 +736,22 @@ const MeetingRoom = ({
               )}
             </div>
 
-            {/* Live caption overlay */}
-            {liveCaptions.length > 0 && (
-              <div className="absolute bottom-16 left-2 right-2 max-h-24 overflow-y-auto rounded-lg bg-black/75 px-3 py-2 text-sm text-white backdrop-blur-sm">
+            {/* Live caption overlay (10s expiry, translated to display lang) */}
+            {visibleCaptions.length > 0 && (
+              <div className="absolute bottom-16 left-2 right-2 max-h-28 overflow-y-auto rounded-lg bg-black/75 px-3 py-2 text-sm text-white backdrop-blur-sm">
                 <div className="space-y-1">
-                  {liveCaptions.slice(-8).map((c, i) => (
-                    <p key={`${c.userId}-${c.timestamp}-${i}`} className="leading-relaxed">
-                      <span className="font-medium text-indigo-300">{c.name}:</span>{" "}
-                      {c.text}
-                    </p>
-                  ))}
+                  {visibleCaptions.slice(-8).map((c, i) => {
+                    const key = `${c.userId}-${c.timestamp}`;
+                    const displayText = (c.sourceLang || "en") === "en"
+                      ? c.text
+                      : (translatedTexts[key] ?? c.text);
+                    return (
+                      <p key={`${key}-${i}`} className="leading-relaxed">
+                        <span className="font-medium text-indigo-300">{c.name}:</span>{" "}
+                        {displayText}
+                      </p>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -763,25 +829,64 @@ const MeetingRoom = ({
                   <Hand className="w-5 h-5" />
                 </button>
 
-                {/* Live captions */}
-                <button
-                  type="button"
-                  onClick={() => setCaptionsOn((c) => !c)}
-                  title={
-                    captionsOn
-                      ? "Turn off live captions"
-                      : HAS_SPEECH_RECOGNITION
-                        ? "Turn on live captions (uses your mic)"
-                        : "Live captions not supported in this browser"
-                  }
-                  disabled={!HAS_SPEECH_RECOGNITION}
-                  className={`p-3 rounded-full transition-colors ${captionsOn
-                    ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
-                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    }`}
-                >
-                  <Captions className="w-5 h-5" />
-                </button>
+                {/* Live captions + language */}
+                <div className="relative flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setCaptionsOn((c) => !c)}
+                    title={
+                      captionsOn
+                        ? "Turn off live captions"
+                        : HAS_SPEECH_RECOGNITION
+                          ? "Turn on live captions (uses your mic)"
+                          : "Live captions not supported in this browser"
+                    }
+                    disabled={!HAS_SPEECH_RECOGNITION}
+                    className={`p-3 rounded-full transition-colors ${captionsOn
+                      ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      }`}
+                  >
+                    <Captions className="w-5 h-5" />
+                  </button>
+                  {captionsOn && HAS_SPEECH_RECOGNITION && (
+                    <div className="relative ml-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setCaptionLangMenuOpen((o) => !o)}
+                        className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"
+                        title="Caption language (English, Hindi, German)"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      {captionLangMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setCaptionLangMenuOpen(false)}
+                            aria-hidden="true"
+                          />
+                          <div className="absolute left-0 bottom-full mb-1 z-20 py-1 rounded-lg bg-zinc-800 border border-zinc-600 shadow-xl min-w-[120px]">
+                            <p className="px-3 py-1 text-[10px] uppercase text-zinc-500">I speak</p>
+                            {CAPTION_SPEAK_LANGS.map((l) => (
+                              <button
+                                key={l.value}
+                                type="button"
+                                onClick={() => {
+                                  setCaptionSpeakLang(l.value);
+                                  setCaptionLangMenuOpen(false);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left text-xs ${captionSpeakLang === l.value ? "text-indigo-300 bg-indigo-500/20" : "text-zinc-300 hover:bg-zinc-700"}`}
+                              >
+                                {l.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Recording (host only) */}
                 {activeMeeting.isHost && (
@@ -2043,8 +2148,14 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     const handleCaption = (payload) => {
       if (!activeMeetingIdRef.current || String(payload.meetingId) !== activeMeetingIdRef.current) return;
       setLiveCaptions((prev) => {
-        const next = [...prev, { userId: payload.userId, name: payload.name, text: payload.text, timestamp: payload.timestamp }];
-        return next.slice(-50); // keep last 50
+        const next = [...prev, {
+          userId: payload.userId,
+          name: payload.name,
+          text: payload.text,
+          sourceLang: payload.sourceLang || "en",
+          timestamp: payload.timestamp,
+        }];
+        return next.slice(-100); // keep last 100 for 10s window
       });
     };
 
@@ -2114,17 +2225,19 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
       return;
     }
     if (hasAutoJoinedRef.current) return;
+    // Wait for socket before attempting; don't clear URL so we retry when socket connects
+    if (!socket || !socket.connected) {
+      if (socket && !socket.connected) {
+        toast.info("Connecting to meeting server...", { duration: 3000 });
+      }
+      hasAutoJoinedRef.current = false;
+      return;
+    }
     hasAutoJoinedRef.current = true;
     const code = String(joinCode).trim().toUpperCase();
     setJoinCodeInput(code);
 
     (async () => {
-      if (!socket) {
-        toast.error("Connecting... Please wait");
-        hasAutoJoinedRef.current = false;
-        setSearchParams({}, { replace: true });
-        return;
-      }
       setJoiningByCode(true);
       try {
         const { data } = await axios.get(
@@ -2134,10 +2247,12 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
         const meeting = data.data;
         if (meeting.status === "cancelled") {
           toast.error("This meeting has been cancelled");
+          setSearchParams({}, { replace: true });
           return;
         }
         if (meeting.status === "ended") {
           toast.error("This meeting has already ended");
+          setSearchParams({}, { replace: true });
           return;
         }
         // If meeting isn't active yet and the current user is not the host, block join
@@ -2151,6 +2266,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
             if (exists) return prev.map((m) => (m._id === meeting._id ? meeting : m));
             return [...prev, meeting];
           });
+          setSearchParams({}, { replace: true });
           return;
         }
         setJoinCodeInput("");
@@ -2179,7 +2295,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
         setSearchParams({}, { replace: true });
       }
     })();
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, socket]);
 
   // ---- Form helpers ----
   const openCreateForm = () => {
@@ -2880,11 +2997,12 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     }
   };
 
-  const handleEmitCaption = useCallback((text) => {
+  const handleEmitCaption = useCallback((text, sourceLang = "en") => {
     if (!activeMeeting || !socket || !text?.trim()) return;
     socket.emit("meeting-caption", {
       meetingId: activeMeeting._id,
       text: text.trim(),
+      sourceLang: ["en", "hi", "de", "nl"].includes(sourceLang) ? sourceLang : "en",
     });
   }, [activeMeeting, socket]);
 
@@ -3428,7 +3546,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
                           </p>
                         )}
 
-                        {isEnded && isParticipant(m) && (
+                        {isEnded && isParticipant(m) && (m.recording_count ?? 0) > 0 && (
                           <div className="mt-2">
                             <button
                               type="button"
