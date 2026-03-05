@@ -541,7 +541,7 @@ export default function DocumentEditor() {
 
   const docIdForSocket = id || (doc ? doc._id : null);
 
-  const { collaborators, typingUsers, registerRemoteUpdateHandler, broadcastUpdate, broadcastTyping } =
+  const { collaborators, typingUsers, registerRemoteUpdateHandler, registerRemoteTitleUpdateHandler, broadcastUpdate, broadcastTitleUpdate, broadcastTyping } =
     useDocumentCollaboration(socket, docIdForSocket, currentUserId, userName);
 
   const editorRef = useRef(null);
@@ -612,12 +612,19 @@ export default function DocumentEditor() {
     });
   }, [registerRemoteUpdateHandler]);
 
-  const save = useCallback(async () => {
+  useEffect(() => {
+    registerRemoteTitleUpdateHandler(({ title }) => {
+      setDoc(d => d ? { ...d, title } : d);
+    });
+  }, [registerRemoteTitleUpdateHandler]);
+
+  const save = useCallback(async (overrideTitle) => {
     if (isReadOnly) return;
     setSaveStatus("saving");
     try {
       const content = editorRef.current?.innerHTML || "";
-      await axios.put(`${BACKEND_URL}/documents/${id}`, { content, title: doc?.title }, { headers: authHeader() });
+      const finalTitle = typeof overrideTitle === "string" ? overrideTitle : doc?.title;
+      await axios.put(`${BACKEND_URL}/documents/${id}`, { content, title: finalTitle }, { headers: authHeader() });
       setSaveStatus("saved");
     } catch (err) { console.error(err); setSaveStatus("idle"); }
   }, [id, doc?.title, isReadOnly]);
@@ -887,7 +894,14 @@ ${html}
         </div>
         <div className="de-title-wrap">
           <input className="de-title-input" value={doc.title || ""} disabled={isReadOnly}
-            onChange={e => setDoc({ ...doc, title: e.target.value })} placeholder="Untitled document" />
+            onChange={e => {
+              const newTitle = e.target.value;
+              setDoc({ ...doc, title: newTitle });
+              broadcastTitleUpdate(newTitle);
+              setSaveStatus("Unsaved changes");
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+              saveTimerRef.current = setTimeout(() => save(newTitle), 1500);
+            }} placeholder="Untitled document" />
         </div>
         <div className="de-menubar-right">
           {collaborators.length > 0 && (

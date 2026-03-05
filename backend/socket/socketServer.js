@@ -794,8 +794,7 @@ function forwardToUser(eventName, toUserId, payload) {
   const normalizedTo = toUserId?.toString?.() ?? toUserId;
   const socketId = users[normalizedTo];
   console.log(
-    `[SIGNALLING] forward "${eventName}" to userId=${normalizedTo} -> socketId=${
-      socketId || "NOT FOUND"
+    `[SIGNALLING] forward "${eventName}" to userId=${normalizedTo} -> socketId=${socketId || "NOT FOUND"
     } | users map:`,
     Object.keys(users)
   );
@@ -1497,6 +1496,21 @@ io.on("connection", async (socket) => {
   });
 
   /**
+   * Broadcast title changes to all OTHER users in the room.
+   */
+  socket.on("doc-title-update", ({ docId, title } = {}) => {
+    if (!docId || !socket.userId || title === undefined) return;
+    if (activeDocuments[docId]) {
+      activeDocuments[docId]._latestTitle = title;
+    }
+    socket.to(`doc:${docId}`).emit("doc-title-update", {
+      docId,
+      title,
+      senderId: socket.userId,
+    });
+  });
+
+  /**
    * Broadcast cursor / selection position to other users in the room.
    * Payload: { docId, cursor: { x, y } }
    */
@@ -1537,8 +1551,9 @@ io.on("connection", async (socket) => {
     if (!docId || !socket.userId) return;
     const latest = activeDocuments[docId]?._latestContent;
     const version = activeDocuments[docId]?._version;
-    if (latest !== undefined) {
-      socket.emit("doc-full-state", { docId, content: latest, version });
+    const title = activeDocuments[docId]?._latestTitle;
+    if (latest !== undefined || title !== undefined) {
+      socket.emit("doc-full-state", { docId, content: latest, version, title });
     }
   });
 

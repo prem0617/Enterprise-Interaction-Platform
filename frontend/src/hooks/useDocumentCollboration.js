@@ -30,11 +30,13 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   // into the contentEditable DOM without going through React state (avoids
   // cursor-jump on every remote keystroke)
   const onRemoteUpdateRef = useRef(null);
+  const onRemoteTitleUpdateRef = useRef(null);
 
   // Debounce timers
   const broadcastTimerRef = useRef(null);
-  const typingTimerRef    = useRef(null);
-  const cursorTimerRef    = useRef(null);
+  const broadcastTitleTimerRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const cursorTimerRef = useRef(null);
 
   // ── 1. Join / Leave doc room ──────────────────────────────────────────────
   useEffect(() => {
@@ -69,9 +71,16 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
     };
 
     // Server sends full content snapshot to late joiners only
-    const handleFullState = ({ content, version }) => {
+    const handleFullState = ({ content, version, title }) => {
       console.log(`[DOC_COLLAB] doc-full-state received`);
-      onRemoteUpdateRef.current?.({ content, version });
+      if (content !== undefined) onRemoteUpdateRef.current?.({ content, version });
+      if (title !== undefined) onRemoteTitleUpdateRef.current?.({ title });
+    };
+
+    const handleDocTitleUpdate = ({ title, senderId }) => {
+      if (String(senderId) === String(currentUserId)) return;
+      console.log(`[DOC_COLLAB] doc-title-update from ${senderId}`);
+      onRemoteTitleUpdateRef.current?.({ title });
     };
 
     // Server broadcasts updated collaborator list whenever someone joins/leaves
@@ -111,18 +120,20 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
       }));
     };
 
-    socket.on("doc-update",        handleDocUpdate);
-    socket.on("doc-full-state",    handleFullState);
+    socket.on("doc-update", handleDocUpdate);
+    socket.on("doc-full-state", handleFullState);
     socket.on("doc-collaborators", handleCollaborators);
-    socket.on("doc-typing",        handleTyping);
-    socket.on("doc-cursor",        handleCursor);
+    socket.on("doc-typing", handleTyping);
+    socket.on("doc-cursor", handleCursor);
+    socket.on("doc-title-update", handleDocTitleUpdate);
 
     return () => {
-      socket.off("doc-update",        handleDocUpdate);
-      socket.off("doc-full-state",    handleFullState);
+      socket.off("doc-update", handleDocUpdate);
+      socket.off("doc-full-state", handleFullState);
       socket.off("doc-collaborators", handleCollaborators);
-      socket.off("doc-typing",        handleTyping);
-      socket.off("doc-cursor",        handleCursor);
+      socket.off("doc-typing", handleTyping);
+      socket.off("doc-cursor", handleCursor);
+      socket.off("doc-title-update", handleDocTitleUpdate);
     };
   }, [socket, docId, currentUserId]);
 
@@ -156,6 +167,10 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
     onRemoteUpdateRef.current = cb;
   }, []);
 
+  const registerRemoteTitleUpdateHandler = useCallback((cb) => {
+    onRemoteTitleUpdateRef.current = cb;
+  }, []);
+
   /**
    * Broadcast a local content change to all other users in the room.
    * Debounced to 150 ms.
@@ -167,6 +182,21 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
       broadcastTimerRef.current = setTimeout(() => {
         console.log(`[DOC_COLLAB] emitting doc-update`);
         socket.emit("doc-update", { docId, content, version: Date.now() });
+      }, 150);
+    },
+    [socket, docId]
+  );
+
+  /**
+   * Broadcast a local title change to all other users in the room.
+   */
+  const broadcastTitleUpdate = useCallback(
+    (title) => {
+      if (!socket?.connected || !docId) return;
+      clearTimeout(broadcastTitleTimerRef.current);
+      broadcastTitleTimerRef.current = setTimeout(() => {
+        console.log(`[DOC_COLLAB] emitting doc-title-update`);
+        socket.emit("doc-title-update", { docId, title });
       }, 150);
     },
     [socket, docId]
@@ -203,7 +233,9 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
     typingUsers,                 // [{ userId, name, color }] — currently typing
     remoteCursors,               // { [userId]: { name, color, cursor } } — cursor positions
     registerRemoteUpdateHandler, // call once on editor mount
+    registerRemoteTitleUpdateHandler,
     broadcastUpdate,             // call on every input event
+    broadcastTitleUpdate,
     broadcastTyping,             // call on every keydown/input event
     broadcastCursor,             // call on selectionchange for cursor tracking
   };
