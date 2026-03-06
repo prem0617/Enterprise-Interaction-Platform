@@ -203,7 +203,8 @@ const MeetingRoom = ({
   const [lobbyBoxOpen, setLobbyBoxOpen] = useState(false);
   const [uploadingRecordings, setUploadingRecordings] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
-  const [captionSpeakLang, setCaptionSpeakLang] = useState("en"); // recognition: en | hi | de | nl; display always English
+  const [captionSpeakLang, setCaptionSpeakLang] = useState("en"); // what I speak
+  const [captionDisplayLang, setCaptionDisplayLang] = useState("en"); // what I read
   const [captionLangMenuOpen, setCaptionLangMenuOpen] = useState(false);
   const [tick, setTick] = useState(Date.now()); // for 10s caption expiry
   const [translatedTexts, setTranslatedTexts] = useState({}); // key -> translated
@@ -250,21 +251,21 @@ const MeetingRoom = ({
     return liveCaptions.filter((c) => now - c.timestamp < 10000);
   }, [liveCaptions, tick]);
 
-  // Always translate non-English captions to English for display
-  const DISPLAY_LANG = "en";
+  // Translate captions to preferred display language
   const requestedTranslationsRef = useRef(new Set());
   useEffect(() => {
     visibleCaptions.forEach((c) => {
       const from = c.sourceLang || "en";
-      if (from === DISPLAY_LANG) return;
-      const key = `${c.userId}-${c.timestamp}`;
+      const to = captionDisplayLang;
+      if (from === to) return;
+      const key = `${c.userId}-${c.timestamp}-${to}`;
       if (requestedTranslationsRef.current.has(key)) return;
       requestedTranslationsRef.current.add(key);
-      translateText(c.text, from, DISPLAY_LANG).then((tr) => {
+      translateText(c.text, from, to).then((tr) => {
         setTranslatedTexts((prev) => ({ ...prev, [key]: tr }));
       });
     });
-  }, [visibleCaptions, translateText]);
+  }, [visibleCaptions, translateText, captionDisplayLang]);
 
   // Live captions via Web Speech API: transcribe local mic, emit to room
   useEffect(() => {
@@ -736,13 +737,14 @@ const MeetingRoom = ({
               )}
             </div>
 
-            {/* Live caption overlay (10s expiry, translated to display lang) */}
-            {visibleCaptions.length > 0 && (
-              <div className="absolute bottom-16 left-2 right-2 max-h-28 overflow-y-auto rounded-lg bg-black/75 px-3 py-2 text-sm text-white backdrop-blur-sm">
-                <div className="space-y-1">
+            {/* Live caption overlay (translated to preferred display language) */}
+            {captionsOn && visibleCaptions.length > 0 && (
+              <div className="absolute bottom-16 left-2 right-2 max-h-28 overflow-y-auto rounded-lg bg-black/75 px-3 py-2 text-sm text-white backdrop-blur-sm shadow-lg pointer-events-none">
+                <div className="space-y-1 pointer-events-auto">
                   {visibleCaptions.slice(-8).map((c, i) => {
-                    const key = `${c.userId}-${c.timestamp}`;
-                    const displayText = (c.sourceLang || "en") === "en"
+                    const to = captionDisplayLang;
+                    const key = `${c.userId}-${c.timestamp}-${to}`;
+                    const displayText = (c.sourceLang || "en") === to
                       ? c.text
                       : (translatedTexts[key] ?? c.text);
                     return (
@@ -834,28 +836,21 @@ const MeetingRoom = ({
                   <button
                     type="button"
                     onClick={() => setCaptionsOn((c) => !c)}
-                    title={
-                      captionsOn
-                        ? "Turn off live captions"
-                        : HAS_SPEECH_RECOGNITION
-                          ? "Turn on live captions (uses your mic)"
-                          : "Live captions not supported in this browser"
-                    }
-                    disabled={!HAS_SPEECH_RECOGNITION}
+                    title={captionsOn ? "Turn off live captions" : "Turn on live captions"}
                     className={`p-3 rounded-full transition-colors ${captionsOn
                       ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
-                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                       }`}
                   >
                     <Captions className="w-5 h-5" />
                   </button>
-                  {captionsOn && HAS_SPEECH_RECOGNITION && (
+                  {captionsOn && (
                     <div className="relative ml-0.5">
                       <button
                         type="button"
                         onClick={() => setCaptionLangMenuOpen((o) => !o)}
                         className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"
-                        title="Caption language (English, Hindi, German)"
+                        title="Caption Settings"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -866,21 +861,48 @@ const MeetingRoom = ({
                             onClick={() => setCaptionLangMenuOpen(false)}
                             aria-hidden="true"
                           />
-                          <div className="absolute left-0 bottom-full mb-1 z-20 py-1 rounded-lg bg-zinc-800 border border-zinc-600 shadow-xl min-w-[120px]">
-                            <p className="px-3 py-1 text-[10px] uppercase text-zinc-500">I speak</p>
-                            {CAPTION_SPEAK_LANGS.map((l) => (
-                              <button
-                                key={l.value}
-                                type="button"
-                                onClick={() => {
-                                  setCaptionSpeakLang(l.value);
-                                  setCaptionLangMenuOpen(false);
-                                }}
-                                className={`w-full px-3 py-1.5 text-left text-xs ${captionSpeakLang === l.value ? "text-indigo-300 bg-indigo-500/20" : "text-zinc-300 hover:bg-zinc-700"}`}
-                              >
-                                {l.label}
-                              </button>
-                            ))}
+                          <div className="absolute left-0 bottom-full mb-1 z-20 py-2 rounded-lg bg-zinc-800 border border-zinc-600 shadow-xl flex gap-2">
+                            <div className="min-w-[140px]">
+                              <p className="px-3 py-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Translate To</p>
+                              <div className="flex flex-col gap-0.5 mt-1 px-1">
+                                {CAPTION_SPEAK_LANGS.map((l) => (
+                                  <button
+                                    key={`disp-${l.value}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setCaptionDisplayLang(l.value);
+                                    }}
+                                    className={`w-full px-2 py-1.5 text-left text-xs rounded transition-colors ${captionDisplayLang === l.value ? "text-indigo-300 bg-indigo-500/20 font-medium" : "text-zinc-300 hover:bg-zinc-700/50"}`}
+                                  >
+                                    {l.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {HAS_SPEECH_RECOGNITION && (
+                              <>
+                                <div className="w-px bg-zinc-700/50 my-1" />
+                                <div className="min-w-[140px]">
+                                  <p className="px-3 py-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Mic className="w-3 h-3" /> I speak
+                                  </p>
+                                  <div className="flex flex-col gap-0.5 mt-1 px-1">
+                                    {CAPTION_SPEAK_LANGS.map((l) => (
+                                      <button
+                                        key={`speak-${l.value}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setCaptionSpeakLang(l.value);
+                                        }}
+                                        className={`w-full px-2 py-1.5 text-left text-xs rounded transition-colors ${captionSpeakLang === l.value ? "text-indigo-300 bg-indigo-500/20 font-medium" : "text-zinc-300 hover:bg-zinc-700/50"}`}
+                                      >
+                                        {l.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </>
                       )}
