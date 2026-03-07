@@ -8,7 +8,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import EmployeeProfilePage from "./pages/employee/ProfilePage";
 import ChangePasswordPage from "./pages/employee/ChangePasswordPage";
-import DocumentEditor from "./pages/documents/DocumentEditor";
+import CommonEditor from "./pages/documents/CommonEditor";
 import CustomerLogin from "./pages/customer/CustomerLogin";
 import CustomerRegister from "./pages/customer/CustomerRegister";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
@@ -104,13 +104,13 @@ function App() {
 
         <Route
           path="/documents/share/:token"
-          element={<DocumentEditor />}
+          element={<CommonEditor />}
         />
         <Route
           path="/documents/:id"
           element={
             <SharedProtectedRoute>
-              <DocumentEditor />
+              <CommonEditor />
             </SharedProtectedRoute>
           }
         />

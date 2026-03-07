@@ -10,11 +10,13 @@ const CollaboratorSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const DocumentSchema = new mongoose.Schema(
-  {
-    title:   { type: String, default: "Untitled document" },
-    content: { type: String, default: "" },
-    owner:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  const DocumentSchema = new mongoose.Schema(
+    {
+      title:   { type: String, default: "Untitled document" },
+      content: { type: String, default: "" },
+      doc_type: { type: String, enum: ["doc", "sheet", "slide"], default: "doc" },
+      slide_theme: { type: String, default: "light" },
+      owner:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
     // Each entry: { user: ObjectId, access: "read"|"write", added_at: Date }
     collaborators: [CollaboratorSchema],

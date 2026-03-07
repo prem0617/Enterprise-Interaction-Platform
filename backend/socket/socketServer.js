@@ -743,6 +743,29 @@ io.on("connection", async (socket) => {
   });
 
   /**
+   * Update server cache silently without broadcasting. (Used for full presentation saves)
+   */
+  socket.on("doc-update-cache", ({ docId, content, version } = {}) => {
+    if (!docId || !socket.userId || content === undefined) return;
+    if (activeDocuments[docId]) {
+      activeDocuments[docId]._latestContent = content;
+      activeDocuments[docId]._version = version || Date.now();
+    }
+  });
+
+  /**
+   * Broadcast a granular slide patch to all OTHER users in the room.
+   */
+  socket.on("doc-slide-update", ({ docId, patch } = {}) => {
+    if (!docId || !socket.userId || !patch) return;
+    socket.to(`doc:${docId}`).emit("doc-slide-update", {
+      docId,
+      patch,
+      senderId: socket.userId,
+    });
+  });
+
+  /**
    * Broadcast title changes to all OTHER users in the room.
    */
   socket.on("doc-title-update", ({ docId, title } = {}) => {
@@ -802,6 +825,22 @@ io.on("connection", async (socket) => {
     if (latest !== undefined || title !== undefined) {
       socket.emit("doc-full-state", { docId, content: latest, version, title });
     }
+  });
+
+  /**
+   * Broadcast slide theme changes to all OTHER users in the room.
+   * Payload: { docId, theme }
+   */
+  socket.on("doc-theme-update", ({ docId, theme } = {}) => {
+    if (!docId || !socket.userId || !theme) return;
+    if (activeDocuments[docId]) {
+      activeDocuments[docId]._latestTheme = theme;
+    }
+    socket.to(`doc:${docId}`).emit("doc-theme-update", {
+      docId,
+      theme,
+      senderId: socket.userId,
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
