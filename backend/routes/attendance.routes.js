@@ -11,7 +11,7 @@ import {
   createHoliday,
   updateHoliday,
   deleteHoliday,
-  getAttendanceSummary,
+
 } from "../controllers/attendance/attendance.controller.js";
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.get("/holidays", verifyToken, getHolidays);
 // ─── Admin/HR routes ───
 router.get("/all", verifyToken, requirePermission("attendance:read_all"), getAllAttendance);
 router.post("/mark", verifyToken, requirePermission("attendance:manage"), adminMarkAttendance);
-router.get("/summary", verifyToken, requirePermission("attendance:read_all"), getAttendanceSummary);
+
 router.post("/holidays", verifyToken, requirePermission("attendance:manage"), createHoliday);
 router.put("/holidays/:id", verifyToken, requirePermission("attendance:manage"), updateHoliday);
 router.delete("/holidays/:id", verifyToken, requirePermission("attendance:manage"), deleteHoliday);

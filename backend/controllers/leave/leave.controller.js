@@ -207,18 +207,10 @@ export const getMyLeaveRequests = async (req, res) => {
 // ─── 5. Admin: Get All Leave Requests ──────────────────
 export const getAllLeaveRequests = async (req, res) => {
   try {
-    const { status, department } = req.query;
+    const { status } = req.query;
     const filter = {};
 
     if (status && status !== "all") filter.status = status;
-
-    // Department filter
-    let empUserIds = null;
-    if (department && department !== "all") {
-      const emps = await Employee.find({ department, is_active: true }).select("user_id");
-      empUserIds = emps.map((e) => e.user_id);
-      filter.employee_id = { $in: empUserIds };
-    }
 
     const requests = await LeaveRequest.find(filter)
       .populate("employee_id", "first_name last_name email profile_picture")

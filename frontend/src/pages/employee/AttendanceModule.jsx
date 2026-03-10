@@ -67,11 +67,7 @@ const LEAVE_COLORS = {
   unpaid: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/20" },
 };
 
-const WORK_TYPES = [
-  { value: "office", label: "Office", icon: Building2 },
-  { value: "wfh", label: "Work from Home", icon: Laptop2 },
-  { value: "hybrid", label: "Hybrid", icon: Home },
-];
+
 
 export default function AttendanceModule() {
   const [activeTab, setActiveTab] = useState("today");
@@ -81,7 +77,6 @@ export default function AttendanceModule() {
 
   // ─── Today's Attendance ───
   const [todayAttendance, setTodayAttendance] = useState(null);
-  const [selectedWorkType, setSelectedWorkType] = useState("office");
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
 
@@ -173,7 +168,7 @@ export default function AttendanceModule() {
   const handleCheckIn = async () => {
     setCheckingIn(true);
     try {
-      const res = await axios.post(`${BACKEND_URL}/attendance/check-in`, { work_type: selectedWorkType }, { headers });
+      const res = await axios.post(`${BACKEND_URL}/attendance/check-in`, { work_type: "office" }, { headers });
       toast.success("Checked in successfully!");
       setTodayAttendance(res.data.attendance);
     } catch (err) {
@@ -301,25 +296,6 @@ export default function AttendanceModule() {
                   </p>
                 </div>
 
-                {/* Work Type */}
-                {!hasCheckedIn && (
-                  <div className="space-y-2">
-                    <Label className="text-xs text-zinc-400">Work Type</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {WORK_TYPES.map((wt) => {
-                        const WtIcon = wt.icon;
-                        return (
-                          <Button key={wt.value} variant={selectedWorkType === wt.value ? "secondary" : "outline"} size="sm"
-                            className={`h-10 gap-1.5 text-xs ${selectedWorkType === wt.value ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-300" : "bg-zinc-800/50 border-zinc-700"}`}
-                            onClick={() => setSelectedWorkType(wt.value)}>
-                            <WtIcon className="size-3.5" />
-                            {wt.label}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
@@ -348,10 +324,7 @@ export default function AttendanceModule() {
                       <span className="text-zinc-500">Status</span>
                       <Badge className={`text-[10px] border ${STATUS_BADGES[todayAttendance.status]}`}>{todayAttendance.status?.replace("_", " ")}</Badge>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-500">Work Type</span>
-                      <span className="capitalize text-zinc-300">{todayAttendance.work_type}</span>
-                    </div>
+
                     {todayAttendance.check_in && (
                       <div className="flex items-center justify-between">
                         <span className="text-zinc-500">Checked In</span>
@@ -455,7 +428,6 @@ export default function AttendanceModule() {
                     <tr className="border-b border-zinc-800">
                       <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500">Date</th>
                       <th className="text-center py-3 px-4 text-xs font-medium text-zinc-500">Status</th>
-                      <th className="text-center py-3 px-4 text-xs font-medium text-zinc-500">Type</th>
                       <th className="text-center py-3 px-4 text-xs font-medium text-zinc-500">Check In</th>
                       <th className="text-center py-3 px-4 text-xs font-medium text-zinc-500">Check Out</th>
                       <th className="text-center py-3 px-4 text-xs font-medium text-zinc-500">Hours</th>
@@ -472,9 +444,7 @@ export default function AttendanceModule() {
                         <td className="py-2.5 px-4 text-center">
                           <Badge className={`text-[10px] border ${STATUS_BADGES[r.status] || ""}`}>{r.status?.replace("_", " ")}</Badge>
                         </td>
-                        <td className="py-2.5 px-4 text-center">
-                          <Badge variant="outline" className="text-[10px] capitalize">{r.work_type}</Badge>
-                        </td>
+
                         <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
                           {r.check_in ? new Date(r.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
                         </td>

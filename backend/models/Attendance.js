@@ -26,7 +26,7 @@ const attendanceSchema = new mongoose.Schema(
     },
     work_type: {
       type: String,
-      enum: ["office", "wfh", "hybrid"],
+      enum: ["office"],
       default: "office",
     },
     total_hours: {

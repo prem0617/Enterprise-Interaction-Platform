@@ -516,8 +516,9 @@ const Ic = {
   subscript: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 16l8-8" /><path d="M12 16l-8-8" /><path d="M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07" /></svg>,
   download: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>,
   find: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>,
-  chatbot: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="9.01" y2="10" /><line x1="15" y1="10" x2="15.01" y2="10" /></svg>,
+  chatbot: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9.938 15.525a2 2 0 0 0-1.463-1.463l-5.63-1.455a.5.5 0 0 1 0-.964l5.63-1.455a2 2 0 0 0 1.463-1.463l1.454-5.63a.5.5 0 0 1 .964 0l1.455 5.63a2 2 0 0 0 1.463 1.463l5.63 1.455a.5.5 0 0 1 0 .964l-5.63 1.455a2 2 0 0 0-1.463 1.463l-1.455 5.63a.5.5 0 0 1-.964 0l-1.454-5.63z" /></svg>,
   send: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>,
+  close: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>,
 };
 
 export default function CommonEditor() {
@@ -859,18 +860,38 @@ export default function CommonEditor() {
             {Ic.share} Share
           </button>
           <button
-            className="de-tb-btn"x
             title="AI Document Assistant"
             onClick={() => setShowChat(c => !c)}
             style={{
-              color: showChat ? "#60a5fa" : "#94a3b8",
-              padding: "6px 10px",
-              borderRadius: 8,
-              background: showChat ? "rgba(96,165,250,.12)" : "none",
-              border: showChat ? "1px solid rgba(96,165,250,.25)" : "1px solid transparent",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              color: "#ffffff",
+              padding: "6px 14px",
+              borderRadius: "20px",
+              fontSize: "13px",
+              fontWeight: 600,
+              background: showChat ? "#334155" : "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+              border: "1px solid",
+              borderColor: showChat ? "#475569" : "#334155",
+              boxShadow: showChat ? "none" : "0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+            onMouseOver={e => {
+              if (!showChat) {
+                e.currentTarget.style.background = "linear-gradient(180deg, #334155 0%, #1e293b 100%)";
+                e.currentTarget.style.borderColor = "#475569";
+              }
+            }}
+            onMouseOut={e => {
+              if (!showChat) {
+                e.currentTarget.style.background = "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)";
+                e.currentTarget.style.borderColor = "#334155";
+              }
             }}
           >
-            {Ic.chatbot}
+            <div style={{ width: 16, height: 16 }}>{Ic.chatbot}</div> Ask AI
           </button>
         </div>
       </div>
@@ -948,6 +969,7 @@ export default function CommonEditor() {
               content={doc.content}
               isReadOnly={isReadOnly}
               docTitle={doc.title}
+              onSelectionChange={handleSelection}
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
                 setSaveStatus("Unsaved changes");
@@ -1003,6 +1025,153 @@ export default function CommonEditor() {
           />
         )
       }
+
+      {/* ── Chat Assistant Panel ── */}
+      {showChat && (
+        <div style={{
+          position: "fixed", right: 24, bottom: 80, width: 380, height: 520,
+          background: "#0b0f19", border: "1px solid #1e293b",
+          borderRadius: "16px", display: "flex", flexDirection: "column",
+          boxShadow: "0 20px 40px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05)", zIndex: 100,
+          overflow: "hidden", fontFamily: "Inter, sans-serif"
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "16px 20px", background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            borderBottom: "1px solid #1e293b"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#f8fafc", fontWeight: 600, fontSize: 14 }}>
+              <div style={{ width: 18, height: 18 }}>{Ic.chatbot}</div> AI Assistant
+            </div>
+            <button
+              onClick={() => setShowChat(false)}
+              style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", display: "flex", transition: "color 0.2s" }}
+              onMouseOver={e => e.currentTarget.style.color = "#f8fafc"}
+              onMouseOut={e => e.currentTarget.style.color = "#94a3b8"}
+            >
+              <div style={{ width: 18, height: 18 }}>{Ic.close}</div>
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16, background: "#0b0f19" }}>
+            {chatMessages.length === 0 && (
+              <div style={{ color: "#64748b", fontSize: 13, textAlign: "center", margin: "auto", padding: 20 }}>
+                <div style={{ width: 32, height: 32, margin: "0 auto 12px", opacity: 0.5 }}>{Ic.chatbot}</div>
+                How can I help you with this document?
+              </div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div key={i} style={{
+                alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                background: msg.role === "user" ? "linear-gradient(180deg, #334155 0%, #1e293b 100%)" : "transparent",
+                border: msg.role === "user" ? "1px solid #475569" : "none",
+                color: "#f8fafc",
+                padding: msg.role === "user" ? "10px 14px" : "4px 8px",
+                borderRadius: "12px",
+                maxWidth: "85%",
+                fontSize: 13, lineHeight: 1.6,
+                borderBottomRightRadius: msg.role === "user" ? 4 : 12,
+                borderBottomLeftRadius: msg.role === "assistant" ? 4 : 12,
+                whiteSpace: "pre-wrap",
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-start"
+              }}>
+                {msg.role === "assistant" && (
+                  <div style={{ width: 24, height: 24, color: "#94a3b8", flexShrink: 0, marginTop: 2 }}>{Ic.chatbot}</div>
+                )}
+                <div>{msg.content}</div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ alignSelf: "flex-start", color: "#64748b", padding: "4px 8px", fontSize: 13, display: "flex", gap: 12 }}>
+                <div style={{ width: 24, height: 24, color: "#64748b", flexShrink: 0 }}>{Ic.chatbot}</div>
+                <div style={{ marginTop: 2 }}>Thinking...</div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input */}
+          <div style={{ padding: "16px", background: "#0f172a", borderTop: "1px solid #1e293b", display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              style={{
+                flex: 1, background: "#1e293b", border: "1px solid #334155",
+                color: "#f8fafc", padding: "10px 16px", borderRadius: "100px", fontSize: 13, outline: "none",
+                fontFamily: "Inter, sans-serif", transition: "border-color 0.2s"
+              }}
+              placeholder="Ask a question..."
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") askQuestion(); }}
+              disabled={chatLoading}
+              onFocus={e => e.currentTarget.style.borderColor = "#475569"}
+              onBlur={e => e.currentTarget.style.borderColor = "#334155"}
+            />
+            <button
+              onClick={() => askQuestion()}
+              disabled={!chatInput.trim() || chatLoading}
+              style={{
+                background: chatInput.trim() && !chatLoading ? "linear-gradient(180deg, #334155 0%, #1e293b 100%)" : "#1e293b",
+                color: chatInput.trim() && !chatLoading ? "#ffffff" : "#64748b",
+                border: "1px solid",
+                borderColor: chatInput.trim() && !chatLoading ? "#475569" : "#334155",
+                borderRadius: "50%", width: 36, height: 36, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: chatInput.trim() && !chatLoading ? "pointer" : "not-allowed",
+                transition: "all 0.2s"
+              }}
+            >
+              <div style={{ width: 16, height: 16 }}>{Ic.send}</div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ask AI Popover (Text Selection) ── */}
+      {askAIPopover.show && (
+        <div style={{
+          position: "fixed",
+          left: askAIPopover.x,
+          top: askAIPopover.y,
+          transform: "translate(-50%, -100%)",
+          background: "#0f172a",
+          border: "1px solid #334155",
+          borderRadius: 6, padding: 4,
+          boxShadow: "0 4px 12px rgba(0,0,0,.3)", zIndex: 110,
+          display: "flex", alignItems: "center"
+        }}>
+          <button
+            onClick={() => handleAskAI(askAIPopover.text)}
+            style={{
+              background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+              border: "1px solid #334155",
+              color: "#f8fafc",
+              fontSize: "13px",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 14px",
+              borderRadius: "20px",
+              cursor: "pointer",
+              fontFamily: "Inter, sans-serif",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.4)"
+            }}
+            onMouseOver={e => {
+              e.currentTarget.style.background = "linear-gradient(180deg, #334155 0%, #1e293b 100%)";
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background = "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)";
+            }}
+          >
+            <div style={{ width: 14, height: 14 }}>{Ic.chatbot}</div> Ask AI
+          </button>
+        </div>
+      )}
+
     </div >
   );
 }

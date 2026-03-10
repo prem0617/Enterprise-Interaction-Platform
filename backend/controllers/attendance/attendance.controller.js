@@ -145,7 +145,6 @@ export const getMyAttendanceHistory = async (req, res) => {
       late: 0,
       half_day: 0,
       on_leave: 0,
-      wfh: 0,
       total_hours: 0,
     };
 
@@ -154,7 +153,6 @@ export const getMyAttendanceHistory = async (req, res) => {
       if (r.status === "late") summary.late++;
       if (r.status === "half_day") summary.half_day++;
       if (r.status === "on_leave") summary.on_leave++;
-      if (r.work_type === "wfh") summary.wfh++;
       summary.total_hours += r.total_hours || 0;
     });
 
@@ -167,36 +165,24 @@ export const getMyAttendanceHistory = async (req, res) => {
   }
 };
 
-// ─── 5. Admin: Get All Attendance for a Date ───────────
 export const getAllAttendance = async (req, res) => {
   try {
-    const { date, department } = req.query;
+    const { date } = req.query;
     const targetDate = date ? startOfDay(new Date(date)) : startOfDay(new Date());
 
     const filter = { date: targetDate };
-
-    // If department filter, first find employees in that department
-    let employeeUserIds = null;
-    if (department && department !== "all") {
-      const emps = await Employee.find({ department, is_active: true }).select("user_id");
-      employeeUserIds = emps.map((e) => e.user_id);
-      filter.employee_id = { $in: employeeUserIds };
-    }
 
     const records = await Attendance.find(filter)
       .populate("employee_id", "first_name last_name email profile_picture")
       .sort({ check_in: -1 });
 
-    // Get total active employees for stats
-    const empFilter = department && department !== "all" ? { department, is_active: true } : { is_active: true };
-    const totalEmployees = await Employee.countDocuments(empFilter);
+    const totalEmployees = await Employee.countDocuments({ is_active: true });
 
     const stats = {
       total: totalEmployees,
       present: records.filter((r) => r.status === "present" || r.status === "late").length,
       late: records.filter((r) => r.status === "late").length,
       absent: totalEmployees - records.length,
-      wfh: records.filter((r) => r.work_type === "wfh").length,
       on_leave: records.filter((r) => r.status === "on_leave").length,
     };
 
@@ -315,73 +301,4 @@ export const deleteHoliday = async (req, res) => {
   }
 };
 
-// ─── 11. Attendance Summary for Admin Dashboard ────────
-export const getAttendanceSummary = async (req, res) => {
-  try {
-    const { days } = req.query;
-    const numDays = parseInt(days) || 30;
-    const startDate = startOfDay(new Date());
-    startDate.setDate(startDate.getDate() - numDays);
 
-    // Daily attendance trend
-    const dailyData = await Attendance.aggregate([
-      { $match: { date: { $gte: startDate } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          present: {
-            $sum: { $cond: [{ $in: ["$status", ["present", "late"]] }, 1, 0] },
-          },
-          late: {
-            $sum: { $cond: [{ $eq: ["$status", "late"] }, 1, 0] },
-          },
-          wfh: {
-            $sum: { $cond: [{ $eq: ["$work_type", "wfh"] }, 1, 0] },
-          },
-          on_leave: {
-            $sum: { $cond: [{ $eq: ["$status", "on_leave"] }, 1, 0] },
-          },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    // WFH stats
-    const wfhStats = await Attendance.aggregate([
-      { $match: { date: { $gte: startDate }, work_type: "wfh" } },
-      {
-        $group: {
-          _id: "$employee_id",
-          wfhDays: { $sum: 1 },
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $project: {
-          first_name: "$user.first_name",
-          last_name: "$user.last_name",
-          profile_picture: "$user.profile_picture",
-          wfhDays: 1,
-        },
-      },
-      { $sort: { wfhDays: -1 } },
-      { $limit: 10 },
-    ]);
-
-    res.json({
-      dailyData: dailyData.map((d) => ({ date: d._id, ...d, _id: undefined })),
-      wfhStats,
-    });
-  } catch (error) {
-    console.error("Attendance summary error:", error);
-    res.status(500).json({ error: "Failed to fetch summary" });
-  }
-};

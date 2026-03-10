@@ -14,7 +14,7 @@ import fileRoutes from "./routes/file.routes.js";
 import directChatRouter from "./routes/directChat.routes.js";
 import callRoutes from "./routes/call.routes.js";
 import meetingRoutes from "./routes/meeting.routes.js";
-import analyticsRoutes from "./routes/analytics.routes.js";
+
 import attendanceRoutes from "./routes/attendance.routes.js";
 import leaveRoutes from "./routes/leave.routes.js";
 import departmentRoutes from "./routes/department.routes.js";
@@ -94,7 +94,7 @@ app.use("/api/direct_chat", directChatRouter);
 app.use("/api/call", callRoutes);
 app.use("/api/meetings", meetingRoutes);
 app.use("/api/ai", aiRoutes);
-app.use("/api/analytics", analyticsRoutes);
+
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leave", leaveRoutes);
 app.use("/api/departments", departmentRoutes);

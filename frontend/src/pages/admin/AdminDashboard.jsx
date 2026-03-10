@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import EmployeeManagement from "./EmployeeManagement";
 import Dashboard from "./Dashboard";
 import AdminProfilePage from "./AdminProfilePage";
-import AnalyticsDashboard from "./AnalyticsDashboard";
+
 import AttendanceDashboard from "./AttendanceDashboard";
 import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
@@ -101,7 +101,7 @@ export default function AdminDashboard() {
     { id: "attendance", icon: CalendarCheck, label: "Attendance" },
     { id: "tickets", icon: Ticket, label: "Tickets" },
     { id: "roles", icon: ShieldCheck, label: "Roles & Access" },
-    { id: "analytics", icon: BarChart3, label: "Analytics" },
+
     { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
     { id: "profile", icon: User, label: "Profile" },
   ];
@@ -124,8 +124,7 @@ export default function AdminDashboard() {
         return <TicketManagement />;
       case "roles":
         return <RoleManagement />;
-      case "analytics":
-        return <AnalyticsDashboard />;
+
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":
