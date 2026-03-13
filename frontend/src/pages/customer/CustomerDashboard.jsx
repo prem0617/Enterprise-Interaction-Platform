@@ -417,22 +417,42 @@ if (showWhiteboard) {
           <div className="flex-1 overflow-y-auto">
             {/* Ticket Summary */}
             {!loading && tickets.length > 0 && (
-              <div className="grid grid-cols-3 gap-1.5 p-2.5 border-b border-zinc-800/40">
-                <div className="rounded-lg bg-blue-500/10 px-2 py-1.5 text-center">
-                  <p className="text-sm font-bold text-blue-400">
-                    {tickets.filter((t) => t.status === "open" || t.status === "pending" || t.status === "in_progress").length}
-                  </p>
-                  <p className="text-[10px] text-zinc-500">Open</p>
+              <div className="p-2.5 border-b border-zinc-800/40 space-y-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div className="rounded-lg bg-blue-500/10 px-2 py-1.5 text-center">
+                    <p className="text-sm font-bold text-blue-400">
+                      {tickets.filter((t) => t.status === "open" || t.status === "pending" || t.status === "in_progress").length}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">Open</p>
+                  </div>
+                  <div className="rounded-lg bg-green-500/10 px-2 py-1.5 text-center">
+                    <p className="text-sm font-bold text-green-400">
+                      {tickets.filter((t) => t.status === "resolved" || t.status === "closed").length}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">Resolved</p>
+                  </div>
+                  <div className="rounded-lg bg-zinc-800/60 px-2 py-1.5 text-center">
+                    <p className="text-sm font-bold text-zinc-300">{tickets.length}</p>
+                    <p className="text-[10px] text-zinc-500">Total</p>
+                  </div>
                 </div>
-                <div className="rounded-lg bg-green-500/10 px-2 py-1.5 text-center">
-                  <p className="text-sm font-bold text-green-400">
-                    {tickets.filter((t) => t.status === "resolved" || t.status === "closed").length}
-                  </p>
-                  <p className="text-[10px] text-zinc-500">Resolved</p>
-                </div>
-                <div className="rounded-lg bg-zinc-800/60 px-2 py-1.5 text-center">
-                  <p className="text-sm font-bold text-zinc-300">{tickets.length}</p>
-                  <p className="text-[10px] text-zinc-500">Total</p>
+                {/* Priority breakdown */}
+                <div className="flex items-center gap-1">
+                  {["high", "critical"].reduce((n, p) => n + tickets.filter(t => t.priority === p && t.status !== "resolved" && t.status !== "closed").length, 0) > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                      {["high", "critical"].reduce((n, p) => n + tickets.filter(t => t.priority === p && t.status !== "resolved" && t.status !== "closed").length, 0)} urgent
+                    </span>
+                  )}
+                  {tickets.filter(t => t.status === "in_progress").length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      {tickets.filter(t => t.status === "in_progress").length} in progress
+                    </span>
+                  )}
+                  {tickets.filter(t => t.status === "pending").length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                      {tickets.filter(t => t.status === "pending").length} pending
+                    </span>
+                  )}
                 </div>
               </div>
             )}

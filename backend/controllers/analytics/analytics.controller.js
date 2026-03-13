@@ -190,3 +190,37 @@ export const getMyStats = async (req, res) => {
     res.status(500).json({ error: "Failed to load stats" });
   }
 };
+
+// ─── Employee Personal Attendance Trend (7 days) ────────
+export const getMyAttendanceTrend = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const now = new Date();
+
+    const trend = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(now);
+      day.setDate(day.getDate() - i);
+      const start = startOfDay(day);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+
+      const record = await Attendance.findOne({
+        employee_id: userId,
+        date: { $gte: start, $lt: end },
+      }).lean();
+
+      trend.push({
+        date: start.toISOString().split("T")[0],
+        label: start.toLocaleDateString("en-US", { weekday: "short" }),
+        status: record?.status || "absent",
+        hours: record?.total_hours || 0,
+      });
+    }
+
+    res.json(trend);
+  } catch (error) {
+    console.error("Attendance trend error:", error);
+    res.status(500).json({ error: "Failed to load attendance trend" });
+  }
+};
