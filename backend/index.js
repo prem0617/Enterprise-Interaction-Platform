@@ -26,7 +26,7 @@ import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
 import Meeting from "./models/Meeting.js";
 import { SupportTicket } from "./models/SupportTicket.js";
-import { LeaveRequest } from "./models/LeaveRequest.js";
+import LeaveRequest from "./models/LeaveRequest.js";
 import Employee from "./models/Employee.js";
 
 import { verifyToken } from "./middlewares/auth.middleware.js";

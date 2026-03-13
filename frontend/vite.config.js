@@ -13,9 +13,6 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",   // IMPORTANT: listen on all interfaces
     port: 5173,
-    strictPort: true,
-
-    // 🔥 THIS is the key fix
     allowedHosts: true
   }
 });
