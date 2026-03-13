@@ -437,23 +437,30 @@ if (showWhiteboard) {
                   </div>
                 </div>
                 {/* Priority breakdown */}
-                <div className="flex items-center gap-1">
-                  {["high", "critical"].reduce((n, p) => n + tickets.filter(t => t.priority === p && t.status !== "resolved" && t.status !== "closed").length, 0) > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
-                      {["high", "critical"].reduce((n, p) => n + tickets.filter(t => t.priority === p && t.status !== "resolved" && t.status !== "closed").length, 0)} urgent
-                    </span>
-                  )}
-                  {tickets.filter(t => t.status === "in_progress").length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      {tickets.filter(t => t.status === "in_progress").length} in progress
-                    </span>
-                  )}
-                  {tickets.filter(t => t.status === "pending").length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-                      {tickets.filter(t => t.status === "pending").length} pending
-                    </span>
-                  )}
-                </div>
+                {(() => {
+                  const urgentCount = tickets.filter(t => (t.priority === "high" || t.priority === "critical") && t.status !== "resolved" && t.status !== "closed").length;
+                  const inProgressCount = tickets.filter(t => t.status === "in_progress").length;
+                  const pendingCount = tickets.filter(t => t.status === "pending").length;
+                  return (urgentCount > 0 || inProgressCount > 0 || pendingCount > 0) && (
+                    <div className="flex items-center gap-1">
+                      {urgentCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                          {urgentCount} urgent
+                        </span>
+                      )}
+                      {inProgressCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          {inProgressCount} in progress
+                        </span>
+                      )}
+                      {pendingCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                          {pendingCount} pending
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             {loading ? (
