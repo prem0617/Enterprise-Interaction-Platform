@@ -15,8 +15,7 @@ import { createSocketConnection } from "../../hooks/useSocket";
 import { useDocumentCollaboration } from "../../hooks/useDocumentCollboration";
 
 import SpreadsheetEditor from "./SpreadsheetEditor";
-import PresentationEditor from "./PresentationEditor";
-import DocumentEditor from "./DocumentEditor";
+import MarkdownEditor from "./MarkdownEditor";
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Helpers & tiny utils
@@ -771,7 +770,7 @@ export default function CommonEditor() {
           }
         }}>{Ic.back}</button>
         {/* Dynamic Logo Based on Doc Type */}
-        <div className={"flex items-center justify-center w-8 h-8 rounded-lg shadow-lg flex-shrink-0 " + (doc.doc_type === "sheet" ? "bg-gradient-to-br from-green-600 to-emerald-600 shadow-green-600/30" : doc.doc_type === "slide" ? "bg-gradient-to-br from-orange-500 to-amber-600 shadow-orange-500/30" : "bg-gradient-to-br from-blue-500 to-violet-600 shadow-blue-500/30")}>
+        <div className={"flex items-center justify-center w-8 h-8 rounded-lg shadow-lg flex-shrink-0 " + (doc.doc_type === "sheet" ? "bg-gradient-to-br from-green-600 to-emerald-600 shadow-green-600/30" : "bg-gradient-to-br from-purple-600 to-violet-600 shadow-purple-600/30")}>
           {doc.doc_type === "sheet" ? (
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="white" fillOpacity="0.95" />
@@ -780,20 +779,13 @@ export default function CommonEditor() {
               <line x1="6" y1="16" x2="18" y2="16" stroke="white" strokeWidth="1" />
               <line x1="12" y1="8" x2="12" y2="20" stroke="white" strokeWidth="1" />
             </svg>
-          ) : doc.doc_type === "slide" ? (
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-              <rect x="2" y="6" width="20" height="14" rx="2" fill="white" fillOpacity="0.9" />
-              <path d="M22 10H2V14H22V10Z" fill="rgba(0,0,0,0.1)" />
-              <circle cx="12" cy="13" r="3" fill="var(--color-orange-500)" />
-              <line x1="12" y1="20" x2="12" y2="22" stroke="white" strokeWidth="2" />
-              <line x1="8" y1="22" x2="16" y2="22" stroke="white" strokeWidth="2" />
-            </svg>
           ) : (
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="white" fillOpacity="0.95" />
               <polyline points="14 2 14 8 20 8" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" fill="none" />
-              <line x1="8" y1="13" x2="16" y2="13" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
-              <line x1="8" y1="17" x2="13" y2="17" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+              <line x1="10" y1="13" x2="8" y2="13" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+              <line x1="16" y1="13" x2="14" y2="13" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+              <line x1="12" y1="11" x2="12" y2="15" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
             </svg>
           )}
         </div>
@@ -825,36 +817,12 @@ export default function CommonEditor() {
               )}
             </div>
           )}
-          {!isReadOnly && doc?.doc_type === "doc" && (
-            <button
-              className="de-tb-btn"
-              title="Download as DOC"
-              onClick={() => { document.dispatchEvent(new CustomEvent('download-doc')) }}
-              style={{ color: "#94a3b8", padding: "6px 10px", borderRadius: 8, marginLeft: "auto" }}
-            >
-              {Ic.download}
-              <span style={{ fontSize: 11, marginLeft: 4, fontWeight: 500 }}>DOC</span>
-            </button>
-          )}
-          {isReadOnly && token && user && (doc?.owner === currentUserId || doc?.collaborators?.some(c => c.userId === currentUserId && (c.role === "editor" || c.role === "owner"))) && (
-            <button
-              className="de-save-btn"
-              style={{ marginLeft: "auto", display: "flex", gap: "6px", alignItems: "center", background: "#3b82f6" }}
-              onClick={() => {
-                navigate(`/documents/${doc._id}`);
-                window.location.reload();
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
-              Edit Document
-            </button>
-          )}
           <button
             className="de-share-btn"
             onClick={() => setShowShare(true)}
             style={{
-              background: doc?.doc_type === "sheet" ? "#325c39ff" : doc?.doc_type === "slide" ? "#f97316" : "#3b82f6",
-              boxShadow: doc?.doc_type === "sheet" ? "0 1px 8px #1c4823ff" : doc?.doc_type === "slide" ? "0 1px 8px rgba(249,115,22,.4)" : "0 1px 8px rgba(59,130,246,.4)"
+              background: doc?.doc_type === "sheet" ? "#325c39ff" : "#7c3aed",
+              boxShadow: doc?.doc_type === "sheet" ? "0 1px 8px #1c4823ff" : "0 1px 8px rgba(124,58,237,.4)"
             }}
           >
             {Ic.share} Share
@@ -927,49 +895,11 @@ export default function CommonEditor() {
               }}
             />
           </div>
-        ) : doc.doc_type === "slide" ? (
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <PresentationEditor
-              content={doc.content}
-              isReadOnly={isReadOnly}
-              slideTheme={doc.slide_theme || 'light'}
-              remotePatch={remotePatch}
-              onSlideUpdate={(patch) => {
-                broadcastSlideUpdate(patch);
-                broadcastTyping();
-              }}
-              onThemeChange={(newTheme) => {
-                setDoc(d => ({ ...d, slide_theme: newTheme }));
-                // Broadcast to collaborators
-                if (socketRef.current && docIdForSocket) {
-                  socketRef.current.emit('doc-theme-update', { docId: docIdForSocket, theme: newTheme });
-                }
-                // Persist to backend
-                axios.put(`${BACKEND_URL}/documents/${id}`, { slide_theme: newTheme }, { headers: authHeader() }).catch(console.error);
-              }}
-              onContentChange={(newContent) => {
-                setDoc(d => ({ ...d, content: newContent }));
-                setSaveStatus("Unsaved changes");
-
-                if (fullSaveTimerRef.current) clearTimeout(fullSaveTimerRef.current);
-                fullSaveTimerRef.current = setTimeout(() => {
-                  if (socketRef.current) {
-                    socketRef.current.emit("doc-update-cache", { docId: id, content: newContent, version: Date.now() });
-                  }
-                  axios.put(`${BACKEND_URL}/documents/${id}`, { content: newContent }, { headers: authHeader() })
-                    .then(() => setSaveStatus("saved"))
-                    .catch(err => { console.error(err); setSaveStatus("idle"); });
-                }, 3000);
-              }}
-            />
-          </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <DocumentEditor
+            <MarkdownEditor
               content={doc.content}
               isReadOnly={isReadOnly}
-              docTitle={doc.title}
-              onSelectionChange={handleSelection}
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
                 setSaveStatus("Unsaved changes");
@@ -993,20 +923,9 @@ export default function CommonEditor() {
           <><div className="de-footer-sep" /><span style={{ color: "#60a5fa" }}>{collaborators.length + 1} online</span></>
         )}
         <div className="de-footer-sep" />
-        {doc.doc_type === "doc" && !isReadOnly && (
-          <button
-            className="de-tb-btn"
-            title="Download as DOC"
-            onClick={() => { document.dispatchEvent(new CustomEvent('download-doc')) }}
-            style={{ color: "#94a3b8", padding: "6px 10px", borderRadius: 8, marginLeft: "auto" }}
-          >
-            {Ic.download}
-            <span style={{ fontSize: 11, marginLeft: 4, fontWeight: 500 }}>DOC</span>
-          </button>
-        )}
         {isReadOnly
           ? <span style={{ color: "#f59e0b", marginLeft: "auto" }}>View only</span>
-          : <span style={{ color: saveStatus === "Unsaved changes" ? "#fbbf24" : saveStatus === "saving" ? "#60a5fa" : "#34d399", marginLeft: doc.doc_type === "doc" ? "0" : "auto" }}>
+          : <span style={{ color: saveStatus === "Unsaved changes" ? "#fbbf24" : saveStatus === "saving" ? "#60a5fa" : "#34d399", marginLeft: "auto" }}>
             {saveStatus === "Unsaved changes" ? "Unsaved changes" : saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "All changes saved" : "Saved"}
           </span>
         }

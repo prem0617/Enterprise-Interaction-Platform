@@ -25,6 +25,9 @@ import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
 import Meeting from "./models/Meeting.js";
+import { SupportTicket } from "./models/SupportTicket.js";
+import { LeaveRequest } from "./models/LeaveRequest.js";
+import Employee from "./models/Employee.js";
 
 import { verifyToken } from "./middlewares/auth.middleware.js";
 // Load environment variables
@@ -100,15 +103,33 @@ app.get("/api/admin/stats", verifyToken, async (req, res) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const [messagesToday, activeMeetings] = await Promise.all([
+    const [
+      messagesToday,
+      activeMeetings,
+      openTickets,
+      pendingLeaveRequests,
+      totalEmployees,
+      activeEmployees,
+    ] = await Promise.all([
       Message.countDocuments({
         created_at: { $gte: todayStart },
         deleted_at: { $exists: false },
       }),
       Meeting.countDocuments({ status: "active" }),
+      SupportTicket.countDocuments({ status: "open" }),
+      LeaveRequest.countDocuments({ status: "pending" }),
+      Employee.countDocuments(),
+      Employee.countDocuments({ is_active: true }),
     ]);
 
-    res.json({ messagesToday, activeMeetings });
+    res.json({
+      messagesToday,
+      activeMeetings,
+      openTickets,
+      pendingLeaveRequests,
+      totalEmployees,
+      activeEmployees,
+    });
   } catch (error) {
     console.error("Stats error:", error);
     res.status(500).json({ error: "Failed to load stats" });

@@ -12,6 +12,12 @@ import {
   TrendingUp,
   Calendar,
   RefreshCcw,
+  Ticket,
+  FileText,
+  UserPlus,
+  CalendarCheck,
+  Building2,
+  Zap,
 } from "lucide-react";
 import axios from "axios";
 import { BACKEND_URL } from "../../../config";
@@ -26,7 +32,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [employees, setEmployees] = useState([]);
-  const [stats, setStats] = useState({ messagesToday: 0, activeMeetings: 0 });
+  const [stats, setStats] = useState({
+    messagesToday: 0,
+    activeMeetings: 0,
+    openTickets: 0,
+    pendingLeaveRequests: 0,
+    totalEmployees: 0,
+    activeEmployees: 0,
+  });
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const adminToken = localStorage.getItem("token");
 
@@ -132,7 +145,7 @@ export default function Dashboard() {
   const statsData = [
     {
       label: "Total Employees",
-      value: employees?.length,
+      value: stats.totalEmployees || employees?.length,
       icon: Users,
       accent: "from-indigo-500 to-indigo-600",
       bg: "bg-indigo-500/10",
@@ -140,7 +153,7 @@ export default function Dashboard() {
     },
     {
       label: "Active Users",
-      value: activeEmployeesList.length,
+      value: stats.activeEmployees || activeEmployeesList.length,
       icon: UserCheck,
       accent: "from-emerald-500 to-emerald-600",
       bg: "bg-emerald-500/10",
@@ -162,6 +175,22 @@ export default function Dashboard() {
       bg: "bg-amber-500/10",
       iconColor: "text-amber-400",
     },
+    {
+      label: "Open Tickets",
+      value: stats.openTickets,
+      icon: Ticket,
+      accent: "from-rose-500 to-rose-600",
+      bg: "bg-rose-500/10",
+      iconColor: "text-rose-400",
+    },
+    {
+      label: "Pending Leaves",
+      value: stats.pendingLeaveRequests,
+      icon: CalendarCheck,
+      accent: "from-cyan-500 to-cyan-600",
+      bg: "bg-cyan-500/10",
+      iconColor: "text-cyan-400",
+    },
   ];
 
   if (loading) {
@@ -171,8 +200,8 @@ export default function Dashboard() {
           <Skeleton className="h-8 w-64 mb-2" />
           <Skeleton className="h-4 w-96" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
@@ -223,7 +252,7 @@ export default function Dashboard() {
       </div>
 
       {/* ─── KPI Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {statsData.map((stat, idx) => {
           const Icon = stat.icon;
           return (
@@ -257,6 +286,87 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {/* ─── Quick Actions ─── */}
+      <Card className="bg-zinc-900/80 border-zinc-800/80">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Zap className="size-4 text-amber-400" />
+            Quick Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                id: "add-employee",
+                icon: UserPlus,
+                label: "Add Employee",
+                description: "Create new user",
+                color: "from-indigo-500/20 to-indigo-600/10",
+                iconColor: "text-indigo-400",
+                borderColor: "border-indigo-500/20",
+                page: "employees",
+              },
+              {
+                id: "schedule-meeting",
+                icon: Video,
+                label: "Schedule Meeting",
+                description: "Create new meeting",
+                color: "from-violet-500/20 to-violet-600/10",
+                iconColor: "text-violet-400",
+                borderColor: "border-violet-500/20",
+                page: "meetings",
+              },
+              {
+                id: "manage-departments",
+                icon: Building2,
+                label: "Departments",
+                description: "Manage structure",
+                color: "from-emerald-500/20 to-emerald-600/10",
+                iconColor: "text-emerald-400",
+                borderColor: "border-emerald-500/20",
+                page: "departments",
+              },
+              {
+                id: "view-tickets",
+                icon: Ticket,
+                label: "Support Tickets",
+                description: `${stats.openTickets || 0} open`,
+                color: "from-rose-500/20 to-rose-600/10",
+                iconColor: "text-rose-400",
+                borderColor: "border-rose-500/20",
+                page: "tickets",
+              },
+            ].map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  onClick={() => {
+                    // Navigate to the respective page - parent component should handle this
+                    console.log(`Navigate to ${action.page}`);
+                  }}
+                  className={`group relative rounded-xl border ${action.borderColor} bg-gradient-to-br ${action.color} p-4 text-left transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]`}
+                >
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ArrowUpRight className="size-3.5 text-zinc-400" />
+                  </div>
+                  <div className="mb-3">
+                    <div className="size-9 rounded-lg bg-zinc-900/60 flex items-center justify-center">
+                      <Icon className={`size-4 ${action.iconColor}`} />
+                    </div>
+                  </div>
+                  <h3 className="text-sm font-semibold text-zinc-100 mb-0.5">
+                    {action.label}
+                  </h3>
+                  <p className="text-xs text-zinc-500">{action.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ─── Main Panels ─── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
