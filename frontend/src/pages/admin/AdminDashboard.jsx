@@ -9,6 +9,7 @@ import AttendanceDashboard from "./AttendanceDashboard";
 import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import TicketManagement from "./TicketManagement";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 import DocumentsPage from "../documents/DocumentsPage";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
@@ -101,6 +102,7 @@ export default function AdminDashboard() {
     { id: "tickets", icon: Ticket, label: "Tickets" },
 
     { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
+    { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
   ];
 
@@ -120,6 +122,8 @@ export default function AdminDashboard() {
         return <AttendanceDashboard />;
       case "tickets":
         return <TicketManagement />;
+      case "analytics":
+        return <AnalyticsDashboard />;
 
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
