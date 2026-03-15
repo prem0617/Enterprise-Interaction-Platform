@@ -3,6 +3,7 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import User from "../../models/User.js";
 import { SupportTicket } from "../../models/SupportTicket.js";
+import { createNotification, createBulkNotifications } from "../../utils/notificationHelper.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import mongoose from "mongoose";
 
@@ -314,6 +315,20 @@ export const addChannelMembers = async (req, res) => {
           });
         }
       });
+
+      // Notify newly added members
+      const channel = await ChatChannel.findById(id);
+      for (const memberId of added_members) {
+        createNotification({
+          recipientId: memberId,
+          type: "channel_invite",
+          priority: "medium",
+          title: `You were added to "${channel?.name || "a group"}"`,
+          body: "You can now send and receive messages in this channel.",
+          actorId: req.userId,
+          reference: { kind: "channel", id },
+        }).catch(() => {});
+      }
     }
 
     res.json({

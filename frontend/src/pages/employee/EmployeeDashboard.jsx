@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function EmployeeDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -112,6 +113,7 @@ export default function EmployeeDashboard() {
               </div>
 
               <div className="flex items-center gap-2">
+                <NotificationBell />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/50 transition-colors">

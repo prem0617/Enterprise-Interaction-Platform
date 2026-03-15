@@ -1,6 +1,7 @@
 import Attendance from "../../models/Attendance.js";
 import Employee from "../../models/Employee.js";
 import Holiday from "../../models/Holiday.js";
+import { createNotification } from "../../utils/notificationHelper.js";
 
 // ─── Helpers ───────────────────────────────────────────
 function startOfDay(date) {
@@ -57,6 +58,18 @@ export const checkIn = async (req, res) => {
         notes: notes || "",
         marked_by: "self",
       });
+    }
+
+    // Notify user if late
+    if (status === "late") {
+      createNotification({
+        recipientId: userId,
+        type: "attendance_late",
+        priority: "medium",
+        title: "Late Check-in Recorded",
+        body: `You checked in at ${now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })} — after the 10:00 AM deadline.`,
+        reference: { kind: "attendance", id: attendance._id },
+      }).catch(() => {});
     }
 
     res.json({ success: true, attendance });

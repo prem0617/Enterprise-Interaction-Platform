@@ -16,6 +16,7 @@ import MeetingModule from "@/components/MeetingModule";
 import WhiteboardModule from "@/components/WhiteboardModule";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
+import NotificationBell from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -151,14 +152,17 @@ export default function AdminDashboard() {
               <Hexagon className="size-4 text-white" />
             </div>
             {!sidebarCollapsed && (
-              <div className="flex flex-col justify-center h-16 min-w-0">
-                <span className="text-sm font-semibold tracking-tight truncate leading-tight">
-                  Enterprise
-                </span>
-                <span className="text-[10px] text-zinc-500 font-medium leading-none">
-                  Admin Portal
-                </span>
-              </div>
+              <>
+                <div className="flex flex-col justify-center h-16 min-w-0 flex-1">
+                  <span className="text-sm font-semibold tracking-tight truncate leading-tight">
+                    Enterprise
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-medium leading-none">
+                    Admin Portal
+                  </span>
+                </div>
+                <NotificationBell />
+              </>
             )}
           </div>
 
@@ -265,6 +269,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="flex items-center gap-1">
+              <NotificationBell />
               <Button
                 variant="ghost"
                 size="icon"

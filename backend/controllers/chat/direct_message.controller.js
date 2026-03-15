@@ -6,6 +6,7 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import { cloudinary } from "../../config/cloudinary.js";
+import { createNotification } from "../../utils/notificationHelper.js";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
@@ -767,6 +768,22 @@ export const sendMessage = async (req, res) => {
           clearInterval(retryInterval);
         }
       }, MESSAGE_DELIVERY_RETRY_MS);
+    });
+
+    // Create notification for recipients
+    const senderName = `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`.trim();
+    channelMembers.forEach((member) => {
+      const memberUserId = member.user_id.toString();
+      if (memberUserId === currentUserId) return;
+      createNotification({
+        recipientId: memberUserId,
+        type: "message",
+        priority: "medium",
+        title: `New message from ${senderName}`,
+        body: populatedMessage.content?.slice(0, 120) || "",
+        actorId: currentUserId,
+        reference: { kind: "channel", id: channelId },
+      }).catch(() => {});
     });
 
     res.status(201).json({

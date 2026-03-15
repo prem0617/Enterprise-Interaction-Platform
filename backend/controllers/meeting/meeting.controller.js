@@ -2,6 +2,7 @@ import Meeting from "../../models/Meeting.js";
 import MeetingRecording from "../../models/MeetingRecording.js";
 import { scheduleRemindersForMeeting, clearRemindersForMeeting } from "../../services/meetingReminderService.js";
 import { broadcastMeetingEvent } from "../../socket/socketServer.js";
+import { createBulkNotifications } from "../../utils/notificationHelper.js";
 
 function generateMeetingCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -80,6 +81,22 @@ export const createMeeting = async (req, res) => {
       .populate("participants", "first_name last_name email")
       .lean();
     broadcastMeetingEvent("created", populated);
+
+    // Notify participants
+    if (populated.participants?.length) {
+      const hostName = `${populated.host_id?.first_name || ""} ${populated.host_id?.last_name || ""}`.trim();
+      createBulkNotifications(
+        populated.participants.map((p) => p._id?.toString() || p.toString()).filter((id) => id !== req.userId),
+        {
+          type: "meeting_created",
+          priority: "high",
+          title: `Meeting: ${populated.title || "Untitled"}`,
+          body: `${hostName} invited you to a meeting${populated.scheduled_at ? ` on ${new Date(populated.scheduled_at).toLocaleString()}` : ""}`,
+          actorId: req.userId,
+          reference: { kind: "meeting", id: populated._id },
+        }
+      ).catch(() => {});
+    }
 
     return res.status(201).json({ data: populated });
   } catch (error) {
