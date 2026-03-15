@@ -651,7 +651,7 @@ export const searchMessagesInChannel = async (req, res) => {
   try {
     const { channelId } = req.params;
     const { query } = req.query;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     if (!query || query.trim().length === 0) {
       return res.status(400).json({ error: "Search query is required" });
@@ -675,8 +675,9 @@ export const searchMessagesInChannel = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Search messages using case-insensitive regex
-    const searchRegex = new RegExp(query.trim(), "i");
+    // Escape special regex characters to prevent ReDoS
+    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchRegex = new RegExp(escaped, "i");
 
     const messages = await Message.find({
       channel_id: channelId,

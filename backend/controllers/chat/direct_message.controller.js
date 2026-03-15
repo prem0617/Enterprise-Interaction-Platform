@@ -1198,7 +1198,7 @@ export const uploadFileMessage = async (req, res) => {
   try {
     const { channelId } = req.params;
     const { caption } = req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -1253,16 +1253,18 @@ export const uploadFileMessage = async (req, res) => {
     await newMessage.save();
     await newMessage.populate(
       "sender_id",
-      "first_name last_name full_name email user_type"
+      "first_name last_name email user_type"
     );
 
-    // ✅ Complete response object
+    const senderFullName = `${newMessage.sender_id.first_name || ""} ${newMessage.sender_id.last_name || ""}`.trim();
+
+    // Complete response object
     const messageResponse = {
       _id: newMessage._id,
       channel_id: newMessage.channel_id,
       sender_id: newMessage.sender_id._id,
       content: newMessage.content,
-      message_type: "file", // ✅ Critical field
+      message_type: "file",
       file_url: newMessage.file_url,
       file_name: newMessage.file_name,
       file_type: newMessage.file_type,
@@ -1275,7 +1277,7 @@ export const uploadFileMessage = async (req, res) => {
         _id: newMessage.sender_id._id,
         first_name: newMessage.sender_id.first_name,
         last_name: newMessage.sender_id.last_name,
-        full_name: newMessage.sender_id.full_name,
+        full_name: senderFullName,
         email: newMessage.sender_id.email,
         user_type: newMessage.sender_id.user_type,
       },
@@ -1332,7 +1334,7 @@ export const uploadFileMessage = async (req, res) => {
 export const deleteFileMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const message = await Message.findById(messageId);
     if (!message) {
@@ -1361,13 +1363,23 @@ export const deleteFileMessage = async (req, res) => {
     message.deleted_at = new Date();
     await message.save();
 
-    // Emit socket event
-    const io = req.app.get("io");
-    if (io) {
-      io.to(message.channel_id.toString()).emit("message_deleted", {
-        message_id: messageId,
+    // Emit socket event to all channel members
+    try {
+      const channelMembers = await ChannelMember.find({
         channel_id: message.channel_id,
+        user_id: { $ne: userId },
+      }).select("user_id");
+      channelMembers.forEach((member) => {
+        const socketId = getReceiverSocketId(member.user_id.toString());
+        if (socketId) {
+          io.to(socketId).emit("message_deleted", {
+            message_id: messageId,
+            channel_id: message.channel_id,
+          });
+        }
       });
+    } catch (socketErr) {
+      console.error("Socket broadcast error (non-fatal):", socketErr.message);
     }
 
     res.json({ success: true, message: "Message deleted successfully" });

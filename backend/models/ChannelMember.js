@@ -25,6 +25,10 @@ const channelMemberSchema = new Schema(
       type: Date,
       default: null,
     },
+    last_read_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
