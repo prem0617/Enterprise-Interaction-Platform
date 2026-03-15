@@ -29,6 +29,10 @@ const chatChannelSchema = new Schema(
       ref: "User",
       required: true,
     },
+    last_message_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: false },

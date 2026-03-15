@@ -1,6 +1,7 @@
 import { Message } from "../../models/Message.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
+import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 
 // Send a message
 export const sendMessage = async (req, res) => {
@@ -53,6 +54,23 @@ export const sendMessage = async (req, res) => {
     const populatedMessage = await Message.findById(message._id)
       .populate("sender_id", "first_name last_name email user_type")
       .populate("parent_message_id");
+
+    // Broadcast to all channel members via Socket.IO for real-time delivery
+    try {
+      const channelMembers = await ChannelMember.find({ channel_id });
+      channelMembers.forEach((member) => {
+        if (member.user_id.toString() === userId) return;
+        const socketId = getReceiverSocketId(member.user_id.toString());
+        if (socketId) {
+          io.to(socketId).emit("new_message", {
+            ...populatedMessage.toObject(),
+            channel_type: "group",
+          });
+        }
+      });
+    } catch (socketErr) {
+      console.error("Socket broadcast error (non-fatal):", socketErr.message);
+    }
 
     res.status(201).json({
       message: "Message sent successfully",
