@@ -35,9 +35,9 @@ export const checkIn = async (req, res) => {
     const now = new Date();
     const checkInHour = now.getHours();
 
-    // Determine status (late if after 9:30 AM)
+    // Late if checked in after 10:00 AM
     let status = "present";
-    if (checkInHour > 9 || (checkInHour === 9 && now.getMinutes() > 30)) {
+    if (checkInHour >= 10) {
       status = "late";
     }
 
@@ -95,7 +95,7 @@ export const checkOut = async (req, res) => {
     const diffMs = now - attendance.check_in;
     attendance.total_hours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
 
-    // If less than 4 hours, mark as half_day
+    // 8 flexible working hours target: half_day if less than 4 hours worked
     if (attendance.total_hours < 4 && attendance.status !== "late") {
       attendance.status = "half_day";
     }

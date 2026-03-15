@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCcw,
+  Turtle,
+  Timer,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
@@ -68,6 +70,9 @@ const LEAVE_COLORS = {
 };
 
 
+
+const REQUIRED_HOURS = 8;
+const LATE_THRESHOLD_HOUR = 10; // 10:00 AM
 
 export default function AttendanceModule() {
   const [activeTab, setActiveTab] = useState("today");
@@ -296,6 +301,12 @@ export default function AttendanceModule() {
                   </p>
                 </div>
 
+                {/* Policy info */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-800/60 border border-zinc-700/40 text-[11px] text-zinc-400">
+                  <Timer className="size-3.5 text-indigo-400 shrink-0" />
+                  <span>Check in by <strong className="text-zinc-300">10:00 AM</strong> · {REQUIRED_HOURS} flexible working hours</span>
+                </div>
+
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
@@ -318,37 +329,99 @@ export default function AttendanceModule() {
                 </div>
 
                 {/* Today Status */}
-                {todayAttendance && (
-                  <div className="rounded-lg bg-zinc-800/40 p-3 space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-500">Status</span>
-                      <Badge className={`text-[10px] border ${STATUS_BADGES[todayAttendance.status]}`}>{todayAttendance.status?.replace("_", " ")}</Badge>
-                    </div>
+                {todayAttendance && (() => {
+                  const isLate = todayAttendance.status === "late";
+                  const workedHours = todayAttendance.total_hours || 0;
+                  const hoursProgress = Math.min((workedHours / REQUIRED_HOURS) * 100, 100);
+                  const remainingHours = Math.max(REQUIRED_HOURS - workedHours, 0);
+                  const hasCompleted8 = workedHours >= REQUIRED_HOURS;
 
-                    {todayAttendance.check_in && (
+                  // Calculate live elapsed hours if still checked in
+                  let liveHours = workedHours;
+                  if (todayAttendance.check_in && !todayAttendance.check_out) {
+                    const elapsed = (now - new Date(todayAttendance.check_in)) / (1000 * 60 * 60);
+                    liveHours = Math.round(elapsed * 100) / 100;
+                  }
+                  const liveProgress = Math.min((liveHours / REQUIRED_HOURS) * 100, 100);
+                  const liveRemaining = Math.max(REQUIRED_HOURS - liveHours, 0);
+
+                  return (
+                    <div className="rounded-lg bg-zinc-800/40 p-3 space-y-3 text-sm">
+                      {/* Status row */}
                       <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Checked In</span>
-                        <span className="tabular-nums text-zinc-300">
-                          {new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
+                        <span className="text-zinc-500">Status</span>
+                        <div className="flex items-center gap-1.5">
+                          {isLate && <Turtle className="size-4 text-amber-400" />}
+                          <Badge className={`text-[10px] border ${STATUS_BADGES[todayAttendance.status]}`}>
+                            {isLate ? "Late" : todayAttendance.status?.replace("_", " ")}
+                          </Badge>
+                        </div>
                       </div>
-                    )}
-                    {todayAttendance.check_out && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Checked Out</span>
-                        <span className="tabular-nums text-zinc-300">
-                          {new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
+
+                      {/* Late warning banner */}
+                      {isLate && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                          <Turtle className="size-4 text-amber-400 shrink-0" />
+                          <span className="text-xs text-amber-300">Checked in after {LATE_THRESHOLD_HOUR}:00 AM — marked as late</span>
+                        </div>
+                      )}
+
+                      {todayAttendance.check_in && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500">Checked In</span>
+                          <span className="tabular-nums text-zinc-300">
+                            {new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      )}
+                      {todayAttendance.check_out && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500">Checked Out</span>
+                          <span className="tabular-nums text-zinc-300">
+                            {new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Working hours progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500 flex items-center gap-1">
+                            <Timer className="size-3.5" /> Working Hours
+                          </span>
+                          <span className="tabular-nums font-medium text-zinc-200">
+                            {todayAttendance.check_out ? workedHours : liveHours.toFixed(1)}h / {REQUIRED_HOURS}h
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              (todayAttendance.check_out ? hasCompleted8 : liveHours >= REQUIRED_HOURS)
+                                ? "bg-emerald-500"
+                                : isLate
+                                  ? "bg-amber-500"
+                                  : "bg-indigo-500"
+                            }`}
+                            style={{ width: `${todayAttendance.check_out ? hoursProgress : liveProgress}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                          <span>0h</span>
+                          {!todayAttendance.check_out && liveRemaining > 0 && (
+                            <span className="text-zinc-400">{liveRemaining.toFixed(1)}h remaining</span>
+                          )}
+                          {todayAttendance.check_out && remainingHours > 0 && (
+                            <span className="text-amber-400">{remainingHours.toFixed(1)}h short of target</span>
+                          )}
+                          {todayAttendance.check_out && hasCompleted8 && (
+                            <span className="text-emerald-400">Target met ✓</span>
+                          )}
+                          <span>{REQUIRED_HOURS}h</span>
+                        </div>
                       </div>
-                    )}
-                    {todayAttendance.total_hours != null && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Total Hours</span>
-                        <span className="tabular-nums font-medium text-zinc-200">{todayAttendance.total_hours}h</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -436,24 +509,41 @@ export default function AttendanceModule() {
                   <tbody>
                     {attendanceHistory.length === 0 ? (
                       <tr><td colSpan={6} className="py-12 text-center text-zinc-500">No attendance records for this month</td></tr>
-                    ) : attendanceHistory.map((r) => (
-                      <tr key={r._id} className="border-b border-zinc-800/50 hover:bg-white/[0.02]">
-                        <td className="py-2.5 px-4 text-sm">
-                          {new Date(r.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                        </td>
-                        <td className="py-2.5 px-4 text-center">
-                          <Badge className={`text-[10px] border ${STATUS_BADGES[r.status] || ""}`}>{r.status?.replace("_", " ")}</Badge>
-                        </td>
-
-                        <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
-                          {r.check_in ? new Date(r.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
-                          {r.check_out ? new Date(r.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-xs tabular-nums">{r.total_hours ? `${r.total_hours}h` : "—"}</td>
-                      </tr>
-                    ))}
+                    ) : attendanceHistory.map((r) => {
+                      const isLate = r.status === "late";
+                      const hoursPct = r.total_hours ? Math.min((r.total_hours / REQUIRED_HOURS) * 100, 100) : 0;
+                      return (
+                        <tr key={r._id} className="border-b border-zinc-800/50 hover:bg-white/[0.02]">
+                          <td className="py-2.5 px-4 text-sm">
+                            {new Date(r.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {isLate && <Turtle className="size-3.5 text-amber-400" />}
+                              <Badge className={`text-[10px] border ${STATUS_BADGES[r.status] || ""}`}>{r.status?.replace("_", " ")}</Badge>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
+                            {r.check_in ? new Date(r.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
+                            {r.check_out ? new Date(r.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            {r.total_hours ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`text-xs tabular-nums font-medium ${r.total_hours >= REQUIRED_HOURS ? "text-emerald-400" : "text-zinc-300"}`}>
+                                  {r.total_hours}h
+                                </span>
+                                <div className="w-16 h-1 rounded-full bg-zinc-700 overflow-hidden">
+                                  <div className={`h-full rounded-full ${r.total_hours >= REQUIRED_HOURS ? "bg-emerald-500" : isLate ? "bg-amber-500" : "bg-indigo-500"}`} style={{ width: `${hoursPct}%` }} />
+                                </div>
+                              </div>
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
