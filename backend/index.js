@@ -23,6 +23,9 @@ import whiteboardRoutes from "./routes/whiteboard.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import payrollRoutes from "./routes/payroll.routes.js";
+import performanceRoutes from "./routes/performance.routes.js";
+import directoryRoutes from "./routes/directory.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
@@ -91,6 +94,9 @@ app.use("/api/whiteboards", whiteboardRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payroll", payrollRoutes);
+app.use("/api/performance", performanceRoutes);
+app.use("/api/directory", directoryRoutes);
 // Admin dashboard stats
 app.get("/api/admin/stats", verifyToken, async (req, res) => {
   try {
