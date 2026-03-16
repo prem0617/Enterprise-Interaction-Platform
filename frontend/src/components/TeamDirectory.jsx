@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuthContext } from "@/context/AuthContextProvider";
 
-export default function TeamDirectory() {
+export default function TeamDirectory({ onStartChat }) {
   const { user } = useAuthContext();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,9 +65,17 @@ export default function TeamDirectory() {
       );
     });
 
-  const handleInitiateChat = (employee) => {
-    // Navigate to messages tab - parent component should handle this
-    toast.info(`Opening chat with ${employee.user_id?.first_name}...`);
+  const handleInitiateChat = async (employee) => {
+    try {
+      toast.info(`Opening chat with ${employee.user_id?.first_name}...`);
+      // Start or find existing DM channel
+      await axios.post(`${BACKEND_URL}/direct_chat/start`, { user_id: employee.user_id?._id }, { headers: { Authorization: `Bearer ${token}` } });
+      // Switch to messages tab
+      if (onStartChat) onStartChat();
+    } catch (error) {
+      toast.error("Failed to start chat");
+      console.error("Start chat error:", error);
+    }
   };
 
   if (loading) {

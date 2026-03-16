@@ -102,11 +102,25 @@ export const checkOut = async (req, res) => {
     }
 
     const now = new Date();
+
+    // Auto-end active break on checkout
+    if (attendance.is_on_break) {
+      const activeBreak = attendance.breaks.find((b) => !b.end);
+      if (activeBreak) {
+        activeBreak.end = now;
+        const breakMs = now - activeBreak.start;
+        attendance.total_break_minutes += Math.round(breakMs / 60000);
+      }
+      attendance.is_on_break = false;
+    }
+
     attendance.check_out = now;
 
-    // Calculate total hours
+    // Calculate total hours minus break time
     const diffMs = now - attendance.check_in;
-    attendance.total_hours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
+    const grossHours = diffMs / (1000 * 60 * 60);
+    const breakHours = (attendance.total_break_minutes || 0) / 60;
+    attendance.total_hours = Math.round((grossHours - breakHours) * 100) / 100;
 
     // 8 flexible working hours target: half_day if less than 4 hours worked
     if (attendance.total_hours < 4 && attendance.status !== "late") {
@@ -118,6 +132,56 @@ export const checkOut = async (req, res) => {
   } catch (error) {
     console.error("Check-out error:", error);
     res.status(500).json({ error: "Failed to check out" });
+  }
+};
+
+// ─── 2b. Start Break (Pause) ─────────────────────────
+export const startBreak = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { reason } = req.body;
+    const today = startOfDay(new Date());
+
+    const attendance = await Attendance.findOne({ employee_id: userId, date: today });
+    if (!attendance || !attendance.check_in) return res.status(400).json({ error: "You haven't checked in today" });
+    if (attendance.check_out) return res.status(400).json({ error: "Already checked out" });
+    if (attendance.is_on_break) return res.status(400).json({ error: "Already on a break" });
+
+    attendance.breaks.push({ start: new Date(), reason: reason || "" });
+    attendance.is_on_break = true;
+    await attendance.save();
+
+    res.json({ success: true, attendance });
+  } catch (error) {
+    console.error("Start break error:", error);
+    res.status(500).json({ error: "Failed to start break" });
+  }
+};
+
+// ─── 2c. End Break (Resume) ──────────────────────────
+export const endBreak = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const today = startOfDay(new Date());
+
+    const attendance = await Attendance.findOne({ employee_id: userId, date: today });
+    if (!attendance) return res.status(400).json({ error: "No attendance record" });
+    if (!attendance.is_on_break) return res.status(400).json({ error: "Not currently on a break" });
+
+    const now = new Date();
+    const activeBreak = attendance.breaks.find((b) => !b.end);
+    if (activeBreak) {
+      activeBreak.end = now;
+      const breakMs = now - activeBreak.start;
+      attendance.total_break_minutes = (attendance.total_break_minutes || 0) + Math.round(breakMs / 60000);
+    }
+    attendance.is_on_break = false;
+    await attendance.save();
+
+    res.json({ success: true, attendance });
+  } catch (error) {
+    console.error("End break error:", error);
+    res.status(500).json({ error: "Failed to end break" });
   }
 };
 

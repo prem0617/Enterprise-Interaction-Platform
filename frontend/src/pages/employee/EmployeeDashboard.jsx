@@ -208,7 +208,7 @@ export default function EmployeeDashboard() {
           {activeTab === "home" && <EmployeeHome onNavigate={setActiveTab} />}
           {activeTab === "messages" && <ChatInterface />}
 
-          {activeTab === "team" && <TeamDirectory />}
+          {activeTab === "team" && <TeamDirectory onStartChat={() => setActiveTab("messages")} />}
 
           {activeTab === "files" && <DocumentsPage />}
 

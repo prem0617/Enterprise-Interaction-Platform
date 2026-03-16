@@ -19,6 +19,9 @@ import {
   RefreshCcw,
   Turtle,
   Timer,
+  Coffee,
+  Play,
+  Pause,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
@@ -84,6 +87,7 @@ export default function AttendanceModule() {
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [togglingBreak, setTogglingBreak] = useState(false);
 
   // ─── History ───
   const [historyMonth, setHistoryMonth] = useState(() => {
@@ -193,6 +197,21 @@ export default function AttendanceModule() {
       toast.error(err.response?.data?.error || "Check-out failed");
     } finally {
       setCheckingOut(false);
+    }
+  };
+
+  const handleToggleBreak = async () => {
+    setTogglingBreak(true);
+    try {
+      const isOnBreak = todayAttendance?.is_on_break;
+      const endpoint = isOnBreak ? "break/end" : "break/start";
+      const res = await axios.post(`${BACKEND_URL}/attendance/${endpoint}`, { reason: "" }, { headers });
+      toast.success(isOnBreak ? "Break ended — back to work!" : "Break started — enjoy your break!");
+      setTodayAttendance(res.data.attendance);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to toggle break");
+    } finally {
+      setTogglingBreak(false);
     }
   };
 
@@ -309,17 +328,28 @@ export default function AttendanceModule() {
 
 
                 {/* Action Buttons */}
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   {!hasCheckedIn ? (
                     <Button className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-500 text-white gap-2" onClick={handleCheckIn} disabled={checkingIn}>
                       <LogIn className="size-4" />
                       {checkingIn ? "Checking In..." : "Check In"}
                     </Button>
                   ) : !hasCheckedOut ? (
-                    <Button className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleCheckOut} disabled={checkingOut}>
-                      <LogOut className="size-4" />
-                      {checkingOut ? "Checking Out..." : "Check Out"}
-                    </Button>
+                    <>
+                      {/* Break toggle */}
+                      <Button
+                        className={`h-11 gap-2 ${todayAttendance?.is_on_break ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20"}`}
+                        onClick={handleToggleBreak}
+                        disabled={togglingBreak}
+                      >
+                        {todayAttendance?.is_on_break ? <Play className="size-4" /> : <Coffee className="size-4" />}
+                        {togglingBreak ? "..." : todayAttendance?.is_on_break ? "Resume" : "Break"}
+                      </Button>
+                      <Button className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleCheckOut} disabled={checkingOut || todayAttendance?.is_on_break}>
+                        <LogOut className="size-4" />
+                        {checkingOut ? "Checking Out..." : "Check Out"}
+                      </Button>
+                    </>
                   ) : (
                     <div className="flex-1 flex items-center justify-center gap-2 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                       <CheckCircle2 className="size-4 text-emerald-400" />
@@ -327,6 +357,22 @@ export default function AttendanceModule() {
                     </div>
                   )}
                 </div>
+
+                {/* Break status indicator */}
+                {todayAttendance?.is_on_break && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/20 animate-pulse">
+                    <Coffee className="size-4 text-amber-400" />
+                    <span className="text-xs text-amber-300">On break — click Resume to continue working</span>
+                  </div>
+                )}
+
+                {/* Break summary */}
+                {todayAttendance?.breaks?.length > 0 && !todayAttendance?.is_on_break && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-800/40 text-[11px] text-zinc-400">
+                    <Coffee className="size-3 text-zinc-500" />
+                    <span>{todayAttendance.breaks.length} break{todayAttendance.breaks.length > 1 ? "s" : ""} · {todayAttendance.total_break_minutes || 0} min total</span>
+                  </div>
+                )}
 
                 {/* Today Status */}
                 {todayAttendance && (() => {
