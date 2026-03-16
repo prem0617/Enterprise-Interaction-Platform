@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { BACKEND_URL } from "../../../config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { DollarSign, Users, TrendingUp, Clock, RefreshCcw, Check, ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { DollarSign, Users, TrendingUp, Clock, RefreshCcw, Check, ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, X, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_STYLES = { draft: "bg-zinc-500/15 text-zinc-300 border-zinc-500/20", processed: "bg-blue-500/15 text-blue-300 border-blue-500/20", paid: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20", cancelled: "bg-red-500/15 text-red-300 border-red-500/20" };
@@ -28,6 +28,9 @@ export default function PayrollPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [empSearch, setEmpSearch] = useState("");
+  const [empDropdownOpen, setEmpDropdownOpen] = useState(false);
+  const empSearchRef = useRef(null);
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -55,6 +58,15 @@ export default function PayrollPage() {
   useEffect(() => { fetchPayroll(); }, [fetchPayroll]);
   useEffect(() => { fetchEmployees(); }, []);
 
+  // Close employee dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (empSearchRef.current && !empSearchRef.current.contains(e.target)) setEmpDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const changeMonth = (delta) => {
     const [y, m] = month.split("-").map(Number);
     const d = new Date(y, m - 1 + delta, 1);
@@ -65,6 +77,8 @@ export default function PayrollPage() {
     const [y, m] = month.split("-").map(Number);
     setEditingId(null);
     setForm({ ...EMPTY_FORM, pay_period_start: new Date(y, m - 1, 1).toISOString().split("T")[0], pay_period_end: new Date(y, m, 0).toISOString().split("T")[0] });
+    setEmpSearch("");
+    setEmpDropdownOpen(false);
     setDialogOpen(true);
   };
 
@@ -81,10 +95,21 @@ export default function PayrollPage() {
     setDialogOpen(true);
   };
 
-  const handleEmployeeSelect = (empId) => {
-    const emp = employees.find((e) => e._id === empId);
-    if (emp) setForm((f) => ({ ...f, employee_id: emp._id, user_id: emp.user_id }));
+  const handleEmployeeSelect = (emp) => {
+    setForm((f) => ({ ...f, employee_id: emp._id, user_id: emp.user_id }));
+    setEmpSearch(`${emp.first_name} ${emp.last_name}`);
+    setEmpDropdownOpen(false);
   };
+
+  const filteredEmployees = empSearch.trim()
+    ? employees.filter((e) => {
+        const q = empSearch.toLowerCase();
+        return `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+          e.email?.toLowerCase().includes(q) ||
+          e.department?.toLowerCase().includes(q) ||
+          e.position?.toLowerCase().includes(q);
+      })
+    : employees;
 
   const handleSave = async () => {
     if (!form.employee_id || !form.base_salary || !form.pay_period_start || !form.pay_period_end) {
@@ -221,18 +246,55 @@ export default function PayrollPage() {
               <DialogTitle className="text-lg">{editingId ? "Edit Payroll Record" : "Create Payroll Record"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
-              {/* Employee selector */}
+              {/* Employee search selector */}
               {!editingId && (
                 <div className="space-y-1.5">
                   <Label className="text-zinc-400 text-xs">Employee *</Label>
-                  <Select value={form.employee_id} onValueChange={handleEmployeeSelect}>
-                    <SelectTrigger className="bg-zinc-800 border-zinc-700"><SelectValue placeholder="Select employee" /></SelectTrigger>
-                    <SelectContent className="bg-zinc-800 border-zinc-700">
-                      {employees.map((e) => (
-                        <SelectItem key={e._id} value={e._id}>{e.first_name} {e.last_name} — {e.department} ({e.position})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative" ref={empSearchRef}>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500 pointer-events-none" />
+                      <Input
+                        value={empSearch}
+                        onChange={(e) => { setEmpSearch(e.target.value); setEmpDropdownOpen(true); if (!e.target.value) setForm((f) => ({ ...f, employee_id: "", user_id: "" })); }}
+                        onFocus={() => setEmpDropdownOpen(true)}
+                        placeholder="Search by name, email, department..."
+                        className="pl-9 bg-zinc-800 border-zinc-700"
+                      />
+                      {form.employee_id && (
+                        <button onClick={() => { setEmpSearch(""); setForm((f) => ({ ...f, employee_id: "", user_id: "" })); setEmpDropdownOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300">
+                          <X className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {empDropdownOpen && filteredEmployees.length > 0 && (
+                      <div className="absolute z-50 top-full mt-1 w-full max-h-[200px] overflow-y-auto bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl">
+                        {filteredEmployees.map((e) => (
+                          <button
+                            key={e._id}
+                            type="button"
+                            onClick={() => handleEmployeeSelect(e)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-700/50 transition-colors border-b border-zinc-700/30 last:border-0 ${form.employee_id === e._id ? "bg-indigo-500/10" : ""}`}
+                          >
+                            <div className="size-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-300 flex-shrink-0">
+                              {e.first_name?.[0]}{e.last_name?.[0]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-zinc-200 truncate">{e.first_name} {e.last_name}</p>
+                              <p className="text-[10px] text-zinc-500 truncate">{e.email} · {e.department} · {e.position?.replace(/_/g, " ")}</p>
+                            </div>
+                            {form.employee_id === e._id && <Check className="size-4 text-indigo-400 flex-shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {empDropdownOpen && empSearch.trim() && filteredEmployees.length === 0 && (
+                      <div className="absolute z-50 top-full mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl p-4 text-center text-sm text-zinc-500">
+                        No employees match "{empSearch}"
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
