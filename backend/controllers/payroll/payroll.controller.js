@@ -71,6 +71,33 @@ export const processPayroll = async (req, res) => {
   }
 };
 
+// Admin: Delete payroll record
+export const deletePayroll = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payroll = await Payroll.findById(id);
+    if (!payroll) return res.status(404).json({ error: "Not found" });
+    if (payroll.status === "paid") return res.status(400).json({ error: "Cannot delete a paid record" });
+    await Payroll.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete" });
+  }
+};
+
+// Admin: Get employees for payroll dropdown
+export const getEmployeesForPayroll = async (req, res) => {
+  try {
+    const employees = await Employee.find({ is_active: true })
+      .populate("user_id", "first_name last_name email")
+      .populate("department", "name")
+      .lean();
+    res.json({ employees: employees.map((e) => ({ _id: e._id, user_id: e.user_id?._id, first_name: e.user_id?.first_name, last_name: e.user_id?.last_name, email: e.user_id?.email, department: e.department?.name, position: e.position })) });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch employees" });
+  }
+};
+
 // Employee: Get my payroll history
 export const getMyPayroll = async (req, res) => {
   try {
