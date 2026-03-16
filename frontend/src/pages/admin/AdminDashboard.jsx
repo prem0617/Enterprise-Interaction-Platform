@@ -152,17 +152,14 @@ export default function AdminDashboard() {
               <Hexagon className="size-4 text-white" />
             </div>
             {!sidebarCollapsed && (
-              <>
-                <div className="flex flex-col justify-center h-16 min-w-0 flex-1">
-                  <span className="text-sm font-semibold tracking-tight truncate leading-tight">
-                    Enterprise
-                  </span>
-                  <span className="text-[10px] text-zinc-500 font-medium leading-none">
-                    Admin Portal
-                  </span>
-                </div>
-                <NotificationBell />
-              </>
+              <div className="flex flex-col justify-center h-16 min-w-0">
+                <span className="text-sm font-semibold tracking-tight truncate leading-tight">
+                  Enterprise
+                </span>
+                <span className="text-[10px] text-zinc-500 font-medium leading-none">
+                  Admin Portal
+                </span>
+              </div>
             )}
           </div>
 
@@ -259,6 +256,14 @@ export default function AdminDashboard() {
 
         {/* ─── Main content ─── */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar - Desktop */}
+          <header className="hidden lg:flex h-12 bg-zinc-950/80 backdrop-blur-sm border-b border-white/[0.06] items-center justify-end px-6 gap-3 sticky top-0 z-40">
+            <span className="text-xs text-zinc-500 mr-auto">
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </span>
+            <NotificationBell />
+          </header>
+
           {/* Top bar - Mobile */}
           <header className="lg:hidden h-14 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4">
             <div className="flex items-center gap-3">

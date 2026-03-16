@@ -182,9 +182,9 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown — fixed to top-right of viewport so it never clips */}
+      {/* Dropdown */}
       {open && (
-        <div className="fixed right-4 top-14 w-[380px] max-h-[480px] bg-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden z-[200] flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden z-[200] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
             <h3 className="text-sm font-semibold text-zinc-200">Notifications</h3>
