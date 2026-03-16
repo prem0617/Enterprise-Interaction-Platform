@@ -75,7 +75,24 @@ const LEAVE_COLORS = {
 
 
 const REQUIRED_HOURS = 8;
-const LATE_THRESHOLD_HOUR = 10; // 10:00 AM
+const LATE_THRESHOLD_HOUR = 10;
+
+function TimelineEvent({ icon, color, label, time, detail, active }) {
+  return (
+    <div className="relative flex items-start gap-3 pb-4">
+      <div className={`absolute left-[-18px] size-[18px] rounded-full flex items-center justify-center ring-2 ring-zinc-900 z-10 ${active ? `bg-${color}-500 animate-pulse` : `bg-${color}-500/20`} text-${color}-400`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0 pt-0.5">
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-medium ${active ? `text-${color}-300` : "text-zinc-300"}`}>{label}</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{time}</span>
+        </div>
+        {detail && <p className="text-[10px] text-zinc-500 mt-0.5">{detail}</p>}
+      </div>
+    </div>
+  );
+}
 
 export default function AttendanceModule() {
   const [activeTab, setActiveTab] = useState("today");
@@ -88,6 +105,7 @@ export default function AttendanceModule() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [togglingBreak, setTogglingBreak] = useState(false);
+  const [monthlyStats, setMonthlyStats] = useState(null);
 
   // ─── History ───
   const [historyMonth, setHistoryMonth] = useState(() => {
@@ -162,10 +180,28 @@ export default function AttendanceModule() {
     }
   }, []);
 
+  const fetchMonthlyStats = useCallback(async () => {
+    try {
+      const now = new Date();
+      const res = await axios.get(`${BACKEND_URL}/attendance/history?year=${now.getFullYear()}&month=${now.getMonth() + 1}`, { headers });
+      const records = res.data.records || [];
+      const daysWorked = records.filter((r) => ["present", "late", "half_day"].includes(r.status));
+      const totalHours = daysWorked.reduce((sum, r) => sum + (r.total_hours || 0), 0);
+      const avgHours = daysWorked.length > 0 ? totalHours / daysWorked.length : 0;
+      setMonthlyStats({
+        daysWorked: daysWorked.length,
+        totalHours: Math.round(totalHours * 10) / 10,
+        avgHours: Math.round(avgHours * 10) / 10,
+        lateDays: records.filter((r) => r.status === "late").length,
+        totalBreakMin: records.reduce((sum, r) => sum + (r.total_break_minutes || 0), 0),
+      });
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([fetchToday(), fetchHistory(), fetchLeaveBalance(), fetchMyLeaves(), fetchHolidays()]);
+      await Promise.all([fetchToday(), fetchHistory(), fetchLeaveBalance(), fetchMyLeaves(), fetchHolidays(), fetchMonthlyStats()]);
       setLoading(false);
     };
     init();
@@ -508,6 +544,133 @@ export default function AttendanceModule() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ─── Monthly Stats + Timeline Row ─── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Monthly Average Working Hours */}
+            {monthlyStats && (
+              <Card className="bg-zinc-900/80 border-zinc-800/80 overflow-hidden">
+                <div className="h-[2px] bg-gradient-to-r from-cyan-500 to-blue-500 opacity-60" />
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Timer className="size-4 text-cyan-400" />
+                    Monthly Overview
+                    <span className="ml-auto text-[10px] text-zinc-500 font-normal">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Average hours gauge */}
+                  <div className="text-center py-2">
+                    <p className={`text-4xl font-bold tabular-nums ${monthlyStats.avgHours >= 7.5 ? "text-emerald-400" : monthlyStats.avgHours >= 6 ? "text-amber-400" : "text-red-400"}`}>
+                      {monthlyStats.avgHours}h
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">avg daily working hours</p>
+                    <div className="w-full max-w-[200px] mx-auto mt-2 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${monthlyStats.avgHours >= 7.5 ? "bg-emerald-500" : monthlyStats.avgHours >= 6 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min((monthlyStats.avgHours / REQUIRED_HOURS) * 100, 100)}%` }} />
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-1">Target: {REQUIRED_HOURS}h / day</p>
+                  </div>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.daysWorked}</p>
+                      <p className="text-[10px] text-zinc-500">Days Worked</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.totalHours}h</p>
+                      <p className="text-[10px] text-zinc-500">Total Hours</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-amber-400 tabular-nums">{monthlyStats.lateDays}</p>
+                      <p className="text-[10px] text-zinc-500">Late Days</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.totalBreakMin}m</p>
+                      <p className="text-[10px] text-zinc-500">Total Breaks</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Today's Activity Timeline */}
+            <Card className="bg-zinc-900/80 border-zinc-800/80 overflow-hidden">
+              <div className="h-[2px] bg-gradient-to-r from-violet-500 to-fuchsia-500 opacity-60" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <Clock className="size-4 text-violet-400" />
+                  Today's Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!todayAttendance ? (
+                  <p className="text-sm text-zinc-500 py-6 text-center">No activity yet today</p>
+                ) : (
+                  <div className="relative pl-6 space-y-0">
+                    {/* Timeline line */}
+                    <div className="absolute left-[9px] top-2 bottom-2 w-[2px] bg-zinc-800" />
+
+                    {/* Check-in event */}
+                    {todayAttendance.check_in && (
+                      <TimelineEvent
+                        icon={<LogIn className="size-3" />}
+                        color="emerald"
+                        label="Checked In"
+                        time={new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        detail={todayAttendance.status === "late" ? "Late arrival" : "On time"}
+                      />
+                    )}
+
+                    {/* Break events */}
+                    {todayAttendance.breaks?.map((b, i) => (
+                      <div key={i}>
+                        <TimelineEvent
+                          icon={<Coffee className="size-3" />}
+                          color="amber"
+                          label={`Break ${i + 1} Started`}
+                          time={new Date(b.start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          detail={b.reason || "Break"}
+                        />
+                        {b.end && (
+                          <TimelineEvent
+                            icon={<Play className="size-3" />}
+                            color="blue"
+                            label="Resumed Work"
+                            time={new Date(b.end).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                            detail={`${Math.round((new Date(b.end) - new Date(b.start)) / 60000)} min break`}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    {/* On break indicator */}
+                    {todayAttendance.is_on_break && (
+                      <TimelineEvent
+                        icon={<Coffee className="size-3" />}
+                        color="amber"
+                        label="Currently on Break"
+                        time="now"
+                        detail="Ongoing..."
+                        active
+                      />
+                    )}
+
+                    {/* Check-out event */}
+                    {todayAttendance.check_out && (
+                      <TimelineEvent
+                        icon={<LogOut className="size-3" />}
+                        color="red"
+                        label="Checked Out"
+                        time={new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        detail={`${todayAttendance.total_hours}h worked · ${todayAttendance.total_break_minutes || 0}m breaks`}
+                      />
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
