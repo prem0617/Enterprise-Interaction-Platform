@@ -808,9 +808,16 @@ export default function EmployeeManagement() {
                                   </span>
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium text-zinc-200">
-                                    {fullName}
-                                  </p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-sm font-medium text-zinc-200">
+                                      {fullName}
+                                    </p>
+                                    {employee.emp_code && (
+                                      <span className="text-[9px] font-mono text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                                        {employee.emp_code}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-xs text-zinc-500">
                                     {employee.user_id?.email}
                                   </p>
@@ -899,9 +906,10 @@ export default function EmployeeManagement() {
                               </span>
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-zinc-200">
-                                {fullName}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-zinc-200">{fullName}</p>
+                                {employee.emp_code && <span className="text-[9px] font-mono text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">{employee.emp_code}</span>}
+                              </div>
                               <p className="text-xs text-zinc-500">
                                 {employee.user_id?.email}
                               </p>
@@ -1218,9 +1226,9 @@ export default function EmployeeManagement() {
                     onChange={handleFormChange}
                     className={selectClasses}
                   >
-                    {DEPARTMENTS.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
+                    {departments.map((d) => (
+                      <option key={d._id} value={d._id}>
+                        {d.name}
                       </option>
                     ))}
                   </select>

@@ -333,9 +333,10 @@ export const getAllEmployees = async (req, res) => {
     if (employee_type) filter.employee_type = employee_type;
     if (is_active !== undefined) filter.is_active = is_active === "true";
 
-    // If search is provided, we need to find matching user IDs first
+    // If search is provided, match by name, email, or emp_code
     if (search && search.trim()) {
-      const searchRegex = new RegExp(search.trim(), "i");
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(escaped, "i");
       const matchingUsers = await User.find({
         $or: [
           { first_name: searchRegex },
@@ -344,7 +345,19 @@ export const getAllEmployees = async (req, res) => {
         ],
       }).select("_id");
       const userIds = matchingUsers.map((u) => u._id);
-      filter.user_id = { $in: userIds };
+
+      // Also match emp_code directly
+      const empCodeMatches = await Employee.find({ emp_code: searchRegex }).select("_id");
+      const empCodeIds = empCodeMatches.map((e) => e._id);
+
+      if (empCodeIds.length > 0) {
+        filter.$or = [
+          { user_id: { $in: userIds } },
+          { _id: { $in: empCodeIds } },
+        ];
+      } else {
+        filter.user_id = { $in: userIds };
+      }
     }
 
     // Server-side pagination (optional — if page param is provided)
