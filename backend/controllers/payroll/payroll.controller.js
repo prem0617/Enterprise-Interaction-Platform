@@ -96,7 +96,7 @@ export const getEmployeesForPayroll = async (req, res) => {
       .populate("user_id", "first_name last_name email")
       .populate("department", "name")
       .lean();
-    res.json({ employees: employees.map((e) => ({ _id: e._id, user_id: e.user_id?._id, first_name: e.user_id?.first_name, last_name: e.user_id?.last_name, email: e.user_id?.email, department: e.department?.name, position: e.position })) });
+    res.json({ employees: employees.map((e) => ({ _id: e._id, user_id: e.user_id?._id, emp_code: e.emp_code, first_name: e.user_id?.first_name, last_name: e.user_id?.last_name, email: e.user_id?.email, department: e.department?.name, position: e.position })) });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch employees" });
   }

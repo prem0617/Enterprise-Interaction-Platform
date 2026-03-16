@@ -16,6 +16,7 @@ export const getDirectory = async (req, res) => {
     let result = employees.map((emp) => ({
       _id: emp._id,
       user_id: emp.user_id?._id,
+      emp_code: emp.emp_code,
       first_name: emp.user_id?.first_name,
       last_name: emp.user_id?.last_name,
       full_name: `${emp.user_id?.first_name || ""} ${emp.user_id?.last_name || ""}`.trim(),
@@ -41,7 +42,8 @@ export const getDirectory = async (req, res) => {
       result = result.filter((e) =>
         e.full_name.toLowerCase().includes(q) ||
         e.email?.toLowerCase().includes(q) ||
-        e.position?.toLowerCase().includes(q)
+        e.position?.toLowerCase().includes(q) ||
+        e.emp_code?.toLowerCase().includes(q)
       );
     }
     if (department) result = result.filter((e) => e.department?._id?.toString() === department || e.department?.name === department);
@@ -78,6 +80,7 @@ export const getOrgTree = async (req, res) => {
         deptMap[deptId].employees.push({
           _id: emp._id,
           user_id: emp.user_id?._id,
+          emp_code: emp.emp_code,
           first_name: emp.user_id?.first_name,
           last_name: emp.user_id?.last_name,
           email: emp.user_id?.email,

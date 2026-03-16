@@ -52,11 +52,12 @@ function OrgNode({ dept, level = 0 }) {
               <div className="size-7 rounded-full bg-indigo-500/15 flex items-center justify-center text-[10px] font-bold text-indigo-300 flex-shrink-0">
                 {emp.first_name?.[0]}{emp.last_name?.[0]}
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-xs text-zinc-300">{emp.first_name} {emp.last_name}</span>
-                <Badge className={`ml-2 text-[9px] border ${POS_COLORS[emp.position] || POS_COLORS.engineer}`}>{formatLabel(emp.position)}</Badge>
-              </div>
-              <span className="text-[10px] text-zinc-600">{emp.email}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-zinc-300">{emp.first_name} {emp.last_name}</span>
+                        {emp.emp_code && <span className="ml-1.5 text-[9px] text-zinc-600 font-mono">{emp.emp_code}</span>}
+                        <Badge className={`ml-2 text-[9px] border ${POS_COLORS[emp.position] || POS_COLORS.engineer}`}>{formatLabel(emp.position)}</Badge>
+                      </div>
+                      <span className="text-[10px] text-zinc-600">{emp.email}</span>
             </div>
           ))}
           {dept.children?.map((child) => <OrgNode key={child._id} dept={child} level={level + 1} />)}
@@ -135,7 +136,10 @@ export default function DirectoryPage() {
                         {emp.first_name?.[0]}{emp.last_name?.[0]}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-zinc-200 truncate">{emp.full_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-zinc-200 truncate">{emp.full_name}</p>
+                          {emp.emp_code && <span className="text-[10px] font-mono text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">{emp.emp_code}</span>}
+                        </div>
                         <Badge className={`text-[9px] border mt-1 ${POS_COLORS[emp.position] || ""}`}>{formatLabel(emp.position)}</Badge>
                       </div>
                     </div>

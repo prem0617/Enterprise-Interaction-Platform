@@ -107,7 +107,8 @@ export default function PayrollPage() {
         return `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
           e.email?.toLowerCase().includes(q) ||
           e.department?.toLowerCase().includes(q) ||
-          e.position?.toLowerCase().includes(q);
+          e.position?.toLowerCase().includes(q) ||
+          e.emp_code?.toLowerCase().includes(q);
       })
     : employees;
 
@@ -205,7 +206,10 @@ export default function PayrollPage() {
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-2">
                           <div className="size-7 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-300">{r.user_id?.first_name?.[0]}{r.user_id?.last_name?.[0]}</div>
-                          <div><p className="text-sm text-zinc-200">{r.user_id?.first_name} {r.user_id?.last_name}</p><p className="text-[10px] text-zinc-500">{r.user_id?.email}</p></div>
+                          <div>
+                            <div className="flex items-center gap-1.5"><p className="text-sm text-zinc-200">{r.user_id?.first_name} {r.user_id?.last_name}</p>{r.employee_id?.emp_code && <span className="text-[9px] font-mono text-indigo-400/60">{r.employee_id.emp_code}</span>}</div>
+                            <p className="text-[10px] text-zinc-500">{r.user_id?.email}</p>
+                          </div>
                         </div>
                       </td>
                       <td className="py-2.5 px-4 text-xs text-zinc-400">{r.employee_id?.department?.name || "—"}</td>
@@ -281,7 +285,7 @@ export default function PayrollPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm text-zinc-200 truncate">{e.first_name} {e.last_name}</p>
-                              <p className="text-[10px] text-zinc-500 truncate">{e.email} · {e.department} · {e.position?.replace(/_/g, " ")}</p>
+                              <p className="text-[10px] text-zinc-500 truncate">{e.emp_code && <span className="font-mono text-indigo-400/70 mr-1">{e.emp_code}</span>}{e.email} · {e.department} · {e.position?.replace(/_/g, " ")}</p>
                             </div>
                             {form.employee_id === e._id && <Check className="size-4 text-indigo-400 flex-shrink-0" />}
                           </button>

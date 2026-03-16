@@ -116,6 +116,18 @@ export const searchUsers = async (req, res) => {
       .select("first_name last_name email user_type country profile_picture")
       .limit(parseInt(limit));
 
+    // Also search by emp_code
+    const empCodeMatches = await Employee.find({ emp_code: { $regex: query, $options: "i" } }).select("user_id").lean();
+    const empCodeUserIds = empCodeMatches.map((e) => e.user_id.toString());
+    // Merge emp_code matches with name/email matches (avoid duplicates)
+    const userIds = new Set(users.map((u) => u._id.toString()));
+    if (empCodeUserIds.length > 0) {
+      const extraUsers = await User.find({ _id: { $in: empCodeUserIds.filter((id) => !userIds.has(id)), $ne: currentUserId }, status: "active" })
+        .select("first_name last_name email user_type country profile_picture")
+        .limit(parseInt(limit));
+      users.push(...extraUsers);
+    }
+
     // Get employee details if user is employee
     const usersWithDetails = await Promise.all(
       users.map(async (user) => {
@@ -123,7 +135,7 @@ export const searchUsers = async (req, res) => {
 
         if (user.user_type === "employee") {
           const employee = await Employee.findOne({ user_id: user._id }).select(
-            "department position employee_type"
+            "department position employee_type emp_code"
           );
           employeeInfo = employee;
         }
