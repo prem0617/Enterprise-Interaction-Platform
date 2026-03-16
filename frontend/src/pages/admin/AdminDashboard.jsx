@@ -20,6 +20,7 @@ import DirectoryPage from "./DirectoryPage";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
 import NotificationBell from "@/components/NotificationBell";
+import BroadcastDialog from "@/components/BroadcastDialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -275,6 +276,7 @@ export default function AdminDashboard() {
             <span className="text-xs text-zinc-500 mr-auto">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
             </span>
+            <BroadcastDialog />
             <NotificationBell />
           </header>
 

@@ -6,11 +6,13 @@ import {
   getUnreadCount,
   deleteNotification,
 } from "../controllers/notification/notification.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { sendBroadcast } from "../controllers/notification/broadcast.controller.js";
+import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 router.use(verifyToken);
 
+router.post("/broadcast", isAdmin, sendBroadcast);
 router.get("/", getNotifications);
 router.get("/unread-count", getUnreadCount);
 router.put("/read-all", markAllAsRead);
