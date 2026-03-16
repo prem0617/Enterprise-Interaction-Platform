@@ -18,6 +18,16 @@ import {
   Trash2,
   Lock,
   CheckCircle2,
+  Users,
+  MessageSquare,
+  Video,
+  Briefcase,
+  CalendarCheck,
+  DollarSign,
+  Star,
+  Network,
+  BarChart3,
+  LayoutDashboard,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
@@ -367,6 +377,9 @@ const AdminProfilePage = ({ onNavigate }) => {
         </div>
       </div>
 
+      {/* ─── Quick Stats Row ─── */}
+      <QuickStatsRow />
+
       {/* ─── Content Grid ─── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Personal Information */}
@@ -542,6 +555,12 @@ const AdminProfilePage = ({ onNavigate }) => {
         </div>
       </div>
 
+      {/* ─── Additional Widgets Row ─── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <RecentActivityWidget />
+        <QuickLinksWidget onNavigate={onNavigate} />
+      </div>
+
       <ImageCropModal
         open={cropModalOpen}
         onClose={() => {
@@ -554,6 +573,141 @@ const AdminProfilePage = ({ onNavigate }) => {
     </div>
   );
 };
+
+// ─── Quick Stats Row ────────────────────────────────────
+function QuickStatsRow() {
+  const [stats, setStats] = useState(null);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await axios.get(`${BACKEND_URL}/analytics/overview`, { headers: { Authorization: `Bearer ${token}` } });
+        setStats(res.data);
+      } catch { /* silent */ }
+    };
+    fetchStats();
+  }, []);
+
+  if (!stats) return null;
+
+  const items = [
+    { label: "Employees", value: stats.totalEmployees, icon: Users, color: "indigo" },
+    { label: "Messages Today", value: stats.totalMessagesToday, icon: MessageSquare, color: "blue" },
+    { label: "Meetings", value: stats.totalMeetingsThisMonth, icon: Video, color: "emerald" },
+    { label: "Pending Leaves", value: stats.pendingLeaves, icon: Briefcase, color: "amber" },
+    { label: "Present Today", value: stats.todayAttendance?.present || 0, icon: CalendarCheck, color: "green" },
+    { label: "Late Today", value: stats.todayAttendance?.late || 0, icon: Clock, color: "red" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {items.map(({ label, value, icon: Icon, color }) => (
+        <Card key={label} className="bg-zinc-900/80 border-zinc-800/80">
+          <CardContent className="p-3 flex items-center gap-2.5">
+            <div className={`p-1.5 rounded-lg bg-${color}-500/10`}>
+              <Icon className={`size-4 text-${color}-400`} />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-white tabular-nums leading-none">{value}</p>
+              <p className="text-[9px] text-zinc-500 mt-0.5">{label}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ─── Recent Activity Widget ─────────────────────────────
+function RecentActivityWidget() {
+  const [notifications, setNotifications] = useState([]);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const res = await axios.get(`${BACKEND_URL}/notifications?limit=6`, { headers: { Authorization: `Bearer ${token}` } });
+        setNotifications(res.data.notifications || []);
+      } catch { /* silent */ }
+    };
+    fetch();
+  }, []);
+
+  function timeAgo(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  return (
+    <Card className="bg-zinc-900/80 border-zinc-800/80">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Clock className="size-4 text-blue-400" />
+          Recent Activity
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {notifications.length === 0 ? (
+          <p className="text-sm text-zinc-500 py-4 text-center">No recent activity</p>
+        ) : notifications.map((n) => (
+          <div key={n._id} className="flex items-start gap-2.5 py-2 border-b border-zinc-800/40 last:border-0">
+            <div className={`size-2 rounded-full mt-1.5 flex-shrink-0 ${n.is_read ? "bg-zinc-700" : "bg-indigo-500"}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-zinc-300 line-clamp-1">{n.title}</p>
+              {n.body && <p className="text-[10px] text-zinc-500 line-clamp-1 mt-0.5">{n.body}</p>}
+            </div>
+            <span className="text-[10px] text-zinc-600 flex-shrink-0">{timeAgo(n.created_at)}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Quick Links Widget ─────────────────────────────────
+function QuickLinksWidget({ onNavigate }) {
+  const links = [
+    { label: "Manage Employees", icon: Users, page: "employees", color: "indigo" },
+    { label: "View Analytics", icon: BarChart3, page: "analytics", color: "cyan" },
+    { label: "Payroll", icon: DollarSign, page: "payroll", color: "emerald" },
+    { label: "Performance Reviews", icon: Star, page: "performance", color: "amber" },
+    { label: "Employee Directory", icon: Network, page: "directory", color: "violet" },
+    { label: "Departments", icon: Building, page: "departments", color: "pink" },
+  ];
+
+  return (
+    <Card className="bg-zinc-900/80 border-zinc-800/80">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <LayoutDashboard className="size-4 text-violet-400" />
+          Quick Links
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-2">
+          {links.map(({ label, icon: Icon, page, color }) => (
+            <button
+              key={page}
+              onClick={() => onNavigate?.(page)}
+              className={`flex items-center gap-2.5 p-3 rounded-lg border border-zinc-800/60 hover:border-${color}-500/30 hover:bg-${color}-500/5 transition-all text-left group`}
+            >
+              <div className={`p-1.5 rounded-lg bg-${color}-500/10 group-hover:bg-${color}-500/20 transition-colors`}>
+                <Icon className={`size-4 text-${color}-400`} />
+              </div>
+              <span className="text-xs font-medium text-zinc-300 group-hover:text-zinc-100">{label}</span>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Profile Field ─────────────────────────────────────
 const ProfileField = ({

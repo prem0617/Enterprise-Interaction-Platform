@@ -363,9 +363,6 @@ export const leaveGroupCall = async (req, res) => {
     }
 
     call.participantIds = call.participantIds.filter((id) => id !== userIdStr);
-    // Clear call status for the user who left
-    clearUserCallStatus(userIdStr);
-    // Clear call status for the user who left
     clearUserCallStatus(userIdStr);
 
     const payload = {

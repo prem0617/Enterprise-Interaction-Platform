@@ -6,6 +6,7 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import { cloudinary } from "../../config/cloudinary.js";
+import { createNotification } from "../../utils/notificationHelper.js";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
@@ -115,6 +116,18 @@ export const searchUsers = async (req, res) => {
       .select("first_name last_name email user_type country profile_picture")
       .limit(parseInt(limit));
 
+    // Also search by emp_code
+    const empCodeMatches = await Employee.find({ emp_code: { $regex: query, $options: "i" } }).select("user_id").lean();
+    const empCodeUserIds = empCodeMatches.map((e) => e.user_id.toString());
+    // Merge emp_code matches with name/email matches (avoid duplicates)
+    const userIds = new Set(users.map((u) => u._id.toString()));
+    if (empCodeUserIds.length > 0) {
+      const extraUsers = await User.find({ _id: { $in: empCodeUserIds.filter((id) => !userIds.has(id)), $ne: currentUserId }, status: "active" })
+        .select("first_name last_name email user_type country profile_picture")
+        .limit(parseInt(limit));
+      users.push(...extraUsers);
+    }
+
     // Get employee details if user is employee
     const usersWithDetails = await Promise.all(
       users.map(async (user) => {
@@ -122,7 +135,7 @@ export const searchUsers = async (req, res) => {
 
         if (user.user_type === "employee") {
           const employee = await Employee.findOne({ user_id: user._id }).select(
-            "department position employee_type"
+            "department position employee_type emp_code"
           );
           employeeInfo = employee;
         }
@@ -769,6 +782,22 @@ export const sendMessage = async (req, res) => {
       }, MESSAGE_DELIVERY_RETRY_MS);
     });
 
+    // Create notification for recipients
+    const senderName = `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`.trim();
+    channelMembers.forEach((member) => {
+      const memberUserId = member.user_id.toString();
+      if (memberUserId === currentUserId) return;
+      createNotification({
+        recipientId: memberUserId,
+        type: "message",
+        priority: "medium",
+        title: `New message from ${senderName}`,
+        body: populatedMessage.content?.slice(0, 120) || "",
+        actorId: currentUserId,
+        reference: { kind: "channel", id: channelId },
+      }).catch(() => {});
+    });
+
     res.status(201).json({
       message: "Message sent successfully",
       data: {
@@ -1198,7 +1227,7 @@ export const uploadFileMessage = async (req, res) => {
   try {
     const { channelId } = req.params;
     const { caption } = req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -1253,16 +1282,18 @@ export const uploadFileMessage = async (req, res) => {
     await newMessage.save();
     await newMessage.populate(
       "sender_id",
-      "first_name last_name full_name email user_type"
+      "first_name last_name email user_type"
     );
 
-    // ✅ Complete response object
+    const senderFullName = `${newMessage.sender_id.first_name || ""} ${newMessage.sender_id.last_name || ""}`.trim();
+
+    // Complete response object
     const messageResponse = {
       _id: newMessage._id,
       channel_id: newMessage.channel_id,
       sender_id: newMessage.sender_id._id,
       content: newMessage.content,
-      message_type: "file", // ✅ Critical field
+      message_type: "file",
       file_url: newMessage.file_url,
       file_name: newMessage.file_name,
       file_type: newMessage.file_type,
@@ -1275,7 +1306,7 @@ export const uploadFileMessage = async (req, res) => {
         _id: newMessage.sender_id._id,
         first_name: newMessage.sender_id.first_name,
         last_name: newMessage.sender_id.last_name,
-        full_name: newMessage.sender_id.full_name,
+        full_name: senderFullName,
         email: newMessage.sender_id.email,
         user_type: newMessage.sender_id.user_type,
       },
@@ -1332,7 +1363,7 @@ export const uploadFileMessage = async (req, res) => {
 export const deleteFileMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const message = await Message.findById(messageId);
     if (!message) {
@@ -1361,13 +1392,23 @@ export const deleteFileMessage = async (req, res) => {
     message.deleted_at = new Date();
     await message.save();
 
-    // Emit socket event
-    const io = req.app.get("io");
-    if (io) {
-      io.to(message.channel_id.toString()).emit("message_deleted", {
-        message_id: messageId,
+    // Emit socket event to all channel members
+    try {
+      const channelMembers = await ChannelMember.find({
         channel_id: message.channel_id,
+        user_id: { $ne: userId },
+      }).select("user_id");
+      channelMembers.forEach((member) => {
+        const socketId = getReceiverSocketId(member.user_id.toString());
+        if (socketId) {
+          io.to(socketId).emit("message_deleted", {
+            message_id: messageId,
+            channel_id: message.channel_id,
+          });
+        }
       });
+    } catch (socketErr) {
+      console.error("Socket broadcast error (non-fatal):", socketErr.message);
     }
 
     res.json({ success: true, message: "Message deleted successfully" });

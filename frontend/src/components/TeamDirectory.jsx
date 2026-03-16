@@ -9,20 +9,27 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuthContext } from "@/context/AuthContextProvider";
 
-export default function TeamDirectory() {
+export default function TeamDirectory({ onStartChat }) {
+  const { user } = useAuthContext();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const token = localStorage.getItem("token");
 
+  // Get logged-in user's department ID
+  const myDeptId = user?.employee?.department?._id || user?.employee?.department;
+
   const loadEmployees = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
     try {
-      const response = await axios.get(`${BACKEND_URL}/employees`, {
+      // If we know the department, filter server-side
+      const params = myDeptId ? `?department=${myDeptId}` : "";
+      const response = await axios.get(`${BACKEND_URL}/employees${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEmployees(response.data.employees || []);
@@ -37,7 +44,7 @@ export default function TeamDirectory() {
 
   useEffect(() => {
     loadEmployees();
-  }, []);
+  }, [myDeptId]);
 
   const filteredEmployees = employees
     .filter((emp) => emp.is_active)
@@ -48,17 +55,27 @@ export default function TeamDirectory() {
       const email = emp.user_id?.email?.toLowerCase() || "";
       const department = emp.department?.name?.toLowerCase() || "";
       const position = emp.position?.toLowerCase() || "";
+      const empCode = emp.emp_code?.toLowerCase() || "";
       return (
         fullName.includes(query) ||
         email.includes(query) ||
         department.includes(query) ||
-        position.includes(query)
+        position.includes(query) ||
+        empCode.includes(query)
       );
     });
 
-  const handleInitiateChat = (employee) => {
-    // Navigate to messages tab - parent component should handle this
-    toast.info(`Opening chat with ${employee.user_id?.first_name}...`);
+  const handleInitiateChat = async (employee) => {
+    try {
+      toast.info(`Opening chat with ${employee.user_id?.first_name}...`);
+      // Start or find existing DM channel
+      await axios.post(`${BACKEND_URL}/direct_chat/start`, { user_id: employee.user_id?._id }, { headers: { Authorization: `Bearer ${token}` } });
+      // Switch to messages tab
+      if (onStartChat) onStartChat();
+    } catch (error) {
+      toast.error("Failed to start chat");
+      console.error("Start chat error:", error);
+    }
   };
 
   if (loading) {
@@ -105,7 +122,7 @@ export default function TeamDirectory() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
         <Input
           type="text"
-          placeholder="Search by name, email, department, or position..."
+          placeholder="Search by name, email, position, or emp code..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10 bg-zinc-900/60 border-zinc-700 h-10"
@@ -148,9 +165,10 @@ export default function TeamDirectory() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-sm text-zinc-100 truncate">
-                        {fullName}
-                      </h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-medium text-sm text-zinc-100 truncate">{fullName}</h3>
+                        {employee.emp_code && <span className="text-[9px] font-mono text-indigo-400/70 bg-indigo-500/10 px-1 py-0.5 rounded flex-shrink-0">{employee.emp_code}</span>}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <Mail className="size-3 text-zinc-500" />
                         <p className="text-xs text-zinc-500 truncate">

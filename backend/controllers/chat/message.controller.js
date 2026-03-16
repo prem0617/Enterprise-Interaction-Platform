@@ -1,6 +1,8 @@
 import { Message } from "../../models/Message.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
+import { getReceiverSocketId, io } from "../../socket/socketServer.js";
+import { createNotification } from "../../utils/notificationHelper.js";
 
 // Send a message
 export const sendMessage = async (req, res) => {
@@ -53,6 +55,38 @@ export const sendMessage = async (req, res) => {
     const populatedMessage = await Message.findById(message._id)
       .populate("sender_id", "first_name last_name email user_type")
       .populate("parent_message_id");
+
+    // Broadcast to all channel members via Socket.IO for real-time delivery
+    try {
+      const channelMembers = await ChannelMember.find({ channel_id });
+      channelMembers.forEach((member) => {
+        if (member.user_id.toString() === userId) return;
+        const socketId = getReceiverSocketId(member.user_id.toString());
+        if (socketId) {
+          io.to(socketId).emit("new_message", {
+            ...populatedMessage.toObject(),
+            channel_type: "group",
+          });
+        }
+      });
+      // Create notifications for channel members
+      const channel = await ChatChannel.findById(channel_id).lean();
+      const senderName = `${populatedMessage.sender_id.first_name} ${populatedMessage.sender_id.last_name}`.trim();
+      channelMembers.forEach((member) => {
+        if (member.user_id.toString() === userId) return;
+        createNotification({
+          recipientId: member.user_id.toString(),
+          type: "message",
+          priority: "low",
+          title: `${senderName} in ${channel?.name || "group"}`,
+          body: populatedMessage.content?.slice(0, 120) || "",
+          actorId: userId,
+          reference: { kind: "channel", id: channel_id },
+        }).catch(() => {});
+      });
+    } catch (socketErr) {
+      console.error("Socket broadcast error (non-fatal):", socketErr.message);
+    }
 
     res.status(201).json({
       message: "Message sent successfully",

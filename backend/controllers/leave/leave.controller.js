@@ -2,6 +2,7 @@ import LeaveRequest from "../../models/LeaveRequest.js";
 import LeaveBalance from "../../models/LeaveBalance.js";
 import Attendance from "../../models/Attendance.js";
 import Employee from "../../models/Employee.js";
+import { createNotification } from "../../utils/notificationHelper.js";
 
 // Default leave allocation per year
 // 21 Paid Leaves + 2 Floater Leaves + 15 Marriage Leaves + Indian National Holidays
@@ -287,6 +288,17 @@ export const updateLeaveStatus = async (req, res) => {
     const updated = await LeaveRequest.findById(id)
       .populate("employee_id", "first_name last_name email profile_picture")
       .populate("approved_by", "first_name last_name");
+
+    // Notify the employee about leave decision
+    createNotification({
+      recipientId: leave.employee_id.toString(),
+      type: status === "approved" ? "leave_approved" : "leave_rejected",
+      priority: "high",
+      title: `Leave ${status === "approved" ? "Approved" : "Rejected"}`,
+      body: `Your ${leave.leave_type} leave request (${leave.days_count} day${leave.days_count > 1 ? "s" : ""}) has been ${status}.${admin_remarks ? ` Remarks: ${admin_remarks}` : ""}`,
+      actorId: req.userId,
+      reference: { kind: "leave", id: leave._id },
+    }).catch(() => {});
 
     res.json({ success: true, leaveRequest: updated });
   } catch (error) {

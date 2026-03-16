@@ -44,10 +44,6 @@ const messageSchema = new Schema(
       type: String,
       default: null,
     },
-    parent_message_id: {
-      type: Schema.Types.ObjectId,
-      ref: "Message",
-    },
     edited_at: {
       type: Date,
     },

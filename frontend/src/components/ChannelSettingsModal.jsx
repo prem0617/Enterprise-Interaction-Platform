@@ -719,7 +719,7 @@ const ChannelSettingsModal = ({
     const handleChannelNameUpdate = (data) => {
       const eventChannelId = data.channelId || data.channel_id;
       if (eventChannelId === channel?._id) {
-        setEditedChannelName(data.new_name);
+        setEditedChannelName(data.name || data.new_name);
         setIsEditingName(false);
       }
     };

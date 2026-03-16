@@ -14,8 +14,13 @@ import DocumentsPage from "../documents/DocumentsPage";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import WhiteboardModule from "@/components/WhiteboardModule";
+import PayrollPage from "./PayrollPage";
+import PerformanceReviewsPage from "./PerformanceReviewsPage";
+import DirectoryPage from "./DirectoryPage";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
+import NotificationBell from "@/components/NotificationBell";
+import BroadcastDialog from "@/components/BroadcastDialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -39,7 +44,10 @@ import {
   Ticket,
   ShieldCheck,
   PenLine,
-  FileText
+  FileText,
+  DollarSign,
+  Star,
+  Network,
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -102,6 +110,9 @@ export default function AdminDashboard() {
     { id: "tickets", icon: Ticket, label: "Tickets" },
 
     { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
+    { id: "payroll", icon: DollarSign, label: "Payroll" },
+    { id: "performance", icon: Star, label: "Reviews" },
+    { id: "directory", icon: Network, label: "Directory" },
     { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
   ];
@@ -124,7 +135,12 @@ export default function AdminDashboard() {
         return <TicketManagement />;
       case "analytics":
         return <AnalyticsDashboard />;
-
+      case "payroll":
+        return <PayrollPage />;
+      case "performance":
+        return <PerformanceReviewsPage />;
+      case "directory":
+        return <DirectoryPage />;
       case "profile":
         return <AdminProfilePage onNavigate={handleNavigation} />;
       case "change-password":
@@ -255,6 +271,15 @@ export default function AdminDashboard() {
 
         {/* ─── Main content ─── */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar - Desktop */}
+          <header className="hidden lg:flex h-12 bg-zinc-950/80 backdrop-blur-sm border-b border-white/[0.06] items-center justify-end px-6 gap-3 sticky top-0 z-40">
+            <span className="text-xs text-zinc-500 mr-auto">
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </span>
+            <BroadcastDialog />
+            <NotificationBell />
+          </header>
+
           {/* Top bar - Mobile */}
           <header className="lg:hidden h-14 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
@@ -265,6 +290,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="flex items-center gap-1">
+              <NotificationBell />
               <Button
                 variant="ghost"
                 size="icon"

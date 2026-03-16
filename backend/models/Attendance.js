@@ -33,6 +33,20 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Break tracking
+    breaks: [{
+      start: { type: Date, required: true },
+      end: { type: Date, default: null },
+      reason: { type: String, default: "" },
+    }],
+    total_break_minutes: {
+      type: Number,
+      default: 0,
+    },
+    is_on_break: {
+      type: Boolean,
+      default: false,
+    },
     notes: {
       type: String,
       default: "",

@@ -17,6 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCcw,
+  Turtle,
+  Timer,
+  Coffee,
+  Play,
+  Pause,
 } from "lucide-react";
 import { BACKEND_URL } from "../../../config";
 import { toast } from "sonner";
@@ -69,6 +74,26 @@ const LEAVE_COLORS = {
 
 
 
+const REQUIRED_HOURS = 8;
+const LATE_THRESHOLD_HOUR = 10;
+
+function TimelineEvent({ icon, color, label, time, detail, active }) {
+  return (
+    <div className="relative flex items-start gap-3 pb-4">
+      <div className={`absolute left-[-18px] size-[18px] rounded-full flex items-center justify-center ring-2 ring-zinc-900 z-10 ${active ? `bg-${color}-500 animate-pulse` : `bg-${color}-500/20`} text-${color}-400`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0 pt-0.5">
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-medium ${active ? `text-${color}-300` : "text-zinc-300"}`}>{label}</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{time}</span>
+        </div>
+        {detail && <p className="text-[10px] text-zinc-500 mt-0.5">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function AttendanceModule() {
   const [activeTab, setActiveTab] = useState("today");
   const [loading, setLoading] = useState(true);
@@ -79,6 +104,8 @@ export default function AttendanceModule() {
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [togglingBreak, setTogglingBreak] = useState(false);
+  const [monthlyStats, setMonthlyStats] = useState(null);
 
   // ─── History ───
   const [historyMonth, setHistoryMonth] = useState(() => {
@@ -153,10 +180,28 @@ export default function AttendanceModule() {
     }
   }, []);
 
+  const fetchMonthlyStats = useCallback(async () => {
+    try {
+      const now = new Date();
+      const res = await axios.get(`${BACKEND_URL}/attendance/history?year=${now.getFullYear()}&month=${now.getMonth() + 1}`, { headers });
+      const records = res.data.records || [];
+      const daysWorked = records.filter((r) => ["present", "late", "half_day"].includes(r.status));
+      const totalHours = daysWorked.reduce((sum, r) => sum + (r.total_hours || 0), 0);
+      const avgHours = daysWorked.length > 0 ? totalHours / daysWorked.length : 0;
+      setMonthlyStats({
+        daysWorked: daysWorked.length,
+        totalHours: Math.round(totalHours * 10) / 10,
+        avgHours: Math.round(avgHours * 10) / 10,
+        lateDays: records.filter((r) => r.status === "late").length,
+        totalBreakMin: records.reduce((sum, r) => sum + (r.total_break_minutes || 0), 0),
+      });
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([fetchToday(), fetchHistory(), fetchLeaveBalance(), fetchMyLeaves(), fetchHolidays()]);
+      await Promise.all([fetchToday(), fetchHistory(), fetchLeaveBalance(), fetchMyLeaves(), fetchHolidays(), fetchMonthlyStats()]);
       setLoading(false);
     };
     init();
@@ -188,6 +233,21 @@ export default function AttendanceModule() {
       toast.error(err.response?.data?.error || "Check-out failed");
     } finally {
       setCheckingOut(false);
+    }
+  };
+
+  const handleToggleBreak = async () => {
+    setTogglingBreak(true);
+    try {
+      const isOnBreak = todayAttendance?.is_on_break;
+      const endpoint = isOnBreak ? "break/end" : "break/start";
+      const res = await axios.post(`${BACKEND_URL}/attendance/${endpoint}`, { reason: "" }, { headers });
+      toast.success(isOnBreak ? "Break ended — back to work!" : "Break started — enjoy your break!");
+      setTodayAttendance(res.data.attendance);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to toggle break");
+    } finally {
+      setTogglingBreak(false);
     }
   };
 
@@ -296,19 +356,36 @@ export default function AttendanceModule() {
                   </p>
                 </div>
 
+                {/* Policy info */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-800/60 border border-zinc-700/40 text-[11px] text-zinc-400">
+                  <Timer className="size-3.5 text-indigo-400 shrink-0" />
+                  <span>Check in by <strong className="text-zinc-300">10:00 AM</strong> · {REQUIRED_HOURS} flexible working hours</span>
+                </div>
+
 
                 {/* Action Buttons */}
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   {!hasCheckedIn ? (
                     <Button className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-500 text-white gap-2" onClick={handleCheckIn} disabled={checkingIn}>
                       <LogIn className="size-4" />
                       {checkingIn ? "Checking In..." : "Check In"}
                     </Button>
                   ) : !hasCheckedOut ? (
-                    <Button className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleCheckOut} disabled={checkingOut}>
-                      <LogOut className="size-4" />
-                      {checkingOut ? "Checking Out..." : "Check Out"}
-                    </Button>
+                    <>
+                      {/* Break toggle */}
+                      <Button
+                        className={`h-11 gap-2 ${todayAttendance?.is_on_break ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20"}`}
+                        onClick={handleToggleBreak}
+                        disabled={togglingBreak}
+                      >
+                        {todayAttendance?.is_on_break ? <Play className="size-4" /> : <Coffee className="size-4" />}
+                        {togglingBreak ? "..." : todayAttendance?.is_on_break ? "Resume" : "Break"}
+                      </Button>
+                      <Button className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleCheckOut} disabled={checkingOut || todayAttendance?.is_on_break}>
+                        <LogOut className="size-4" />
+                        {checkingOut ? "Checking Out..." : "Check Out"}
+                      </Button>
+                    </>
                   ) : (
                     <div className="flex-1 flex items-center justify-center gap-2 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                       <CheckCircle2 className="size-4 text-emerald-400" />
@@ -317,38 +394,116 @@ export default function AttendanceModule() {
                   )}
                 </div>
 
-                {/* Today Status */}
-                {todayAttendance && (
-                  <div className="rounded-lg bg-zinc-800/40 p-3 space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-500">Status</span>
-                      <Badge className={`text-[10px] border ${STATUS_BADGES[todayAttendance.status]}`}>{todayAttendance.status?.replace("_", " ")}</Badge>
-                    </div>
-
-                    {todayAttendance.check_in && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Checked In</span>
-                        <span className="tabular-nums text-zinc-300">
-                          {new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                    )}
-                    {todayAttendance.check_out && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Checked Out</span>
-                        <span className="tabular-nums text-zinc-300">
-                          {new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                    )}
-                    {todayAttendance.total_hours != null && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Total Hours</span>
-                        <span className="tabular-nums font-medium text-zinc-200">{todayAttendance.total_hours}h</span>
-                      </div>
-                    )}
+                {/* Break status indicator */}
+                {todayAttendance?.is_on_break && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/20 animate-pulse">
+                    <Coffee className="size-4 text-amber-400" />
+                    <span className="text-xs text-amber-300">On break — click Resume to continue working</span>
                   </div>
                 )}
+
+                {/* Break summary */}
+                {todayAttendance?.breaks?.length > 0 && !todayAttendance?.is_on_break && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-800/40 text-[11px] text-zinc-400">
+                    <Coffee className="size-3 text-zinc-500" />
+                    <span>{todayAttendance.breaks.length} break{todayAttendance.breaks.length > 1 ? "s" : ""} · {todayAttendance.total_break_minutes || 0} min total</span>
+                  </div>
+                )}
+
+                {/* Today Status */}
+                {todayAttendance && (() => {
+                  const isLate = todayAttendance.status === "late";
+                  const workedHours = todayAttendance.total_hours || 0;
+                  const hoursProgress = Math.min((workedHours / REQUIRED_HOURS) * 100, 100);
+                  const remainingHours = Math.max(REQUIRED_HOURS - workedHours, 0);
+                  const hasCompleted8 = workedHours >= REQUIRED_HOURS;
+
+                  // Calculate live elapsed hours if still checked in
+                  let liveHours = workedHours;
+                  if (todayAttendance.check_in && !todayAttendance.check_out) {
+                    const elapsed = (now - new Date(todayAttendance.check_in)) / (1000 * 60 * 60);
+                    liveHours = Math.round(elapsed * 100) / 100;
+                  }
+                  const liveProgress = Math.min((liveHours / REQUIRED_HOURS) * 100, 100);
+                  const liveRemaining = Math.max(REQUIRED_HOURS - liveHours, 0);
+
+                  return (
+                    <div className="rounded-lg bg-zinc-800/40 p-3 space-y-3 text-sm">
+                      {/* Status row */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-500">Status</span>
+                        <div className="flex items-center gap-1.5">
+                          {isLate && <Turtle className="size-4 text-amber-400" />}
+                          <Badge className={`text-[10px] border ${STATUS_BADGES[todayAttendance.status]}`}>
+                            {isLate ? "Late" : todayAttendance.status?.replace("_", " ")}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Late warning banner */}
+                      {isLate && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                          <Turtle className="size-4 text-amber-400 shrink-0" />
+                          <span className="text-xs text-amber-300">Checked in after {LATE_THRESHOLD_HOUR}:00 AM — marked as late</span>
+                        </div>
+                      )}
+
+                      {todayAttendance.check_in && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500">Checked In</span>
+                          <span className="tabular-nums text-zinc-300">
+                            {new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      )}
+                      {todayAttendance.check_out && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500">Checked Out</span>
+                          <span className="tabular-nums text-zinc-300">
+                            {new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Working hours progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500 flex items-center gap-1">
+                            <Timer className="size-3.5" /> Working Hours
+                          </span>
+                          <span className="tabular-nums font-medium text-zinc-200">
+                            {todayAttendance.check_out ? workedHours : liveHours.toFixed(1)}h / {REQUIRED_HOURS}h
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              (todayAttendance.check_out ? hasCompleted8 : liveHours >= REQUIRED_HOURS)
+                                ? "bg-emerald-500"
+                                : isLate
+                                  ? "bg-amber-500"
+                                  : "bg-indigo-500"
+                            }`}
+                            style={{ width: `${todayAttendance.check_out ? hoursProgress : liveProgress}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                          <span>0h</span>
+                          {!todayAttendance.check_out && liveRemaining > 0 && (
+                            <span className="text-zinc-400">{liveRemaining.toFixed(1)}h remaining</span>
+                          )}
+                          {todayAttendance.check_out && remainingHours > 0 && (
+                            <span className="text-amber-400">{remainingHours.toFixed(1)}h short of target</span>
+                          )}
+                          {todayAttendance.check_out && hasCompleted8 && (
+                            <span className="text-emerald-400">Target met ✓</span>
+                          )}
+                          <span>{REQUIRED_HOURS}h</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -389,6 +544,133 @@ export default function AttendanceModule() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ─── Monthly Stats + Timeline Row ─── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Monthly Average Working Hours */}
+            {monthlyStats && (
+              <Card className="bg-zinc-900/80 border-zinc-800/80 overflow-hidden">
+                <div className="h-[2px] bg-gradient-to-r from-cyan-500 to-blue-500 opacity-60" />
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Timer className="size-4 text-cyan-400" />
+                    Monthly Overview
+                    <span className="ml-auto text-[10px] text-zinc-500 font-normal">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Average hours gauge */}
+                  <div className="text-center py-2">
+                    <p className={`text-4xl font-bold tabular-nums ${monthlyStats.avgHours >= 7.5 ? "text-emerald-400" : monthlyStats.avgHours >= 6 ? "text-amber-400" : "text-red-400"}`}>
+                      {monthlyStats.avgHours}h
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">avg daily working hours</p>
+                    <div className="w-full max-w-[200px] mx-auto mt-2 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${monthlyStats.avgHours >= 7.5 ? "bg-emerald-500" : monthlyStats.avgHours >= 6 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min((monthlyStats.avgHours / REQUIRED_HOURS) * 100, 100)}%` }} />
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-1">Target: {REQUIRED_HOURS}h / day</p>
+                  </div>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.daysWorked}</p>
+                      <p className="text-[10px] text-zinc-500">Days Worked</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.totalHours}h</p>
+                      <p className="text-[10px] text-zinc-500">Total Hours</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-amber-400 tabular-nums">{monthlyStats.lateDays}</p>
+                      <p className="text-[10px] text-zinc-500">Late Days</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-800/40 p-2.5 text-center">
+                      <p className="text-lg font-bold text-zinc-200 tabular-nums">{monthlyStats.totalBreakMin}m</p>
+                      <p className="text-[10px] text-zinc-500">Total Breaks</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Today's Activity Timeline */}
+            <Card className="bg-zinc-900/80 border-zinc-800/80 overflow-hidden">
+              <div className="h-[2px] bg-gradient-to-r from-violet-500 to-fuchsia-500 opacity-60" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <Clock className="size-4 text-violet-400" />
+                  Today's Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!todayAttendance ? (
+                  <p className="text-sm text-zinc-500 py-6 text-center">No activity yet today</p>
+                ) : (
+                  <div className="relative pl-6 space-y-0">
+                    {/* Timeline line */}
+                    <div className="absolute left-[9px] top-2 bottom-2 w-[2px] bg-zinc-800" />
+
+                    {/* Check-in event */}
+                    {todayAttendance.check_in && (
+                      <TimelineEvent
+                        icon={<LogIn className="size-3" />}
+                        color="emerald"
+                        label="Checked In"
+                        time={new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        detail={todayAttendance.status === "late" ? "Late arrival" : "On time"}
+                      />
+                    )}
+
+                    {/* Break events */}
+                    {todayAttendance.breaks?.map((b, i) => (
+                      <div key={i}>
+                        <TimelineEvent
+                          icon={<Coffee className="size-3" />}
+                          color="amber"
+                          label={`Break ${i + 1} Started`}
+                          time={new Date(b.start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          detail={b.reason || "Break"}
+                        />
+                        {b.end && (
+                          <TimelineEvent
+                            icon={<Play className="size-3" />}
+                            color="blue"
+                            label="Resumed Work"
+                            time={new Date(b.end).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                            detail={`${Math.round((new Date(b.end) - new Date(b.start)) / 60000)} min break`}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    {/* On break indicator */}
+                    {todayAttendance.is_on_break && (
+                      <TimelineEvent
+                        icon={<Coffee className="size-3" />}
+                        color="amber"
+                        label="Currently on Break"
+                        time="now"
+                        detail="Ongoing..."
+                        active
+                      />
+                    )}
+
+                    {/* Check-out event */}
+                    {todayAttendance.check_out && (
+                      <TimelineEvent
+                        icon={<LogOut className="size-3" />}
+                        color="red"
+                        label="Checked Out"
+                        time={new Date(todayAttendance.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        detail={`${todayAttendance.total_hours}h worked · ${todayAttendance.total_break_minutes || 0}m breaks`}
+                      />
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -436,24 +718,41 @@ export default function AttendanceModule() {
                   <tbody>
                     {attendanceHistory.length === 0 ? (
                       <tr><td colSpan={6} className="py-12 text-center text-zinc-500">No attendance records for this month</td></tr>
-                    ) : attendanceHistory.map((r) => (
-                      <tr key={r._id} className="border-b border-zinc-800/50 hover:bg-white/[0.02]">
-                        <td className="py-2.5 px-4 text-sm">
-                          {new Date(r.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                        </td>
-                        <td className="py-2.5 px-4 text-center">
-                          <Badge className={`text-[10px] border ${STATUS_BADGES[r.status] || ""}`}>{r.status?.replace("_", " ")}</Badge>
-                        </td>
-
-                        <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
-                          {r.check_in ? new Date(r.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
-                          {r.check_out ? new Date(r.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-xs tabular-nums">{r.total_hours ? `${r.total_hours}h` : "—"}</td>
-                      </tr>
-                    ))}
+                    ) : attendanceHistory.map((r) => {
+                      const isLate = r.status === "late";
+                      const hoursPct = r.total_hours ? Math.min((r.total_hours / REQUIRED_HOURS) * 100, 100) : 0;
+                      return (
+                        <tr key={r._id} className="border-b border-zinc-800/50 hover:bg-white/[0.02]">
+                          <td className="py-2.5 px-4 text-sm">
+                            {new Date(r.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {isLate && <Turtle className="size-3.5 text-amber-400" />}
+                              <Badge className={`text-[10px] border ${STATUS_BADGES[r.status] || ""}`}>{r.status?.replace("_", " ")}</Badge>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
+                            {r.check_in ? new Date(r.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-xs text-zinc-400 tabular-nums">
+                            {r.check_out ? new Date(r.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            {r.total_hours ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`text-xs tabular-nums font-medium ${r.total_hours >= REQUIRED_HOURS ? "text-emerald-400" : "text-zinc-300"}`}>
+                                  {r.total_hours}h
+                                </span>
+                                <div className="w-16 h-1 rounded-full bg-zinc-700 overflow-hidden">
+                                  <div className={`h-full rounded-full ${r.total_hours >= REQUIRED_HOURS ? "bg-emerald-500" : isLate ? "bg-amber-500" : "bg-indigo-500"}`} style={{ width: `${hoursPct}%` }} />
+                                </div>
+                              </div>
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -3,6 +3,8 @@ import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
 import {
   checkIn,
   checkOut,
+  startBreak,
+  endBreak,
   getMyAttendanceToday,
   getMyAttendanceHistory,
   getAllAttendance,
@@ -11,7 +13,6 @@ import {
   createHoliday,
   updateHoliday,
   deleteHoliday,
-
 } from "../controllers/attendance/attendance.controller.js";
 
 const router = express.Router();
@@ -19,6 +20,8 @@ const router = express.Router();
 // ─── Employee routes (auth required) ───
 router.post("/check-in", verifyToken, checkIn);
 router.post("/check-out", verifyToken, checkOut);
+router.post("/break/start", verifyToken, startBreak);
+router.post("/break/end", verifyToken, endBreak);
 router.get("/today", verifyToken, getMyAttendanceToday);
 router.get("/history", verifyToken, getMyAttendanceHistory);
 router.get("/holidays", verifyToken, getHolidays);

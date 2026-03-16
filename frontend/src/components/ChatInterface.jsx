@@ -482,6 +482,12 @@ const ChatInterface = () => {
   useEffect(() => {
     fetchDirectChats();
     getUserChannel();
+    // Periodically refresh chat lists to catch missed messages
+    const refreshInterval = setInterval(() => {
+      fetchDirectChats();
+      getUserChannel();
+    }, 15000);
+    return () => clearInterval(refreshInterval);
   }, []);
   useEffect(() => {
     scrollToBottom();
@@ -1137,7 +1143,7 @@ const ChatInterface = () => {
 
     const appendMessage = (data) => {
       const currentChat = selectedChatRef.current;
-      if (currentChat && data.channel_id === currentChat._id) {
+      if (currentChat && String(data.channel_id) === String(currentChat._id)) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === data._id)) return prev;
 

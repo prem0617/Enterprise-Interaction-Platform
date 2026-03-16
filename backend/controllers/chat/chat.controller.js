@@ -3,6 +3,7 @@ import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import User from "../../models/User.js";
 import { SupportTicket } from "../../models/SupportTicket.js";
+import { createNotification, createBulkNotifications } from "../../utils/notificationHelper.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import mongoose from "mongoose";
 
@@ -314,6 +315,20 @@ export const addChannelMembers = async (req, res) => {
           });
         }
       });
+
+      // Notify newly added members
+      const channel = await ChatChannel.findById(id);
+      for (const memberId of added_members) {
+        createNotification({
+          recipientId: memberId,
+          type: "channel_invite",
+          priority: "medium",
+          title: `You were added to "${channel?.name || "a group"}"`,
+          body: "You can now send and receive messages in this channel.",
+          actorId: req.userId,
+          reference: { kind: "channel", id },
+        }).catch(() => {});
+      }
     }
 
     res.json({
@@ -651,7 +666,7 @@ export const searchMessagesInChannel = async (req, res) => {
   try {
     const { channelId } = req.params;
     const { query } = req.query;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     if (!query || query.trim().length === 0) {
       return res.status(400).json({ error: "Search query is required" });
@@ -675,8 +690,9 @@ export const searchMessagesInChannel = async (req, res) => {
         .json({ error: "You are not a member of this channel" });
     }
 
-    // Search messages using case-insensitive regex
-    const searchRegex = new RegExp(query.trim(), "i");
+    // Escape special regex characters to prevent ReDoS
+    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchRegex = new RegExp(escaped, "i");
 
     const messages = await Message.find({
       channel_id: channelId,
