@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Payroll from "../../models/Payroll.js";
 import Employee from "../../models/Employee.js";
 
@@ -7,6 +8,9 @@ export const upsertPayroll = async (req, res) => {
     const { employee_id, user_id, base_salary, currency, pay_frequency, bonus, allowances, deductions, tax, pay_period_start, pay_period_end, pay_date, status, bank_name, account_number, notes } = req.body;
     if (!employee_id || !user_id || !base_salary || !pay_period_start || !pay_period_end) {
       return res.status(400).json({ error: "employee_id, user_id, base_salary, pay_period_start, pay_period_end are required" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(employee_id) || !mongoose.Types.ObjectId.isValid(user_id)) {
+      return res.status(400).json({ error: "Invalid employee_id or user_id" });
     }
 
     const existing = await Payroll.findOne({ employee_id, pay_period_start: new Date(pay_period_start) });
