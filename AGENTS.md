@@ -33,3 +33,4 @@
 - **Lint** (`cd frontend && npm run lint`): pre-existing warnings/errors exist in the codebase; the lint command itself works.
 - **No test suite** is configured — `npm run test` in backend is a placeholder that exits with code 1.
 - **Admin signup** requires `country` to be one of: `"germany"`, `"india"`, `"usa"` (lowercase).
+- **Web Push (notifications when the tab is closed)** needs `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in `backend/.env` (`npx web-push generate-vapid-keys`). Optional `VAPID_SUBJECT` (e.g. `mailto:ops@company.com`). Users enable it from the notification bell (“Alerts when away”).

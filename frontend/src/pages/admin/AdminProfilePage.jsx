@@ -24,7 +24,6 @@ import {
   Briefcase,
   CalendarCheck,
   DollarSign,
-  Star,
   Network,
   BarChart3,
   LayoutDashboard,
@@ -676,7 +675,6 @@ function QuickLinksWidget({ onNavigate }) {
     { label: "Manage Employees", icon: Users, page: "employees", color: "indigo" },
     { label: "View Analytics", icon: BarChart3, page: "analytics", color: "cyan" },
     { label: "Payroll", icon: DollarSign, page: "payroll", color: "emerald" },
-    { label: "Performance Reviews", icon: Star, page: "performance", color: "amber" },
     { label: "Employee Directory", icon: Network, page: "directory", color: "violet" },
     { label: "Departments", icon: Building, page: "departments", color: "pink" },
   ];

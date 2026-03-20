@@ -120,6 +120,7 @@ Both dashboards use **conditional rendering** (not React Router nested routes):
 - `OPENAI_API_KEY` — OpenAI API key for AI assistant
 - `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS` — SMTP config
 - `PORT` — Server port (default: 3000)
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — Web Push (browser notifications when the app is closed); generate with `npx web-push generate-vapid-keys`. Optional: `VAPID_SUBJECT` (default `mailto:noreply@localhost`)
 
 **Frontend** (see `frontend/src/config.js`):
 - `VITE_API_URL` — Backend API URL (default: `http://localhost:8000/api`)

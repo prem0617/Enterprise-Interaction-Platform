@@ -15,7 +15,6 @@ import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import WhiteboardModule from "@/components/WhiteboardModule";
 import PayrollPage from "./PayrollPage";
-import PerformanceReviewsPage from "./PerformanceReviewsPage";
 import DirectoryPage from "./DirectoryPage";
 import FloatingMeetingBar from "@/components/FloatingMeetingBar";
 import { GlobalCallProvider } from "@/context/CallContextProvider";
@@ -46,7 +45,6 @@ import {
   PenLine,
   FileText,
   DollarSign,
-  Star,
   Network,
 } from "lucide-react";
 
@@ -111,7 +109,6 @@ export default function AdminDashboard() {
 
     { id: "whiteboard", icon: PenLine, label: "Whiteboard" },
     { id: "payroll", icon: DollarSign, label: "Payroll" },
-    { id: "performance", icon: Star, label: "Reviews" },
     { id: "directory", icon: Network, label: "Directory" },
     { id: "analytics", icon: BarChart3, label: "Analytics" },
     { id: "profile", icon: User, label: "Profile" },
@@ -137,8 +134,6 @@ export default function AdminDashboard() {
         return <AnalyticsDashboard />;
       case "payroll":
         return <PayrollPage />;
-      case "performance":
-        return <PerformanceReviewsPage />;
       case "directory":
         return <DirectoryPage />;
       case "profile":

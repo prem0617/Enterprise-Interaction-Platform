@@ -2,12 +2,18 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import {
   Bell, Check, CheckCheck, MessageSquare, Video, Phone, Calendar,
-  Users, Shield, Clock, Ticket, UserPlus, AlertTriangle, Megaphone,
-  Trash2, X, Loader2
+  Users, Shield, Clock, Ticket, UserPlus, Megaphone,
+  Trash2, X, Loader2, Smartphone
 } from "lucide-react";
 import { BACKEND_URL } from "../../config";
 import { useAuthContext } from "@/context/AuthContextProvider";
 import { toast } from "sonner";
+import {
+  isWebPushSupported,
+  enableWebPush,
+  disableWebPush,
+  getLocalPushSubscription,
+} from "@/lib/webPushClient";
 
 const PRIORITY_STYLES = {
   urgent: "border-l-red-500 bg-red-500/5",
@@ -79,9 +85,51 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
   const dropdownRef = useRef(null);
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
+  const authHeaders = useCallback(() => ({ Authorization: `Bearer ${localStorage.getItem("token")}` }), []);
+
+  const pushCapable = typeof window !== "undefined" && isWebPushSupported();
+
+  useEffect(() => {
+    if (!token || !pushCapable) return;
+    let cancelled = false;
+    getLocalPushSubscription().then((sub) => {
+      if (!cancelled) setPushOn(!!sub);
+    });
+    return () => { cancelled = true; };
+  }, [token, pushCapable, open]);
+
+  const handleEnablePush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await enableWebPush(authHeaders);
+      if (result.ok) {
+        setPushOn(true);
+        toast.success("Browser notifications enabled", {
+          description: "You’ll get alerts even when this tab is closed (where the browser allows it).",
+        });
+      } else {
+        toast.error("Could not enable push", { description: result.reason });
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    setPushBusy(true);
+    try {
+      await disableWebPush(authHeaders);
+      setPushOn(false);
+      toast.message("Browser notifications turned off");
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -186,18 +234,51 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-zinc-900 border border-zinc-700/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden z-[200] flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
-            <h3 className="text-sm font-semibold text-zinc-200">Notifications</h3>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllRead}
-                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1"
-                >
-                  <CheckCheck className="size-3" /> Mark all read
-                </button>
-              )}
+          <div className="px-4 py-3 border-b border-zinc-800/60 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-zinc-200">Notifications</h3>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllRead}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1"
+                  >
+                    <CheckCheck className="size-3" /> Mark all read
+                  </button>
+                )}
+              </div>
             </div>
+            {token && pushCapable && (
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-zinc-800/40 px-2.5 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Smartphone className="size-3.5 text-zinc-500 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-zinc-300">Alerts when away</p>
+                    <p className="text-[10px] text-zinc-600 leading-tight">System notifications if the tab is closed</p>
+                  </div>
+                </div>
+                {pushOn ? (
+                  <button
+                    type="button"
+                    disabled={pushBusy}
+                    onClick={handleDisablePush}
+                    className="text-[11px] shrink-0 px-2 py-1 rounded-md border border-zinc-600 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {pushBusy ? <Loader2 className="size-3.5 animate-spin" /> : "Off"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={pushBusy}
+                    onClick={handleEnablePush}
+                    className="text-[11px] shrink-0 px-2 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {pushBusy ? <Loader2 className="size-3.5 animate-spin" /> : "Enable"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* List */}

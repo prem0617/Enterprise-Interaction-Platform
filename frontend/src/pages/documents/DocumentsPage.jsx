@@ -1,9 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { BACKEND_URL } from "../../../config";
 import { useAuthContext } from "@/context/AuthContextProvider";
-import { toast } from "sonner";
 
 const S = `
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -322,6 +321,60 @@ const S = `
   }
 `;
 
+/** Initial deck JSON for PresentationEditor (`{ slides: [{ id, bg, elements }] }`) */
+function defaultSlideDeckContent() {
+  const sid = () => `sl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const uid = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const slides = [
+    {
+      id: sid(),
+      bg: null,
+      elements: [
+        {
+          id: uid(),
+          type: "text",
+          x: 60,
+          y: 140,
+          w: 840,
+          h: 120,
+          text: "Your Presentation Title",
+          style: {
+            fontSize: 56,
+            fontFamily: "Outfit",
+            color: "#0f172a",
+            bold: true,
+            align: "center",
+            lineHeight: 1.4,
+            background: "transparent",
+            borderRadius: 0,
+            padding: 8,
+          },
+        },
+        {
+          id: uid(),
+          type: "text",
+          x: 160,
+          y: 290,
+          w: 640,
+          h: 60,
+          text: "Click here to add a subtitle",
+          style: {
+            fontSize: 24,
+            fontFamily: "Outfit",
+            color: "#475569",
+            align: "center",
+            lineHeight: 1.4,
+            background: "transparent",
+            borderRadius: 0,
+            padding: 8,
+          },
+        },
+      ],
+    },
+  ];
+  return JSON.stringify({ slides });
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -335,15 +388,41 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function slideDeckPreviewText(raw) {
+  try {
+    const p = JSON.parse(raw);
+    const slides = p.slides || [];
+    return slides
+      .map((s) =>
+        (s.elements || [])
+          .filter((e) => e.type === "text" && e.text)
+          .map((e) => e.text)
+          .join(" ")
+      )
+      .join(" ")
+      .slice(0, 300);
+  } catch {
+    return "";
+  }
+}
+
 function DocCard({ doc, navigate, isMine, onDelete }) {
-  const preview = doc.content ? doc.content.replace(/<[^>]+>/g, "").slice(0, 300) : null;
+  let preview = null;
+  if (doc.content) {
+    if (doc.doc_type === "slide" || doc.doc_type === "presentation") {
+      preview = slideDeckPreviewText(doc.content) || null;
+    } else {
+      preview = doc.content.replace(/<[^>]+>/g, "").slice(0, 300) || null;
+    }
+  }
   
   const getDocTypeIcon = () => {
     switch (doc.doc_type) {
       case "sheet":
         return <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16,flexShrink:0}}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="9" x2="9" y2="21"></line><line x1="15" y1="9" x2="15" y2="21"></line></svg>;
-      case "markdown":
-        return <svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16,flexShrink:0}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="10" y1="13" x2="8" y2="13"></line><line x1="16" y1="13" x2="14" y2="13"></line><line x1="12" y1="11" x2="12" y2="15"></line></svg>;
+      case "slide":
+      case "presentation":
+        return <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16,flexShrink:0}}><rect x="3" y="4" width="18" height="12" rx="2" ry="2"></rect><line x1="12" y1="16" x2="12" y2="20"></line><line x1="8" y1="20" x2="16" y2="20"></line><line x1="3" y1="8" x2="21" y2="8"></line></svg>;
       default:
         return <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16,flexShrink:0}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>;
     }
@@ -356,9 +435,10 @@ function DocCard({ doc, navigate, isMine, onDelete }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, opacity: 0.3 }}>
              {Array.from({length: 16}).map((_, i) => <div key={i} style={{ height: 16, background: '#fff', borderRadius: 2 }} />)}
           </div>
-        ) : doc.doc_type === "markdown" ? (
-          <div style={{ fontSize: 11, lineHeight: 1.6, color: '#94a3b8', fontFamily: 'monospace', overflow: 'hidden' }}>
-            {(doc.content || '').slice(0, 200)}
+        ) : doc.doc_type === "slide" || doc.doc_type === "presentation" ? (
+          <div style={{ width: '100%', height: '80%', border: '2px solid rgba(255,255,255,0.2)', borderRadius: 4, position: 'relative' }}>
+             <div style={{ width: '60%', height: 4, background: 'rgba(255,255,255,0.3)', margin: '12px auto 0' }} />
+             <div style={{ width: '80%', height: 4, background: 'rgba(255,255,255,0.1)', margin: '6px auto 0' }} />
           </div>
         ) : preview ? (
           <div className="dp-card-thumb-text">{preview}</div>
@@ -407,87 +487,25 @@ export default function DocumentsPage() {
   useEffect(() => { fetchDocs(); }, []);
 
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [sharedFiles, setSharedFiles] = useState([]);
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadForm, setUploadForm] = useState({ description: "", visibility: "everyone", shared_with: "", shared_department: "", category: "general" });
-  const fileInputRef = useRef(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-
-  const fetchSharedFiles = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`${BACKEND_URL}/shared-files`, { headers: { Authorization: `Bearer ${token}` } });
-      setSharedFiles(res.data.files || []);
-    } catch { /* silent */ }
-  };
-
-  useEffect(() => { fetchSharedFiles(); }, []);
-
-  const handleUpload = async () => {
-    if (!selectedFile) { toast.error("Please select a file"); return; }
-    setUploading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const fd = new FormData();
-      fd.append("file", selectedFile);
-      fd.append("description", uploadForm.description);
-      fd.append("visibility", uploadForm.visibility);
-      fd.append("category", uploadForm.category);
-      if (uploadForm.visibility === "specific" && uploadForm.shared_with) {
-        fd.append("shared_with", JSON.stringify(uploadForm.shared_with.split(",").map(s => s.trim()).filter(Boolean)));
-      }
-      if (uploadForm.visibility === "department" && uploadForm.shared_department) {
-        fd.append("shared_department", uploadForm.shared_department);
-      }
-      await axios.post(`${BACKEND_URL}/shared-files`, fd, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
-      toast.success("File uploaded and shared!");
-      setUploadDialogOpen(false);
-      setSelectedFile(null);
-      setUploadForm({ description: "", visibility: "everyone", shared_with: "", shared_department: "", category: "general" });
-      fetchSharedFiles();
-    } catch (e) { toast.error(e.response?.data?.error || "Upload failed"); }
-    finally { setUploading(false); }
-  };
-
-  const deleteSharedFile = async (id) => {
-    try {
-      const token = localStorage.getItem("token");
-      await axios.delete(`${BACKEND_URL}/shared-files/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      setSharedFiles(prev => prev.filter(f => f._id !== id));
-      toast.success("File deleted");
-    } catch { toast.error("Failed to delete"); }
-  };
-
-  function formatFileSize(bytes) {
-    if (!bytes) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  }
 
   const createNew = async (doc_type) => {
     setCreateMenuOpen(false);
     let defaultTitle = "Untitled document";
     if (doc_type === "sheet") defaultTitle = "Untitled spreadsheet";
-    if (doc_type === "markdown") defaultTitle = "Untitled markdown";
+    if (doc_type === "slide") defaultTitle = "Untitled presentation";
 
-    // Set default content structure depending on type
     let defaultContent = "";
     if (doc_type === "sheet") {
-      // 20x10 empty grid
-      const grid = Array.from({length: 20}, () => Array(10).fill(""));
+      const grid = Array.from({ length: 20 }, () => Array(10).fill(""));
       defaultContent = JSON.stringify(grid);
-    } else if (doc_type === "markdown") {
-      // Default markdown content
-      defaultContent = "# New Document\n\nStart writing your markdown here...";
+    } else if (doc_type === "slide") {
+      defaultContent = defaultSlideDeckContent();
     }
 
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(`${BACKEND_URL}/documents`,
-        { title: defaultTitle, content: defaultContent, doc_type },
+      const res = await axios.post(`${BACKEND_URL}/documents`, 
+        { title: defaultTitle, content: defaultContent, doc_type }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
       navigate(`/documents/${res.data._id || res.data.id}`);
@@ -548,12 +566,23 @@ export default function DocumentsPage() {
                 onClick={() => setCreateMenuOpen(false)} 
               />
               <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, 
+                background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', 
                 borderRadius: 12, padding: 8, minWidth: 200, zIndex: 101,
                 boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
               }}>
-                <button
+                <button 
+                  onClick={() => createNew("doc")}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', background: 'none', border: 'none', color: '#e2e8f0', fontFamily: 'Inter', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderRadius: 8, transition: 'background 0.2s', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                >
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  </div>
+                  Document
+                </button>
+                <button 
                   onClick={() => createNew("sheet")}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', background: 'none', border: 'none', color: '#e2e8f0', fontFamily: 'Inter', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderRadius: 8, transition: 'background 0.2s', textAlign: 'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
@@ -564,28 +593,16 @@ export default function DocumentsPage() {
                   </div>
                   Spreadsheet
                 </button>
-                <button
-                  onClick={() => createNew("markdown")}
+                <button 
+                  onClick={() => createNew("slide")}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', background: 'none', border: 'none', color: '#e2e8f0', fontFamily: 'Inter', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderRadius: 8, transition: 'background 0.2s', textAlign: 'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}
                 >
-                  <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="10" y1="13" x2="8" y2="13"></line><line x1="16" y1="13" x2="14" y2="13"></line><line x1="12" y1="11" x2="12" y2="15"></line></svg>
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fbbf24' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="12" rx="2" ry="2"></rect><line x1="12" y1="16" x2="12" y2="20"></line><line x1="8" y1="20" x2="16" y2="20"></line><line x1="3" y1="8" x2="21" y2="8"></line></svg>
                   </div>
-                  Markdown
-                </button>
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 0' }} />
-                <button
-                  onClick={() => { setCreateMenuOpen(false); setUploadDialogOpen(true); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', background: 'none', border: 'none', color: '#e2e8f0', fontFamily: 'Inter', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderRadius: 8, transition: 'background 0.2s', textAlign: 'left' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                >
-                  <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  </div>
-                  Upload & Share File
+                  Presentation
                 </button>
               </div>
             </>
@@ -633,124 +650,7 @@ export default function DocumentsPage() {
             )}
           </>
         )}
-
-        {/* ═══ Shared Files Section ═══ */}
-        {sharedFiles.length > 0 && (
-          <>
-            <div className="dp-section-header" style={{ marginTop: 32 }}>
-              <div className="dp-section-label">Shared Files</div>
-              <div className="dp-count">{sharedFiles.length}</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-              {sharedFiles.map((f) => {
-                const isOwn = String(f.uploaded_by?._id) === String(userId);
-                return (
-                  <div key={f._id} style={{
-                    background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
-                    transition: 'all 0.2s', cursor: 'default'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa', flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.file_name}</p>
-                        <p style={{ fontSize: 11, color: '#64748b' }}>{formatFileSize(f.file_size)} · {f.category}</p>
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        <a href={f.file_url} target="_blank" rel="noopener noreferrer" style={{ padding: '4px 10px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
-                          Download
-                        </a>
-                        {isOwn && (
-                          <button onClick={() => deleteSharedFile(f._id)} style={{ padding: '4px 8px', background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>✕</button>
-                        )}
-                      </div>
-                    </div>
-                    {f.description && <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.4 }}>{f.description}</p>}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: '#475569' }}>
-                      <span>By {f.uploaded_by?.first_name} {f.uploaded_by?.last_name}</span>
-                      <span style={{ padding: '2px 6px', borderRadius: 4, background: f.visibility === 'everyone' ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.1)', color: f.visibility === 'everyone' ? '#34d399' : '#818cf8' }}>
-                        {f.visibility === 'everyone' ? 'Everyone' : f.visibility === 'specific' ? 'Specific users' : f.visibility === 'department' ? f.shared_department?.name || 'Department' : 'Admins only'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
       </div>
-
-      {/* ═══ Upload Dialog ═══ */}
-      {uploadDialogOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }} onClick={(e) => e.target === e.currentTarget && setUploadDialogOpen(false)}>
-          <div style={{ background: '#161b27', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24, width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#f1f5f9', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Upload & Share File
-            </h3>
-
-            {/* File picker */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              style={{ border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 10, padding: selectedFile ? '12px 16px' : '28px 16px', textAlign: 'center', cursor: 'pointer', marginBottom: 14, transition: 'border-color 0.2s', background: 'rgba(0,0,0,0.2)' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
-            >
-              {selectedFile ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  <span style={{ fontSize: 13, color: '#e2e8f0', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile.name}</span>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>{formatFileSize(selectedFile.size)}</span>
-                </div>
-              ) : (
-                <>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" style={{ margin: '0 auto 8px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <p style={{ fontSize: 13, color: '#94a3b8' }}>Click to select a file</p>
-                  <p style={{ fontSize: 11, color: '#475569' }}>PDF, DOCX, images, code files — up to 10MB</p>
-                </>
-              )}
-            </div>
-            <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
-
-            {/* Description */}
-            <input value={uploadForm.description} onChange={(e) => setUploadForm(f => ({ ...f, description: e.target.value }))} placeholder="Description (optional)" style={{ width: '100%', padding: '8px 12px', background: '#0d0e14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 13, marginBottom: 10, outline: 'none', fontFamily: 'Inter,sans-serif' }} />
-
-            {/* Visibility */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-              <div>
-                <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Share with</label>
-                <select value={uploadForm.visibility} onChange={(e) => setUploadForm(f => ({ ...f, visibility: e.target.value }))} style={{ width: '100%', padding: '8px 10px', background: '#0d0e14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 12, fontFamily: 'Inter,sans-serif', cursor: 'pointer' }}>
-                  <option value="everyone">Everyone</option>
-                  <option value="specific">Specific People</option>
-                  <option value="department">My Department</option>
-                  <option value="admins_only">Admins Only</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Category</label>
-                <select value={uploadForm.category} onChange={(e) => setUploadForm(f => ({ ...f, category: e.target.value }))} style={{ width: '100%', padding: '8px 10px', background: '#0d0e14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 12, fontFamily: 'Inter,sans-serif', cursor: 'pointer' }}>
-                  <option value="general">General</option>
-                  <option value="policy">Policy</option>
-                  <option value="template">Template</option>
-                  <option value="report">Report</option>
-                  <option value="training">Training</option>
-                  <option value="design">Design</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={() => { setUploadDialogOpen(false); setSelectedFile(null); }} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#94a3b8', fontSize: 13, cursor: 'pointer', fontFamily: 'Inter,sans-serif' }}>Cancel</button>
-              <button onClick={handleUpload} disabled={uploading || !selectedFile} style={{ padding: '8px 16px', background: uploading ? '#334155' : 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'Inter,sans-serif', opacity: !selectedFile ? 0.5 : 1 }}>
-                {uploading ? 'Uploading...' : 'Upload & Share'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
