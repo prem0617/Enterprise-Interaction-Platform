@@ -118,6 +118,75 @@ Given a transcript of messages a user has not yet read, provide a concise and cl
   }
 };
 
+/** Flatten stored document content to plain text for the AI context window */
+function slideDeckToPlainText(raw) {
+  try {
+    const p = JSON.parse(raw);
+    const slides = p.slides || (Array.isArray(p) ? p : []);
+    if (!Array.isArray(slides)) return "";
+    const text = slides
+      .map((s) => {
+        if (s?.elements && Array.isArray(s.elements)) {
+          return s.elements
+            .filter((e) => e?.type === "text" && e.text)
+            .map((e) => e.text)
+            .join("\n");
+        }
+        return [s.title, s.body, s.notes, s.content].filter(Boolean).join("\n");
+      })
+      .join("\n\n");
+    return text.replace(/\s+/g, " ").trim();
+  } catch {
+    return raw.replace(/\s+/g, " ").trim();
+  }
+}
+
+function documentContentToPlainText(doc) {
+  const raw = doc.content || "";
+  const type = doc.doc_type || "markdown";
+
+  if (type === "slide" || type === "presentation") {
+    return slideDeckToPlainText(raw);
+  }
+
+  if (type === "sheet") {
+    try {
+      const data = JSON.parse(raw);
+      if (data.sheets && Array.isArray(data.sheets)) {
+        return data.sheets
+          .map((sh) => {
+            const g = sh.grid;
+            if (!g || !Array.isArray(g)) return "";
+            return g
+              .map((row) => (Array.isArray(row) ? row.join("\t") : ""))
+              .join("\n");
+          })
+          .join("\n\n")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+      if (Array.isArray(data)) {
+        return data
+          .map((row) => (Array.isArray(row) ? row.join("\t") : ""))
+          .join("\n")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return raw
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export const documentQA = async (req, res) => {
   try {
     const { document_id } = req.params;
@@ -132,16 +201,7 @@ export const documentQA = async (req, res) => {
       return res.status(404).json({ error: "Document not found" });
     }
 
-    // Strip HTML tags for cleaner context
-    const textContent = (doc.content || "")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 12000); // Limit context length
+    const textContent = documentContentToPlainText(doc).slice(0, 12000);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

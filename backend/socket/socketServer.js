@@ -822,8 +822,9 @@ io.on("connection", async (socket) => {
     const latest = activeDocuments[docId]?._latestContent;
     const version = activeDocuments[docId]?._version;
     const title = activeDocuments[docId]?._latestTitle;
-    if (latest !== undefined || title !== undefined) {
-      socket.emit("doc-full-state", { docId, content: latest, version, title });
+    const theme = activeDocuments[docId]?._latestTheme;
+    if (latest !== undefined || title !== undefined || theme !== undefined) {
+      socket.emit("doc-full-state", { docId, content: latest, version, title, theme });
     }
   });
 

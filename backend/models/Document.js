@@ -14,7 +14,12 @@ const CollaboratorSchema = new mongoose.Schema(
     {
       title:   { type: String, default: "Untitled document" },
       content: { type: String, default: "" },
-      doc_type: { type: String, enum: ["sheet", "markdown"], default: "markdown" },
+      doc_type: {
+        type: String,
+        enum: ["sheet", "markdown", "docx", "presentation", "doc", "slide"],
+        default: "markdown",
+      },
+      slide_theme: { type: String, default: "light" },
       owner:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
     // Each entry: { user: ObjectId, access: "read"|"write", added_at: Date }

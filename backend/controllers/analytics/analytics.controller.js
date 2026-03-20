@@ -6,7 +6,7 @@ import { SupportTicket } from "../../models/SupportTicket.js";
 import Meeting from "../../models/Meeting.js";
 import User from "../../models/User.js";
 import { Message } from "../../models/Message.js";
-import Notification from "../../models/Notification.js";
+import { fetchMapByIds } from "../../utils/safeObjectIdBatch.js";
 
 function startOfDay(date) {
   const d = new Date(date);
@@ -22,11 +22,26 @@ export const getAnalyticsOverview = async (req, res) => {
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    // ─── Core counts ───
-    const [employees, departments] = await Promise.all([
-      Employee.find({ is_active: true }).populate("department", "name code type").populate("user_id", "first_name last_name email country date_of_birth profile_picture created_at last_login").lean(),
+    // ─── Core counts (manual joins — avoids populate $in BSON errors on bad refs) ───
+    const [rawEmployees, departments] = await Promise.all([
+      Employee.find({ is_active: true }).lean(),
       Department.find({ is_active: true }).lean(),
     ]);
+    const empUserIds = rawEmployees.map((e) => e.user_id);
+    const empDeptIds = rawEmployees.map((e) => e.department);
+    const [empUserMap, empDeptMap] = await Promise.all([
+      fetchMapByIds(
+        User,
+        empUserIds,
+        "first_name last_name email country date_of_birth profile_picture created_at last_login"
+      ),
+      fetchMapByIds(Department, empDeptIds, "name code type"),
+    ]);
+    const employees = rawEmployees.map((emp) => ({
+      ...emp,
+      user_id: empUserMap.get(emp.user_id?.toString?.()) ?? null,
+      department: empDeptMap.get(emp.department?.toString?.()) ?? null,
+    }));
 
     // ─── Department distribution ───
     const deptMap = {};
@@ -61,7 +76,7 @@ export const getAnalyticsOverview = async (req, res) => {
       const nextBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
       if (nextBirthday < today) nextBirthday.setFullYear(now.getFullYear() + 1);
       const daysUntil = Math.ceil((nextBirthday - today) / (1000 * 60 * 60 * 24));
-      if (daysUntil <= 30) {
+      if (daysUntil <= 30 && emp.user_id?._id) {
         const age = nextBirthday.getFullYear() - birth.getFullYear();
         upcomingBirthdays.push({
           _id: emp.user_id._id,
@@ -134,18 +149,31 @@ export const getAnalyticsOverview = async (req, res) => {
     // ─── Upcoming meetings (next 7 days) ───
     const next7Days = new Date(now);
     next7Days.setDate(next7Days.getDate() + 7);
-    const upcomingMeetings = await Meeting.find({
+    const upcomingMeetingsRaw = await Meeting.find({
       status: "scheduled",
       scheduled_at: { $gte: now, $lte: next7Days },
     })
-      .populate("host_id", "first_name last_name email profile_picture")
       .sort({ scheduled_at: 1 })
       .limit(10)
       .lean();
+    const hostMap = await fetchMapByIds(
+      User,
+      upcomingMeetingsRaw.map((m) => m.host_id),
+      "first_name last_name email profile_picture"
+    );
+    const upcomingMeetings = upcomingMeetingsRaw.map((m) => ({
+      ...m,
+      host_id: hostMap.get(m.host_id?.toString?.()) ?? null,
+    }));
 
-    // ─── Meeting stats ───
+    // ─── Meeting stats (Meeting schema uses default timestamps → createdAt) ───
     const [totalMeetingsThisMonth, meetingsByStatus] = await Promise.all([
-      Meeting.countDocuments({ created_at: { $gte: thisMonthStart, $lte: thisMonthEnd } }),
+      Meeting.countDocuments({
+        $or: [
+          { createdAt: { $gte: thisMonthStart, $lte: thisMonthEnd } },
+          { created_at: { $gte: thisMonthStart, $lte: thisMonthEnd } },
+        ],
+      }),
       Promise.all(
         ["scheduled", "active", "ended", "cancelled"].map(async (status) => ({
           status,

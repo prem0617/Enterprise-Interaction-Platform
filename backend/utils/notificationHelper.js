@@ -1,5 +1,6 @@
 import Notification from "../models/Notification.js";
 import { getReceiverSocketId, io } from "../socket/socketServer.js";
+import { isWebPushConfigured, sendWebPushToUser } from "./webPush.js";
 
 /**
  * Create a notification and push it to the recipient via Socket.IO.
@@ -41,6 +42,16 @@ export async function createNotification({
     const socketId = getReceiverSocketId(recipientId.toString());
     if (socketId && io) {
       io.to(socketId).emit("notification", populated);
+    }
+
+    // Web Push (works when tab is closed / browser in background)
+    if (populated && isWebPushConfigured()) {
+      void sendWebPushToUser(recipientId, {
+        title: populated.title,
+        body: populated.body || "",
+        url: "/",
+        tag: `eip-${populated._id}`,
+      });
     }
 
     return populated;

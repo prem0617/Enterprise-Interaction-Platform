@@ -24,10 +24,10 @@ import documentRoutes from "./routes/document.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import payrollRoutes from "./routes/payroll.routes.js";
-import performanceRoutes from "./routes/performance.routes.js";
 import directoryRoutes from "./routes/directory.routes.js";
 import sharedFileRoutes from "./routes/sharedfile.routes.js";
 import { verifyEmailConfig } from "./utils/emailService.js";
+import { initWebPush } from "./utils/webPush.js";
 import { server, app } from "./socket/socketServer.js";
 import { Message } from "./models/Message.js";
 import Meeting from "./models/Meeting.js";
@@ -59,6 +59,7 @@ connectDB();
 
 // Verify email configuration
 verifyEmailConfig();
+initWebPush();
 
 // Routes
 app.get("/", (req, res) => {
@@ -96,7 +97,6 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payroll", payrollRoutes);
-app.use("/api/performance", performanceRoutes);
 app.use("/api/directory", directoryRoutes);
 app.use("/api/shared-files", sharedFileRoutes);
 // Admin dashboard stats

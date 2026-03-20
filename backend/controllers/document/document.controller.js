@@ -28,17 +28,32 @@ function isOwnerOrAdmin(doc, userId, req) {
   return idStr(doc.owner) === String(userId) || req.user?.user_type === "admin";
 }
 
+const ALLOWED_DOC_TYPES = [
+  "sheet",
+  "markdown",
+  "docx",
+  "presentation",
+  "doc",
+  "slide",
+];
+
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 export const createDocument = async (req, res) => {
   try {
-    const { title, content, is_public, doc_type } = req.body;
+    const { title, content, is_public, doc_type, slide_theme } = req.body;
     const owner = getUid(req);
+
+    const resolvedType = ALLOWED_DOC_TYPES.includes(doc_type) ? doc_type : "markdown";
 
     const doc = new Document({
       title: title || "Untitled document",
       content: content || "",
-      doc_type: ["sheet", "markdown"].includes(doc_type) ? doc_type : "markdown",
+      doc_type: resolvedType,
+      slide_theme:
+        typeof slide_theme === "string" && slide_theme.trim()
+          ? slide_theme.trim()
+          : "light",
       owner,
       is_public: !!is_public,
       collaborators: [],
@@ -121,7 +136,7 @@ export const getDocumentById = async (req, res) => {
 export const updateDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, is_public } = req.body;
+    const { title, content, is_public, slide_theme } = req.body;
     const userId = getUid(req);
 
     const doc = await Document.findById(id);
@@ -134,6 +149,14 @@ export const updateDocument = async (req, res) => {
     if (title   !== undefined) doc.title   = title;
     if (content !== undefined) {
       doc.content = content;
+      doc.last_edited_by = userId;
+    }
+    if (
+      slide_theme !== undefined &&
+      typeof slide_theme === "string" &&
+      slide_theme.trim()
+    ) {
+      doc.slide_theme = slide_theme.trim();
       doc.last_edited_by = userId;
     }
 
@@ -408,7 +431,7 @@ export const getDocumentByShareToken = async (req, res) => {
 export const autoSaveDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    const { content, title } = req.body;
+    const { content, title, slide_theme } = req.body;
     const userId = getUid(req);
 
     const doc = await Document.findById(id);
@@ -422,6 +445,14 @@ export const autoSaveDocument = async (req, res) => {
       doc.last_edited_by = userId;
     }
     if (title !== undefined) doc.title = title;
+    if (
+      slide_theme !== undefined &&
+      typeof slide_theme === "string" &&
+      slide_theme.trim()
+    ) {
+      doc.slide_theme = slide_theme.trim();
+      doc.last_edited_by = userId;
+    }
 
     await doc.save();
     res.json({ success: true, updated_at: doc.updated_at });
