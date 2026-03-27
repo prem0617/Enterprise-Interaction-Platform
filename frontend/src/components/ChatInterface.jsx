@@ -2598,7 +2598,7 @@ const ChatInterface = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-400" />
                 <h3 className="text-sm font-semibold text-zinc-100">
-                  Unseen Messages Summary
+                  Chat Summary
                 </h3>
               </div>
               <button
@@ -2625,7 +2625,7 @@ const ChatInterface = () => {
                     You're all caught up!
                   </p>
                   <p className="text-xs text-zinc-500 text-center">
-                    No unseen messages in this conversation.
+                    Nothing to summarize yet.
                   </p>
                 </div>
               ) : summaryData ? (
@@ -2633,8 +2633,11 @@ const ChatInterface = () => {
                   {/* Unseen count badge */}
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-indigo-500/15 text-indigo-300 text-xs font-medium rounded-full">
-                      {summaryData.unseen_count} unseen{" "}
-                      {summaryData.unseen_count === 1 ? "message" : "messages"}
+                      {summaryData.scope === "recent"
+                        ? "Recent messages"
+                        : `${summaryData.unseen_count} unseen ${
+                            summaryData.unseen_count === 1 ? "message" : "messages"
+                          }`}
                     </span>
                     {summaryData.channel?.name && (
                       <span className="text-xs text-zinc-500 truncate">

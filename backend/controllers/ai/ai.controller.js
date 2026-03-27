@@ -44,11 +44,89 @@ export const chatSummary = async (req, res) => {
       .populate("sender_id", "first_name last_name email")
       .lean();
 
+    // If nothing is unseen, fallback to summarizing recent messages so the user still gets a useful summary
     if (unseenMessages.length === 0) {
+      const recent = await Message.find({
+        channel_id,
+        deleted_at: null,
+      })
+        .sort({ created_at: -1 })
+        .limit(40)
+        .populate("sender_id", "first_name last_name email")
+        .lean();
+
+      if (!recent?.length) {
+        return res.status(200).json({
+          summary: null,
+          message: "No messages found in this channel.",
+          unseen_count: 0,
+          scope: "recent",
+          channel: {
+            id: channel._id,
+            name: channel.name ?? null,
+            channel_type: channel.channel_type,
+          },
+        });
+      }
+
+      const recentChrono = recent.reverse();
+      const transcript = recentChrono
+        .map((msg) => {
+          const senderName = msg.sender_id
+            ? `${msg.sender_id.first_name ?? ""} ${msg.sender_id.last_name ?? ""}`.trim()
+            : "Unknown User";
+
+          const timestamp = new Date(msg.created_at).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          if (msg.message_type === "file") {
+            return `[${timestamp}] ${senderName}: [Shared a file: ${msg.file_name ?? "file"}]`;
+          }
+
+          if (msg.message_type === "system") {
+            return `[${timestamp}] System: ${msg.content}`;
+          }
+
+          return `[${timestamp}] ${senderName}: ${msg.content}`;
+        })
+        .join("\n");
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a helpful assistant that summarizes chat conversations.
+Given a transcript of recent messages from a chat channel, provide a concise and clear summary that:
+- Highlights the key topics discussed
+- Mentions any important decisions, action items, or requests (if any)
+- Notes any files or resources shared
+- Keeps the summary brief (3–6 sentences max)
+- Uses a neutral, professional tone`,
+          },
+          {
+            role: "user",
+            content: `Please summarize the following recent messages from a chat channel:\n\n${transcript}`,
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.4,
+      });
+
+      const summary = completion.choices[0]?.message?.content?.trim();
       return res.status(200).json({
-        summary: null,
-        message: "No unseen messages found in this channel.",
+        summary,
         unseen_count: 0,
+        scope: "recent",
+        channel: {
+          id: channel._id,
+          name: channel.name ?? null,
+          channel_type: channel.channel_type,
+        },
       });
     }
 
@@ -106,6 +184,7 @@ Given a transcript of messages a user has not yet read, provide a concise and cl
     return res.status(200).json({
       summary,
       unseen_count: unseenMessages.length,
+      scope: "unseen",
       channel: {
         id: channel._id,
         name: channel.name ?? null,

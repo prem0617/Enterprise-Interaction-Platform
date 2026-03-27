@@ -10,6 +10,7 @@ import DepartmentManagement from "./DepartmentManagement";
 import AdminChangePasswordPage from "./AdminChangePasswordPage";
 import TicketManagement from "./TicketManagement";
 import DocumentsPage from "../documents/DocumentsPage";
+import AdminTeamsView from "./AdminTeamsView";
 import ChatInterface from "@/components/ChatInterface";
 import MeetingModule from "@/components/MeetingModule";
 import WhiteboardModule from "@/components/WhiteboardModule";
@@ -94,6 +95,7 @@ export default function AdminDashboard() {
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { id: "employees", icon: Users, label: "Employees" },
     { id: "departments", icon: Building2, label: "Departments" },
+    { id: "teams", icon: Users, label: "Teams" },
     { id: "documents", icon: FileText, label: "Documents" },
     { id: "messages", icon: MessageSquare, label: "Messages" },
     { id: "meetings", icon: Video, label: "Meetings" },
@@ -112,6 +114,8 @@ export default function AdminDashboard() {
         return <EmployeeManagement />;
       case "departments":
         return <DepartmentManagement />;
+      case "teams":
+        return <AdminTeamsView />;
       case "documents":
         return <DocumentsPage />;
       case "messages":
