@@ -1848,24 +1848,27 @@ const ChatInterface = () => {
                 {(selectedChat.channel_type === "group" ||
                   selectedChat.channel_type === "team") && (
                   <>
-                    <button
-                      onClick={() =>
-                        groupCall.startGroupCall(
-                          selectedChat._id,
-                          selectedChat.name,
-                          "video"
-                        )
-                      }
-                      disabled={
-                        groupCall.groupCallState !== "idle" ||
-                        audioCall.callState !== "idle" ||
-                        videoCall.callState !== "idle"
-                      }
-                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
-                      title="Start video call"
-                    >
-                      <Video className="w-4 h-4" />
-                    </button>
+                    {(selectedChat.channel_type === "team" ||
+                      selectedChat.user_role === "admin") && (
+                      <button
+                        onClick={() =>
+                          groupCall.startGroupCall(
+                            selectedChat._id,
+                            selectedChat.name,
+                            "video"
+                          )
+                        }
+                        disabled={
+                          groupCall.groupCallState !== "idle" ||
+                          audioCall.callState !== "idle" ||
+                          videoCall.callState !== "idle"
+                        }
+                        className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
+                        title="Start video call"
+                      >
+                        <Video className="w-4 h-4" />
+                      </button>
+                    )}
                     {groupCall.groupCallState === "idle" &&
                       !groupCallStatus?.active &&
                       (selectedChat.channel_type === "team" ||
