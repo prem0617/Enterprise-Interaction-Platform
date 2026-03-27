@@ -126,7 +126,9 @@ export const checkUserCallStatus = async (req, res) => {
 };
 
 /**
- * POST /api/call/group/start - Start a group call (admin only).
+ * POST /api/call/group/start - Start a group call.
+ * - Team channels: any member can start.
+ * - Regular group channels: admin only.
  */
 export const startGroupCall = async (req, res) => {
   try {
@@ -146,8 +148,18 @@ export const startGroupCall = async (req, res) => {
       return res.status(403).json({ error: "Not a member of this channel" });
     }
 
-    if (membership.role !== "admin") {
-      return res.status(403).json({ error: "Only channel admins can start group calls" });
+    const channel = await ChatChannel.findById(channelId).select(
+      "channel_type name"
+    );
+    if (!channel) {
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    const isTeamChannel = channel.channel_type === "team";
+    if (!isTeamChannel && membership.role !== "admin") {
+      return res
+        .status(403)
+        .json({ error: "Only channel admins can start group calls" });
     }
 
     if (activeGroupCalls[channelId]) {
@@ -169,7 +181,6 @@ export const startGroupCall = async (req, res) => {
       channelId: channelId,
     });
 
-    const channel = await ChatChannel.findById(channelId);
     const channelName = channel?.name || "Group";
 
     const members = await ChannelMember.find({ channel_id: channelId }).select("user_id");
