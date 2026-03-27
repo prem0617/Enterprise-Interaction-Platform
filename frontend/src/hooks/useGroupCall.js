@@ -34,6 +34,7 @@ export function useGroupCall(
   const [initiatorId, setInitiatorId] = useState(null);
   const [initiatorName, setInitiatorName] = useState(null);
   const [participants, setParticipants] = useState([]); // [{ id, name }]
+  const [callMediaType, setCallMediaType] = useState("video"); // "audio" | "video"
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({}); // { [userId]: MediaStream }
   const [isMuted, setIsMuted] = useState(false);
@@ -65,6 +66,7 @@ export function useGroupCall(
     setInitiatorId(null);
     setInitiatorName(null);
     setParticipants([]);
+    setCallMediaType("video");
     setIsMuted(false);
     setIsVideoOff(false);
     setErrorMessage(null);
@@ -105,18 +107,23 @@ export function useGroupCall(
   }, [isVideoOff]);
 
   const startGroupCall = useCallback(
-    async (channelId, channelName) => {
+    async (channelId, channelName, mediaTypeArg = "video") => {
       if (!currentUserIdStr || !startGroupCallApi) return;
       setErrorMessage(null);
       isInitiatorRef.current = true;
+      const effectiveMediaType = mediaTypeArg === "audio" ? "audio" : "video";
+      setCallMediaType(effectiveMediaType);
 
       // Request microphone and video permissions upfront
       let stream;
       try {
-        stream = await requestMediaPermissions({ audio: true, video: true });
+        stream = await requestMediaPermissions({
+          audio: true,
+          video: effectiveMediaType === "video",
+        });
         localStreamRef.current = stream;
         setLocalStream(stream);
-        setIsVideoOff(false);
+        setIsVideoOff(effectiveMediaType !== "video");
       } catch (err) {
         console.error("[GROUP_CALL] media permission denied:", err);
         setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Camera/microphone access denied");
@@ -124,7 +131,7 @@ export function useGroupCall(
       }
 
       try {
-        await startGroupCallApi(channelId);
+        await startGroupCallApi(channelId, effectiveMediaType);
         setActiveChannelId(channelId);
         setActiveChannelName(channelName || "Group");
         setInitiatorId(currentUserIdStr);
@@ -145,17 +152,34 @@ export function useGroupCall(
   );
 
   const joinGroupCall = useCallback(
-    async (channelId, channelName, initId, initName) => {
+    async (channelId, channelName, initId, initName, mediaTypeArg = null) => {
       if (!currentUserIdStr || !joinGroupCallApi) return;
       setErrorMessage(null);
+
+      let effectiveMediaType = (mediaTypeArg === "audio" || mediaTypeArg === "video") ? mediaTypeArg : callMediaType;
+      // If we missed the start event, fetch status to know whether this is audio-only or video
+      try {
+        if (getGroupCallStatusApi) {
+          const status = await getGroupCallStatusApi(channelId);
+          if (status?.mediaType === "audio" || status?.mediaType === "video") {
+            effectiveMediaType = status.mediaType;
+          }
+        }
+      } catch (err) {
+        // Ignore status fetch failures; fall back to current state/default
+      }
 
       // Request microphone and video permissions upfront
       let stream;
       try {
-        stream = await requestMediaPermissions({ audio: true, video: true });
+        stream = await requestMediaPermissions({
+          audio: true,
+          video: effectiveMediaType === "video",
+        });
         localStreamRef.current = stream;
         setLocalStream(stream);
-        setIsVideoOff(false);
+        setIsVideoOff(effectiveMediaType !== "video");
+        setCallMediaType(effectiveMediaType);
       } catch (err) {
         console.error("[GROUP_CALL] media permission denied:", err);
         setErrorMessage(err instanceof PermissionDeniedError ? err.message : "Camera/microphone access denied");
@@ -193,7 +217,7 @@ export function useGroupCall(
         setErrorMessage(err.response?.data?.error || "Failed to join call");
       }
     },
-    [currentUserIdStr, currentUserName, joinGroupCallApi]
+    [currentUserIdStr, currentUserName, joinGroupCallApi, getGroupCallStatusApi, callMediaType]
   );
 
   const dismissIncoming = useCallback(() => {
@@ -208,7 +232,7 @@ export function useGroupCall(
     if (!socket || !currentUserIdStr) return;
 
     const handleGroupCallStarted = (data) => {
-      const { channelId, channelName, initiatorId: initId, initiatorName: initName } = data;
+      const { channelId, channelName, initiatorId: initId, initiatorName: initName, mediaType } = data;
       if (groupCallState !== "idle" && activeChannelId !== channelId) return;
       if (String(initId) === currentUserIdStr) return;
       console.log("[GROUP_CALL] received group-call-started", data);
@@ -216,6 +240,7 @@ export function useGroupCall(
       setActiveChannelName(channelName || "Group");
       setInitiatorId(String(initId));
       setInitiatorName(initName || "Someone");
+      if (mediaType === "audio" || mediaType === "video") setCallMediaType(mediaType);
       setGroupCallState("incoming");
     };
 
@@ -447,6 +472,7 @@ export function useGroupCall(
     groupCallState,
     activeChannelId,
     activeChannelName,
+    callMediaType,
     initiatorId,
     initiatorName,
     participants,

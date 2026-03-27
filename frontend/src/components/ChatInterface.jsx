@@ -418,10 +418,10 @@ const ChatInterface = () => {
   const renderCallModals = !hasGlobalCall;
 
   const startGroupCallApi = useCallback(
-    async (channelId) => {
+    async (channelId, mediaType = "video") => {
       const { data } = await axios.post(
         `${BACKEND_URL}/call/group/start`,
-        { channelId },
+        { channelId, mediaType },
         axiosConfig
       );
       return data;
@@ -1852,7 +1852,8 @@ const ChatInterface = () => {
                       onClick={() =>
                         groupCall.startGroupCall(
                           selectedChat._id,
-                          selectedChat.name
+                          selectedChat.name,
+                          "video"
                         )
                       }
                       disabled={
@@ -1873,7 +1874,8 @@ const ChatInterface = () => {
                           onClick={() =>
                             groupCall.startGroupCall(
                               selectedChat._id,
-                              selectedChat.name
+                              selectedChat.name,
+                              "audio"
                             )
                           }
                           disabled={
@@ -2552,6 +2554,17 @@ const ChatInterface = () => {
       )}
       {(groupCall.groupCallState === "active" ||
         groupCall.groupCallState === "joined") && (
+        groupCall.callMediaType === "audio" ? (
+          <GroupCallActiveBar
+            channelName={groupCall.activeChannelName}
+            participants={groupCall.participants}
+            remoteStreams={groupCall.remoteStreams}
+            isMuted={groupCall.isMuted}
+            onToggleMute={groupCall.toggleMute}
+            onHangUp={groupCall.leaveGroupCall}
+            currentUserId={user?.id}
+          />
+        ) : (
           <GroupVideoCallBar
             channelName={groupCall.activeChannelName}
             participants={groupCall.participants}
@@ -2565,6 +2578,7 @@ const ChatInterface = () => {
             currentUserId={user?.id}
             isConnecting={groupCall.groupCallState === "waiting"}
           />
+        )
         )}
       <FileUploadModal
         show={showFileUpload}

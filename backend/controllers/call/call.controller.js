@@ -132,7 +132,7 @@ export const checkUserCallStatus = async (req, res) => {
  */
 export const startGroupCall = async (req, res) => {
   try {
-    const { channelId } = req.body;
+    const { channelId, mediaType = "video" } = req.body;
     const userId = req.userId;
     const user = req.user;
 
@@ -166,12 +166,16 @@ export const startGroupCall = async (req, res) => {
       return res.status(400).json({ error: "A group call is already active in this channel" });
     }
 
+    const normalizedMediaType = mediaType === "audio" ? "audio" : "video";
+
     const userIdStr = String(userId);
     const initiatorName = getCallerName(user);
     activeGroupCalls[channelId] = {
       initiatorId: userIdStr,
       initiatorName,
       participantIds: [userIdStr],
+      channelName: channel?.name || "Group",
+      mediaType: normalizedMediaType,
     };
 
     // Mark initiator as in a group call
@@ -192,6 +196,7 @@ export const startGroupCall = async (req, res) => {
           channelName,
           initiatorId: userIdStr,
           initiatorName,
+          mediaType: normalizedMediaType,
         });
       }
     }
@@ -201,6 +206,7 @@ export const startGroupCall = async (req, res) => {
       channelId,
       initiatorId: userIdStr,
       participantIds: [userIdStr],
+      mediaType: normalizedMediaType,
     });
   } catch (error) {
     console.error("[CALL] startGroupCall error:", error);
@@ -251,6 +257,7 @@ export const getGroupCallStatus = async (req, res) => {
       initiatorName: call.initiatorName,
       participantIds: call.participantIds,
       participants,
+      mediaType: call.mediaType || "video",
     });
   } catch (error) {
     console.error("[CALL] getGroupCallStatus error:", error);
