@@ -19,6 +19,9 @@ import {
   GitBranchPlus,
   Crown,
   RefreshCcw,
+  UserPlus,
+  UserMinus,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -249,6 +252,13 @@ export default function DepartmentManagement() {
   const [detailEmployees, setDetailEmployees] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Manage team members
+  const [membersModal, setMembersModal] = useState(null); // team dept object
+  const [teamMembers, setTeamMembers] = useState([]);     // employees in the team
+  const [parentMembers, setParentMembers] = useState([]); // employees in parent dept
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersSaving, setMembersSaving] = useState(false);
+
   // ─── Fetch ───
   const fetchDepartments = useCallback(async () => {
     try {
@@ -457,7 +467,76 @@ export default function DepartmentManagement() {
     }
   };
 
+  // ─── Manage Team Members ───
+  const openMembersModal = async (team) => {
+    setMembersModal(team);
+    setMembersLoading(true);
+    setTeamMembers([]);
+    setParentMembers([]);
+    try {
+      const teamRes = await axios.get(
+        `${BACKEND_URL}/employees?department=${team._id}&is_active=true`,
+        { headers: getAuthHeaders() }
+      );
+      const teamEmps = teamRes.data?.employees || [];
+      setTeamMembers(teamEmps);
+
+      const parentId = team.parent_department_id?._id || team.parent_department_id;
+      if (parentId) {
+        const parentRes = await axios.get(
+          `${BACKEND_URL}/employees?department=${parentId}&is_active=true`,
+          { headers: getAuthHeaders() }
+        );
+        setParentMembers(parentRes.data?.employees || []);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load team members");
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const handleAddToTeam = async (emp) => {
+    if (!membersModal) return;
+    setMembersSaving(true);
+    try {
+      await axios.put(
+        `${BACKEND_URL}/departments/${membersModal._id}/members`,
+        { add: [emp._id], remove: [] },
+        { headers: getAuthHeaders() }
+      );
+      toast.success(`${emp.user_id?.first_name} added to team`);
+      await openMembersModal(membersModal);
+      fetchDepartments();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to add member");
+    } finally {
+      setMembersSaving(false);
+    }
+  };
+
+  const handleRemoveFromTeam = async (emp) => {
+    if (!membersModal) return;
+    setMembersSaving(true);
+    try {
+      await axios.put(
+        `${BACKEND_URL}/departments/${membersModal._id}/members`,
+        { add: [], remove: [emp._id] },
+        { headers: getAuthHeaders() }
+      );
+      toast.success(`${emp.user_id?.first_name} removed from team`);
+      await openMembersModal(membersModal);
+      fetchDepartments();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to remove member");
+    } finally {
+      setMembersSaving(false);
+    }
+  };
+
   // ─── Render ───
+
   const labelClasses = "block text-xs font-medium text-zinc-400 mb-1.5";
   const inputClasses =
     "flex h-9 w-full rounded-lg border border-zinc-700/80 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors";
@@ -620,7 +699,7 @@ export default function DepartmentManagement() {
       {viewMode === "list" ? (
         <>
           {/* Search */}
-          <div className="mb-4">
+          <div className="mb-6">
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
               <Input
@@ -632,173 +711,190 @@ export default function DepartmentManagement() {
             </div>
           </div>
 
-          {/* Department Cards */}
-          {filteredDepartments.length === 0 ? (
-            <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-12 text-center">
-              <Building2 className="mx-auto size-10 text-zinc-700 mb-3" />
-              <h3 className="text-sm font-medium text-zinc-300 mb-1">
-                {searchTerm ? "No results match your search" : "No departments yet"}
-              </h3>
-              <p className="text-sm text-zinc-600 mb-4">
-                {searchTerm
-                  ? "Try a different search term"
-                  : "Create your first department to get started"}
-              </p>
-              {!searchTerm && (
-                <Button onClick={() => openCreateDialog("department")} className="bg-indigo-600 hover:bg-indigo-500 text-white border-0">
-                  <Plus className="size-4" />
-                  Create Department
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredDepartments.map((dept) => {
-                const headUser = dept.head_id?.user_id;
-                const headName = headUser
-                  ? `${headUser.first_name} ${headUser.last_name}`
-                  : null;
-                const headInitials = headUser
-                  ? `${headUser.first_name?.[0] || ""}${headUser.last_name?.[0] || ""}`
-                  : "";
-                const parentName = dept.parent_department_id?.name;
-                const isTeam = dept.type === "team";
+          {/* ─── Departments Section ─── */}
+          {(() => {
+            const depts = filteredDepartments.filter((d) => d.type !== "team");
+            const teams = filteredDepartments.filter((d) => d.type === "team");
 
-                return (
-                  <div
-                    key={dept._id}
-                    className="group bg-zinc-900/60 border border-zinc-800/80 rounded-xl hover:border-zinc-700/80 transition-all cursor-pointer overflow-hidden"
-                    onClick={() => openDetail(dept)}
-                  >
-                    {/* Color bar */}
-                    <div
-                      className="h-1"
-                      style={{ backgroundColor: dept.color || "#6366f1" }}
-                    />
+            const renderCard = (dept) => {
+              const headUser = dept.head_id?.user_id;
+              const headName = headUser ? `${headUser.first_name} ${headUser.last_name}` : null;
+              const headInitials = headUser ? `${headUser.first_name?.[0] || ""}${headUser.last_name?.[0] || ""}` : "";
+              const parentName = dept.parent_department_id?.name;
+              const isTeam = dept.type === "team";
 
-                    <div className="p-4">
-                      {/* Top row: name + actions */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div
-                            className="size-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                            style={{
-                              backgroundColor: `${dept.color || "#6366f1"}15`,
-                            }}
-                          >
-                            {isTeam ? (
-                              <Users
-                                className="size-4"
-                                style={{ color: dept.color || "#6366f1" }}
-                              />
-                            ) : (
-                              <Building2
-                                className="size-4"
-                                style={{ color: dept.color || "#6366f1" }}
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <h3 className="text-sm font-semibold text-zinc-200 truncate">
-                                {dept.name}
-                              </h3>
-                              {isTeam && (
-                                <Badge variant="secondary" className="text-[9px] bg-cyan-500/10 text-cyan-400 border-cyan-500/20 py-0 px-1.5 flex-shrink-0">
-                                  Team
-                                </Badge>
-                              )}
-                            </div>
-                            <span className="text-[10px] font-mono text-zinc-600">
-                              {dept.code}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditDialog(dept);
-                            }}
-                            className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
-                            title="Edit"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget(dept);
-                            }}
-                            className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
+              return (
+                <div
+                  key={dept._id}
+                  className="group bg-zinc-900/60 border border-zinc-800/80 rounded-xl hover:border-zinc-700/80 transition-all cursor-pointer overflow-hidden"
+                  onClick={() => openDetail(dept)}
+                >
+                  {/* Color bar */}
+                  <div className="h-1" style={{ backgroundColor: dept.color || "#6366f1" }} />
 
-                      {/* Description */}
-                      {dept.description && (
-                        <p className="text-xs text-zinc-500 mb-3 line-clamp-2">
-                          {dept.description}
-                        </p>
-                      )}
-
-                      {/* Head */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {headUser ? (
-                            <>
-                              <Avatar className="size-6 ring-1 ring-zinc-800">
-                                <AvatarImage src={headUser.profile_picture} />
-                                <AvatarFallback className="text-[9px] bg-zinc-700 text-zinc-300">
-                                  {headInitials}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="text-xs text-zinc-300 font-medium leading-none">
-                                  {headName}
-                                </p>
-                                <p className="text-[10px] text-zinc-600 mt-0.5">
-                                  {isTeam ? "Team Lead" : "Department Head"}
-                                </p>
-                              </div>
-                            </>
+                  <div className="p-4">
+                    {/* Top row: name + actions */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="size-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: `${dept.color || "#6366f1"}15` }}
+                        >
+                          {isTeam ? (
+                            <Users className="size-4" style={{ color: dept.color || "#6366f1" }} />
                           ) : (
-                            <span className="text-xs text-zinc-600 italic">
-                              No {isTeam ? "lead" : "head"} assigned
-                            </span>
+                            <Building2 className="size-4" style={{ color: dept.color || "#6366f1" }} />
                           )}
                         </div>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-zinc-200 truncate">{dept.name}</h3>
+                          <span className="text-[10px] font-mono text-zinc-600">{dept.code}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isTeam && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
+                            className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                            title="Manage Members"
+                          >
+                            <UserPlus className="size-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditDialog(dept); }}
+                          className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(dept); }}
+                          className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
 
+                    {/* Description */}
+                    {dept.description && (
+                      <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{dept.description}</p>
+                    )}
+
+                    {/* Head + member count */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {headUser ? (
+                          <>
+                            <Avatar className="size-6 ring-1 ring-zinc-800">
+                              <AvatarImage src={headUser.profile_picture} />
+                              <AvatarFallback className="text-[9px] bg-zinc-700 text-zinc-300">{headInitials}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-xs text-zinc-300 font-medium leading-none">{headName}</p>
+                              <p className="text-[10px] text-zinc-600 mt-0.5">{isTeam ? "Team Lead" : "Department Head"}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-zinc-600 italic">No {isTeam ? "lead" : "head"} assigned</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Users className="size-3 text-zinc-600" />
+                        <span className="text-xs font-medium text-zinc-400">{dept.employee_count || 0}</span>
+                      </div>
+                    </div>
+
+                    {/* Parent tag */}
+                    {parentName && (
+                      <div className="mt-2.5 pt-2.5 border-t border-zinc-800/60">
                         <div className="flex items-center gap-1.5">
-                          <Users className="size-3 text-zinc-600" />
-                          <span className="text-xs font-medium text-zinc-400">
-                            {dept.employee_count || 0}
+                          <GitBranchPlus className="size-3 text-zinc-600" />
+                          <span className="text-[10px] text-zinc-500">
+                            {isTeam ? "Department" : "Parent"}: {parentName}
                           </span>
                         </div>
                       </div>
+                    )}
 
-                      {/* Parent tag */}
-                      {parentName && (
-                        <div className="mt-2.5 pt-2.5 border-t border-zinc-800/60">
-                          <div className="flex items-center gap-1.5">
-                            <GitBranchPlus className="size-3 text-zinc-600" />
-                            <span className="text-[10px] text-zinc-500">
-                              {isTeam ? "Department" : "Parent"}: {parentName}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {/* Manage Members CTA for teams */}
+                    {isTeam && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
+                        className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/5 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                      >
+                        <UserPlus className="size-3" />
+                        Manage Members
+                      </button>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            };
+
+            return (
+              <div className="space-y-8">
+                {/* Departments */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="size-4 text-indigo-400" />
+                      <h2 className="text-sm font-semibold text-zinc-300">Departments</h2>
+                      <span className="text-xs text-zinc-600 font-medium">({depts.length})</span>
+                    </div>
+                    <button
+                      onClick={() => openCreateDialog("department")}
+                      className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      <Plus className="size-3.5" /> New
+                    </button>
+                  </div>
+                  {depts.length === 0 ? (
+                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-8 text-center">
+                      <Building2 className="mx-auto size-8 text-zinc-700 mb-2" />
+                      <p className="text-sm text-zinc-500">{searchTerm ? "No departments match" : "No departments yet"}</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {depts.map(renderCard)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Teams */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-cyan-400" />
+                      <h2 className="text-sm font-semibold text-zinc-300">Teams</h2>
+                      <span className="text-xs text-zinc-600 font-medium">({teams.length})</span>
+                    </div>
+                    <button
+                      onClick={() => openCreateDialog("team")}
+                      className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                      <Plus className="size-3.5" /> New
+                    </button>
+                  </div>
+                  {teams.length === 0 ? (
+                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-8 text-center">
+                      <Users className="mx-auto size-8 text-zinc-700 mb-2" />
+                      <p className="text-sm text-zinc-500">{searchTerm ? "No teams match" : "No teams yet — create one within a department"}</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {teams.map(renderCard)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </>
       ) : (
+
         // ─── Org Tree View ───
         <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl">
           <div className="px-5 py-4 border-b border-zinc-800/60">
@@ -1268,6 +1364,135 @@ export default function DepartmentManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Manage Team Members Modal ─── */}
+      <Dialog
+        open={!!membersModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMembersModal(null);
+            setTeamMembers([]);
+            setParentMembers([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl bg-zinc-900 border-zinc-800 text-zinc-100 max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-zinc-100">
+              <div
+                className="size-6 rounded flex items-center justify-center"
+                style={{ backgroundColor: `${membersModal?.color || "#06b6d4"}20` }}
+              >
+                <Users className="size-3.5" style={{ color: membersModal?.color || "#06b6d4" }} />
+              </div>
+              Manage Members — {membersModal?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          {membersLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="size-6 text-cyan-400 animate-spin" />
+            </div>
+          ) : (
+            <div className="flex gap-4 overflow-hidden flex-1 min-h-0 py-2">
+              {/* Current Team Members */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                  Team Members ({teamMembers.length})
+                </p>
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                  {teamMembers.length === 0 ? (
+                    <p className="text-xs text-zinc-600 italic py-4 text-center">No one in this team yet</p>
+                  ) : (
+                    teamMembers.map((emp) => {
+                      const u = emp.user_id || {};
+                      const initials = `${u.first_name?.[0] || ""}${u.last_name?.[0] || ""}`;
+                      return (
+                        <div key={emp._id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-800/60">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Avatar className="size-7 flex-shrink-0">
+                              <AvatarImage src={u.profile_picture} />
+                              <AvatarFallback className="text-[9px] bg-zinc-700 text-zinc-300">{initials}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-zinc-200 truncate">{u.first_name} {u.last_name}</p>
+                              <p className="text-[10px] text-zinc-500 truncate">{emp.position || "—"}</p>
+                            </div>
+                          </div>
+                          <button
+                            disabled={membersSaving}
+                            onClick={() => handleRemoveFromTeam(emp)}
+                            className="size-6 flex-shrink-0 rounded flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            title="Remove from team"
+                          >
+                            <UserMinus className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="w-px bg-zinc-800/60 flex-shrink-0" />
+
+              {/* Available employees from parent dept */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                  Available to Add
+                </p>
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                  {(() => {
+                    const teamMemberIds = new Set(teamMembers.map((m) => String(m._id)));
+                    const available = parentMembers.filter((m) => !teamMemberIds.has(String(m._id)));
+                    if (available.length === 0) {
+                      return <p className="text-xs text-zinc-600 italic py-4 text-center">All department members are in this team</p>;
+                    }
+                    return available.map((emp) => {
+                      const u = emp.user_id || {};
+                      const initials = `${u.first_name?.[0] || ""}${u.last_name?.[0] || ""}`;
+                      return (
+                        <div key={emp._id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-zinc-800/30 border border-zinc-800/40 hover:border-zinc-700/60 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Avatar className="size-7 flex-shrink-0">
+                              <AvatarImage src={u.profile_picture} />
+                              <AvatarFallback className="text-[9px] bg-zinc-700 text-zinc-300">{initials}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-zinc-200 truncate">{u.first_name} {u.last_name}</p>
+                              <p className="text-[10px] text-zinc-500 truncate">{emp.position || "—"}</p>
+                            </div>
+                          </div>
+                          <button
+                            disabled={membersSaving}
+                            onClick={() => handleAddToTeam(emp)}
+                            className="size-6 flex-shrink-0 rounded flex items-center justify-center text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+                            title="Add to team"
+                          >
+                            <UserPlus className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMembersModal(null)}
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

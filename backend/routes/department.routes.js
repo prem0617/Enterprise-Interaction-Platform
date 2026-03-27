@@ -7,6 +7,7 @@ import {
   deleteDepartment,
   getOrgTree,
   assignDepartmentHead,
+  assignTeamMembers,
 } from "../controllers/department/department.controller.js";
 import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
 
@@ -20,6 +21,7 @@ router.get("/:id", getDepartmentById);
 router.post("/", isAdmin, createDepartment);
 router.put("/:id", isAdmin, updateDepartment);
 router.put("/:id/head", isAdmin, assignDepartmentHead);
+router.put("/:id/members", isAdmin, assignTeamMembers);
 router.delete("/:id", isAdmin, deleteDepartment);
 
 export default router;

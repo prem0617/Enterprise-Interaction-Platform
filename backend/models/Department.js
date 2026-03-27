@@ -43,6 +43,11 @@ const departmentSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    chat_channel_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChatChannel",
+      default: null,
+    },
   },
   {
     timestamps: true,

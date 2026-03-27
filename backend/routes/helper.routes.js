@@ -1,5 +1,5 @@
 import express from "express";
-import { isHR, verifyToken } from "../middlewares/auth.middleware.js";
+import {  verifyToken } from "../middlewares/auth.middleware.js";
 
 import { getTeamLead } from "../controllers/helper/getTeamLead.controller.js";
 
@@ -9,6 +9,6 @@ const router = express.Router();
 router.use(verifyToken);
 
 // Create employee (Admin or HR only)
-router.get("/getTeamLead", isHR, getTeamLead);
+router.get("/getTeamLead", getTeamLead);
 
 export default router;

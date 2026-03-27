@@ -1289,6 +1289,11 @@ const ChatInterface = () => {
 
   const sortChatsByLastMessage = (chats) =>
     [...chats].sort((a, b) => {
+      // Team channels always come first
+      const aIsTeam = a.channel_type === "team";
+      const bIsTeam = b.channel_type === "team";
+      if (aIsTeam !== bIsTeam) return aIsTeam ? -1 : 1;
+
       const aTime = a.last_message?.created_at
         ? new Date(a.last_message.created_at).getTime()
         : new Date(a.created_at).getTime();
@@ -1311,7 +1316,7 @@ const ChatInterface = () => {
       );
     else if (activeTab === "groups")
       filteredByTab = uniqueChats.filter(
-        (chat) => chat.channel_type === "group"
+        (chat) => chat.channel_type === "group" || chat.channel_type === "team"
       );
     if (chatSearchQuery.trim()) {
       const query = chatSearchQuery.toLowerCase();
@@ -1327,6 +1332,7 @@ const ChatInterface = () => {
     return sortChatsByLastMessage(filteredByTab).filter((chat) => chat && chat._id);
   }, [directChats, userChannel, activeTab, chatSearchQuery]);
 
+
   const getChatDisplayInfo = (chat = {}) => {
     if (chat.channel_type === "direct")
       return {
@@ -1337,15 +1343,17 @@ const ChatInterface = () => {
         isGroup: false,
         profile_picture: chat.other_user?.profile_picture || null,
       };
+    // both 'group' and 'team' use the group display
     return {
-      name: chat.name || "Group Chat",
+      name: chat.name || (chat.channel_type === "team" ? "Team Chat" : "Group Chat"),
       subtitle: `${chat.member_count || 0} members${chat.department ? ` \u00B7 ${chat.department?.name || ""}` : ""
         }`,
-      initials: chat.name?.[0] || "G",
+      initials: chat.name?.[0] || (chat.channel_type === "team" ? "T" : "G"),
       isGroup: true,
       profile_picture: null,
     };
   };
+
 
   const openChannelSettings = () => {
     if (selectedChat?.channel_type === "group") setShowSettingsModal(true);
@@ -1484,11 +1492,17 @@ const ChatInterface = () => {
                       >
                         {displayInfo.name}
                       </h3>
-                      {displayInfo.isGroup && (
+                      {chat.channel_type === "team" && (
+                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
+                          Team
+                        </span>
+                      )}
+                      {chat.channel_type === "group" && (
                         <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
                           Group
                         </span>
                       )}
+
                     </div>
                     {/* Call indicators */}
                     {!displayInfo.isGroup &&

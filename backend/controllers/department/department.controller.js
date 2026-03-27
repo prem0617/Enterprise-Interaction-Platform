@@ -1,6 +1,56 @@
 import Department from "../../models/Department.js";
 import Employee from "../../models/Employee.js";
 import User from "../../models/User.js";
+import { ChatChannel } from "../../models/ChatChannel.js";
+import { ChannelMember } from "../../models/ChannelMember.js";
+import { Message } from "../../models/Message.js";
+
+// ─── Internal helper: create team chat channel ───
+async function createTeamChannel(department, adminUserId) {
+  try {
+    // Find all active employees in the parent department
+    const employees = await Employee.find({
+      department: department.parent_department_id,
+      is_active: true,
+    }).populate("user_id", "_id");
+
+    const channel = await ChatChannel.create({
+      channel_type: "team",
+      name: department.name,
+      created_by: adminUserId,
+    });
+
+    // Add all parent dept employees as members
+    const memberDocs = employees
+      .filter((e) => e.user_id)
+      .map((e) => ({
+        channel_id: channel._id,
+        user_id: e.user_id._id,
+        role: "member",
+      }));
+
+    if (memberDocs.length > 0) {
+      await ChannelMember.insertMany(memberDocs, { ordered: false });
+    }
+
+    return channel._id;
+  } catch (err) {
+    console.error("createTeamChannel error:", err);
+    return null;
+  }
+}
+
+// ─── Internal helper: delete team chat channel ───
+async function deleteTeamChannel(channelId) {
+  if (!channelId) return;
+  try {
+    await Message.deleteMany({ channel_id: channelId });
+    await ChannelMember.deleteMany({ channel_id: channelId });
+    await ChatChannel.findByIdAndDelete(channelId);
+  } catch (err) {
+    console.error("deleteTeamChannel error:", err);
+  }
+}
 
 // ─── Create Department ───
 export const createDepartment = async (req, res) => {
@@ -51,6 +101,15 @@ export const createDepartment = async (req, res) => {
       color: color || "#6366f1",
       type: deptType,
     });
+
+    // Auto-create team chat channel
+    if (deptType === "team") {
+      const channelId = await createTeamChannel(department, req.userId);
+      if (channelId) {
+        department.chat_channel_id = channelId;
+        await department.save();
+      }
+    }
 
     const populated = await Department.findById(department._id)
       .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
@@ -166,6 +225,11 @@ export const updateDepartment = async (req, res) => {
 
     await department.save();
 
+    // Sync team channel name if it changed
+    if (name && department.chat_channel_id) {
+      await ChatChannel.findByIdAndUpdate(department.chat_channel_id, { name: department.name });
+    }
+
     const populated = await Department.findById(department._id)
       .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
       .populate("parent_department_id", "name code type");
@@ -187,6 +251,11 @@ export const deleteDepartment = async (req, res) => {
     const children = await Department.countDocuments({ parent_department_id: department._id });
     if (children > 0) {
       return res.status(400).json({ error: "Cannot delete: has child teams. Remove or reassign them first." });
+    }
+
+    // Auto-delete associated team chat channel
+    if (department.type === "team" && department.chat_channel_id) {
+      await deleteTeamChannel(department.chat_channel_id);
     }
 
     await Department.findByIdAndDelete(req.params.id);
@@ -270,6 +339,75 @@ export const assignDepartmentHead = async (req, res) => {
     res.json({ department: populated });
   } catch (error) {
     console.error("Assign head error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ─── Assign Team Members (add/remove employees from a team) ───
+export const assignTeamMembers = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { add = [], remove = [] } = req.body; // arrays of employee IDs
+
+    const team = await Department.findById(id);
+    if (!team) return res.status(404).json({ error: "Team not found" });
+    if (team.type !== "team") return res.status(400).json({ error: "This endpoint is only for teams" });
+
+    const errors = [];
+
+    // ── Add employees ──
+    for (const empId of add) {
+      const emp = await Employee.findById(empId);
+      if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
+
+      emp.department = team._id;
+      await emp.save();
+
+      // Also add to the team's chat channel if it exists
+      if (team.chat_channel_id && emp.user_id) {
+        const alreadyMember = await ChannelMember.findOne({
+          channel_id: team.chat_channel_id,
+          user_id: emp.user_id,
+        });
+        if (!alreadyMember) {
+          await ChannelMember.create({
+            channel_id: team.chat_channel_id,
+            user_id: emp.user_id,
+            role: "member",
+          });
+        }
+      }
+    }
+
+    // ── Remove employees (move them back to parent dept) ──
+    for (const empId of remove) {
+      const emp = await Employee.findById(empId);
+      if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
+
+      // Move back to parent department
+      emp.department = team.parent_department_id || emp.department;
+      await emp.save();
+
+      // Remove from chat channel
+      if (team.chat_channel_id && emp.user_id) {
+        await ChannelMember.findOneAndDelete({
+          channel_id: team.chat_channel_id,
+          user_id: emp.user_id,
+        });
+      }
+    }
+
+    // Return updated employee list for this team
+    const members = await Employee.find({ department: team._id, is_active: true })
+      .populate("user_id", "first_name last_name email profile_picture");
+
+    res.json({
+      message: "Team members updated",
+      members,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error("Assign team members error:", error);
     res.status(500).json({ error: error.message });
   }
 };

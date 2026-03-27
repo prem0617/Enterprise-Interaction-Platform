@@ -76,11 +76,16 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       );
     }
 
+    // Initialize empty streams immediately to avoid "Connecting..." infinite loading state on UI
     if (!remoteStreamsRef.current[remoteIdStr]) {
-      remoteStreamsRef.current[remoteIdStr] = new MediaStream();
+      const stream = new MediaStream();
+      remoteStreamsRef.current[remoteIdStr] = stream;
+      setRemoteStreams((prev) => ({ ...prev, [remoteIdStr]: stream }));
     }
     if (!remoteScreenStreamsRef.current[remoteIdStr]) {
-      remoteScreenStreamsRef.current[remoteIdStr] = new MediaStream();
+      const screenStream = new MediaStream();
+      remoteScreenStreamsRef.current[remoteIdStr] = screenStream;
+      setRemoteScreenStreams((prev) => ({ ...prev, [remoteIdStr]: screenStream }));
     }
 
     pc.ontrack = (e) => {
@@ -101,11 +106,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       const stream = streamRef.current[remoteIdStr];
       if (stream) {
         stream.addTrack(e.track);
-        if (stream.getTracks().length === 1) {
-          setState((prev) => ({ ...prev, [remoteIdStr]: stream }));
-        } else if (isScreen) {
-          setState((prev) => ({ ...prev, [remoteIdStr]: stream }));
-        }
+        setState((prev) => ({ ...prev, [remoteIdStr]: stream }));
       }
     };
 
@@ -400,7 +401,14 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
           ? err.message
           : "Camera and microphone access denied";
       setMediaError(msg);
-      throw err;
+      // Failsafe: return an empty media stream instead of throwing, so users can still join
+      console.warn("[MEETING_CALL] Joining with empty media stream due to missing permissions.");
+      setIsVideoOff(true);
+      setIsMuted(true);
+      const emptyStream = new MediaStream();
+      localStreamRef.current = emptyStream;
+      setLocalStream(emptyStream);
+      return emptyStream;
     }
   }, []);
 

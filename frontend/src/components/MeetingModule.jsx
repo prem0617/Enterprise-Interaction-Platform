@@ -2548,6 +2548,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     try {
       stream = await meetingCall.startMedia();
       setLocalMediaStream(stream);
+      if (stream && stream.getTracks().length === 0) {
+        toast.error("Camera/microphone access denied. Joining without media.", { duration: 4000 });
+      }
     } catch (err) {
       toast.error(meetingCall.mediaError || "Camera/microphone access denied");
       setCreatingInstant(false);
@@ -2731,6 +2734,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     try {
       stream = await meetingCall.startMedia();
       setLocalMediaStream(stream);
+      if (stream && stream.getTracks().length === 0) {
+        toast.error("Camera/microphone access denied. Joining without media.", { duration: 4000 });
+      }
     } catch (err) {
       toast.error(meetingCall.mediaError || "Camera/microphone access denied");
       return;
