@@ -301,7 +301,16 @@ export const deleteDepartment = async (req, res) => {
       return res.status(400).json({ error: "Cannot delete: has child teams. Remove or reassign them first." });
     }
 
-    // Auto-delete associated team chat channel
+    // For teams, move any legacy-assigned employees back to parent department
+    // (keeps Employee.department valid and avoids orphan team references).
+    if (department.type === "team" && department.parent_department_id) {
+      await Employee.updateMany(
+        { department: department._id },
+        { $set: { department: department.parent_department_id } }
+      );
+    }
+
+    // Auto-delete associated team chat channel (also removes channel members/messages)
     if (department.type === "team" && department.chat_channel_id) {
       await deleteTeamChannel(department.chat_channel_id);
     }
@@ -406,15 +415,12 @@ export const assignTeamMembers = async (req, res) => {
 
     const errors = [];
 
-    // ── Add employees ──
+    // ── Add employees to team channel only (supports multi-team membership) ──
     for (const empId of add) {
       const emp = await Employee.findById(empId);
       if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
 
-      emp.department = team._id;
-      await emp.save();
-
-      // Also add to the team's chat channel if it exists
+      // Add to the team's chat channel if it exists
       if (team.chat_channel_id && emp.user_id) {
         const alreadyMember = await ChannelMember.findOne({
           channel_id: team.chat_channel_id,
@@ -430,14 +436,10 @@ export const assignTeamMembers = async (req, res) => {
       }
     }
 
-    // ── Remove employees (move them back to parent dept) ──
+    // ── Remove employees from team channel only ──
     for (const empId of remove) {
       const emp = await Employee.findById(empId);
       if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
-
-      // Move back to parent department
-      emp.department = team.parent_department_id || emp.department;
-      await emp.save();
 
       // Remove from chat channel
       if (team.chat_channel_id && emp.user_id) {
@@ -448,9 +450,18 @@ export const assignTeamMembers = async (req, res) => {
       }
     }
 
-    // Return updated employee list for this team
-    const members = await Employee.find({ department: team._id, is_active: true })
-      .populate("user_id", "first_name last_name email profile_picture");
+    // Return updated team members from channel membership (multi-team friendly)
+    let members = [];
+    if (team.chat_channel_id) {
+      const channelMembers = await ChannelMember.find({
+        channel_id: team.chat_channel_id,
+      }).select("user_id");
+      const userIds = channelMembers.map((m) => m.user_id).filter(Boolean);
+      members = await Employee.find({
+        user_id: { $in: userIds },
+        is_active: true,
+      }).populate("user_id", "first_name last_name email profile_picture");
+    }
 
     res.json({
       message: "Team members updated",
