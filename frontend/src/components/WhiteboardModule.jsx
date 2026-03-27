@@ -37,6 +37,11 @@ import {
   WifiOff,
   MoveRight,
   Link2,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  History,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1227,9 +1232,21 @@ export default function WhiteboardModule({ isVisible = true }) {
   const [newTitle, setNewTitle] = useState("");
   const [newIsPublic, setNewIsPublic] = useState(true);
   const [remoteCursors, setRemoteCursors] = useState({});
+  const [versions, setVersions] = useState([]);
+  const [versionsPage, setVersionsPage] = useState(1);
+  const [versionsTotalPages, setVersionsTotalPages] = useState(1);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [selectedVersionNumber, setSelectedVersionNumber] = useState(null);
+  const [displayCanvasState, setDisplayCanvasState] = useState({});
+  const [editingVersionNumber, setEditingVersionNumber] = useState(null);
+  const [editingVersionLabel, setEditingVersionLabel] = useState("");
+  const [showVersionsSidebar, setShowVersionsSidebar] = useState(false);
 
   const saveTimerRef = useRef(null);
+  const versionTimerRef = useRef(null);
   const isRemoteRef = useRef(false);
+  const VERSIONS_LIMIT = 10;
+  const currentUserId = String(user?.id || user?._id || "");
 
   const api = useMemo(
     () =>
@@ -1292,6 +1309,9 @@ export default function WhiteboardModule({ isVisible = true }) {
       const { data } = await api.get(`/${wb._id}`);
       setActiveWhiteboard(data);
       setElements(data.elements || []);
+      setDisplayCanvasState(data.canvas_state || {});
+      setVersionsPage(1);
+      setSelectedVersionNumber(null);
       setView("editor");
       // NOTE: whiteboard-join is emitted in the socket listeners useEffect
       // (after listeners are registered) to avoid the race condition where
@@ -1301,16 +1321,42 @@ export default function WhiteboardModule({ isVisible = true }) {
     }
   }, [api]);
 
+  const fetchVersions = useCallback(
+    async (whiteboardId, page = 1) => {
+      if (!whiteboardId) return;
+      setVersionsLoading(true);
+      try {
+        const { data } = await api.get(`/${whiteboardId}/versions`, {
+          params: { page, limit: VERSIONS_LIMIT },
+        });
+        setVersions(data.versions || []);
+        setVersionsPage(data.pagination?.page || page);
+        setVersionsTotalPages(data.pagination?.totalPages || 1);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to load versions");
+      } finally {
+        setVersionsLoading(false);
+      }
+    },
+    [api]
+  );
+
   // ─── Leave editor ─────────────────────────────────────
   const leaveEditor = useCallback(() => {
     if (activeWhiteboard && socket) {
       socket.emit("whiteboard-leave", { whiteboardId: activeWhiteboard._id });
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (versionTimerRef.current) clearTimeout(versionTimerRef.current);
     setActiveWhiteboard(null);
     setElements([]);
+    setDisplayCanvasState({});
     setLiveCollaborators([]);
     setRemoteCursors({});
+    setVersions([]);
+    setVersionsPage(1);
+    setVersionsTotalPages(1);
+    setSelectedVersionNumber(null);
     setView("list");
   }, [activeWhiteboard, socket]);
 
@@ -1323,6 +1369,78 @@ export default function WhiteboardModule({ isVisible = true }) {
       console.error("Auto-save failed:", err);
     }
   }, [activeWhiteboard, api]);
+
+  const createVersionSnapshot = useCallback(
+    async (els) => {
+      if (!activeWhiteboard) return;
+      try {
+        const { data } = await api.post(`/${activeWhiteboard._id}/versions/snapshot`, {
+          elements: els,
+          canvas_state: displayCanvasState,
+        });
+        fetchVersions(activeWhiteboard._id, 1);
+        toast.success(`Snapshot ${data.version_label} created`);
+      } catch (err) {
+        console.error("Version snapshot failed:", err);
+      }
+    },
+    [activeWhiteboard, api, displayCanvasState, fetchVersions]
+  );
+
+  useEffect(() => {
+    if (view === "editor" && activeWhiteboard?._id) {
+      fetchVersions(activeWhiteboard._id, versionsPage);
+    }
+  }, [view, activeWhiteboard, versionsPage, fetchVersions]);
+
+  const handleLoadVersion = useCallback(
+    async (versionNumber) => {
+      if (!activeWhiteboard) return;
+      try {
+        const { data } = await api.get(
+          `/${activeWhiteboard._id}/versions/${versionNumber}`
+        );
+        setElements(Array.isArray(data.elements) ? data.elements : []);
+        setDisplayCanvasState(data.canvas_state || {});
+        setSelectedVersionNumber(data.version_number);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to load version");
+      }
+    },
+    [activeWhiteboard, api]
+  );
+
+  const handleBackToLatest = useCallback(async () => {
+    if (!activeWhiteboard) return;
+    try {
+      const { data } = await api.get(`/${activeWhiteboard._id}`);
+      setElements(data.elements || []);
+      setDisplayCanvasState(data.canvas_state || {});
+      setSelectedVersionNumber(null);
+    } catch (err) {
+      toast.error("Failed to load latest version");
+    }
+  }, [activeWhiteboard, api]);
+
+  const handleRenameVersion = useCallback(
+    async (versionNumber) => {
+      if (!activeWhiteboard) return;
+      const nextLabel = editingVersionLabel.trim();
+      if (!nextLabel) return toast.error("Version label is required");
+      try {
+        await api.patch(`/${activeWhiteboard._id}/versions/${versionNumber}`, {
+          version_label: nextLabel,
+        });
+        setEditingVersionNumber(null);
+        setEditingVersionLabel("");
+        fetchVersions(activeWhiteboard._id, versionsPage);
+        toast.success("Version label updated");
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to rename version");
+      }
+    },
+    [activeWhiteboard, api, editingVersionLabel, fetchVersions, versionsPage]
+  );
 
   // ─── Handle element changes ───────────────────────────
   const handleElementsChange = useCallback((newElements) => {
@@ -1339,7 +1457,9 @@ export default function WhiteboardModule({ isVisible = true }) {
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => saveContent(newElements), 2000);
-  }, [socket, activeWhiteboard, saveContent]);
+    if (versionTimerRef.current) clearTimeout(versionTimerRef.current);
+    versionTimerRef.current = setTimeout(() => createVersionSnapshot(newElements), 30000);
+  }, [socket, activeWhiteboard, saveContent, createVersionSnapshot]);
 
   // ─── Socket listeners ─────────────────────────────────
   useEffect(() => {
@@ -1650,6 +1770,19 @@ export default function WhiteboardModule({ isVisible = true }) {
                 <Copy className="h-3 w-3" />
                 <span className="font-mono">{activeWhiteboard?.session_code}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setShowVersionsSidebar((s) => !s)}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white transition-colors"
+                title={showVersionsSidebar ? "Hide versions" : "Show versions"}
+              >
+                {showVersionsSidebar ? (
+                  <PanelLeftClose className="h-3.5 w-3.5" />
+                ) : (
+                  <PanelLeftOpen className="h-3.5 w-3.5" />
+                )}
+                Versions
+              </button>
             </div>
 
             {/* Live indicator in header */}
@@ -1669,16 +1802,175 @@ export default function WhiteboardModule({ isVisible = true }) {
             </div>
           </div>
 
-          {/* Drawing Canvas with built-in online panel */}
-          <DrawingCanvas
-            elements={elements}
-            onElementsChange={handleElementsChange}
-            remoteCursors={remoteCursors}
-            canvasState={activeWhiteboard?.canvas_state}
-            onCursorMove={handleCursorMove}
-            liveCollaborators={liveCollaborators}
-            currentUser={user}
-          />
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {/* Versions sidebar */}
+            <div
+              className={cn(
+                "border-r border-zinc-800 bg-zinc-950/90 flex flex-col transition-all duration-300 ease-out",
+                showVersionsSidebar ? "w-72 opacity-100" : "w-0 opacity-0 pointer-events-none"
+              )}
+            >
+              <div className="px-3 py-3 border-b border-zinc-800 bg-zinc-900/60">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white inline-flex items-center gap-1.5">
+                      <History className="h-4 w-4 text-indigo-400" />
+                      Versions
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">30s idle snapshots</p>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                    {versions.length}
+                  </span>
+                </div>
+              </div>
+              <div className="px-3 py-2 border-b border-zinc-800">
+                <button
+                  type="button"
+                  onClick={handleBackToLatest}
+                  className="w-full rounded-lg bg-zinc-800 text-zinc-200 text-xs py-1.5 hover:bg-zinc-700 transition-colors border border-zinc-700/70"
+                >
+                  Load latest
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
+                {versionsLoading ? (
+                  <p className="text-xs text-zinc-500">Loading versions...</p>
+                ) : versions.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No versions yet.</p>
+                ) : (
+                  versions.map((v) => {
+                    const canEdit =
+                      String(v.created_by?._id || "") === currentUserId ||
+                      String(activeWhiteboard?.owner_id?._id || activeWhiteboard?.owner_id || "") === currentUserId;
+                    const isEditing = editingVersionNumber === v.version_number;
+                    return (
+                      <div
+                        key={v._id}
+                        className={cn(
+                          "w-full rounded-xl border px-3 py-2.5 transition-colors shadow-sm",
+                          selectedVersionNumber === v.version_number
+                            ? "border-indigo-500 bg-indigo-500/15 shadow-indigo-500/10"
+                            : "border-zinc-800 bg-zinc-900/70 hover:bg-zinc-900"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleLoadVersion(v.version_number)}
+                          className="w-full text-left"
+                        >
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingVersionLabel}
+                              onChange={(e) => setEditingVersionLabel(e.target.value)}
+                              className="w-full text-xs font-semibold text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 outline-none focus:border-indigo-500"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <p className="text-xs font-semibold text-white truncate">
+                              {v.version_label}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-zinc-400 truncate mt-1">
+                            {v.created_by?.name || "Unknown user"}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            {new Date(v.createdAt).toLocaleString()}
+                          </p>
+                        </button>
+                        {canEdit && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRenameVersion(v.version_number)}
+                                  className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px]"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingVersionNumber(null);
+                                    setEditingVersionLabel("");
+                                  }}
+                                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingVersionNumber(v.version_number);
+                                  setEditingVersionLabel(v.version_label || "");
+                                }}
+                                className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                              >
+                                Edit label
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <div className="px-3 py-2 border-t border-zinc-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setVersionsPage((p) => Math.max(1, p - 1))}
+                  disabled={versionsPage <= 1 || versionsLoading}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                  Prev
+                </button>
+                <span className="text-[11px] text-zinc-400">
+                  {versionsPage} / {versionsTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVersionsPage((p) => Math.min(versionsTotalPages, p + 1))
+                  }
+                  disabled={versionsPage >= versionsTotalPages || versionsLoading}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs disabled:opacity-50"
+                >
+                  Next
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+
+            {!showVersionsSidebar && (
+              <button
+                type="button"
+                onClick={() => setShowVersionsSidebar(true)}
+                className="absolute left-3 top-16 z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900/95 border border-zinc-700 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                title="Show versions"
+              >
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+                Versions
+              </button>
+            )}
+
+            {/* Drawing Canvas with built-in online panel */}
+            <DrawingCanvas
+              elements={elements}
+              onElementsChange={handleElementsChange}
+              remoteCursors={remoteCursors}
+              canvasState={displayCanvasState}
+              onCursorMove={handleCursorMove}
+              liveCollaborators={liveCollaborators}
+              currentUser={user}
+            />
+
+          </div>
         </div>
       )}
     </div>

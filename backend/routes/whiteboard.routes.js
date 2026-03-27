@@ -4,6 +4,10 @@ import {
   createWhiteboard,
   getMyWhiteboards,
   getWhiteboardById,
+  getWhiteboardVersions,
+  getWhiteboardVersionSnapshot,
+  createWhiteboardVersionSnapshot,
+  renameWhiteboardVersion,
   joinByCode,
   updateWhiteboard,
   saveContent,
@@ -17,6 +21,10 @@ router.use(verifyToken);
 router.post("/", createWhiteboard);
 router.get("/", getMyWhiteboards);
 router.get("/join/:code", joinByCode);
+router.get("/:id/versions", getWhiteboardVersions);
+router.get("/:id/versions/:versionNumber", getWhiteboardVersionSnapshot);
+router.post("/:id/versions/snapshot", createWhiteboardVersionSnapshot);
+router.patch("/:id/versions/:versionNumber", renameWhiteboardVersion);
 router.get("/:id", getWhiteboardById);
 router.put("/:id", updateWhiteboard);
 router.put("/:id/content", saveContent);

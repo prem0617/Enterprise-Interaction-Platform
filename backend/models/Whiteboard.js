@@ -48,6 +48,39 @@ const whiteboardSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    version_counter: {
+      type: Number,
+      default: 0,
+    },
+    versions: [
+      {
+        version_number: {
+          type: Number,
+          required: true,
+        },
+        version_label: {
+          type: String,
+          required: true,
+        },
+        created_by: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        elements_snapshot: {
+          type: Schema.Types.Mixed,
+          default: [],
+        },
+        canvas_state_snapshot: {
+          type: Schema.Types.Mixed,
+          default: {},
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   { timestamps: true }
 );

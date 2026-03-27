@@ -271,6 +271,7 @@ function PropPanel({ el, onChange, theme }) {
     </div>
   );
   const s = el.style||{};
+  const bgColorRef = useRef(null);
   const upd = p => onChange({ style:{...s,...p} });
 
   return (
@@ -313,7 +314,29 @@ function PropPanel({ el, onChange, theme }) {
             <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
               <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Background</span>
               <div style={{ display:'flex',gap:4 }}>
-                <input type="color" value={(!s.background||s.background==='transparent')?'#000000':s.background} onChange={e=>upd({background:e.target.value})} style={{ ...inp,height:28,padding:2,cursor:'pointer',flex:1 }}/>
+                {/* Visible square shows transparent by default; actual color picker is hidden */}
+                <button
+                  type="button"
+                  onClick={() => bgColorRef.current?.click()}
+                  title="Background color"
+                  style={{
+                    height: 28,
+                    padding: 2,
+                    cursor: 'pointer',
+                    flex: 1,
+                    borderRadius: 5,
+                    border: '1px solid #1e2535',
+                    background: (!s.background || s.background === 'transparent') ? 'rgba(0,0,0,0)' : s.background,
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <input
+                  ref={bgColorRef}
+                  type="color"
+                  value={(!s.background||s.background==='transparent')?'#000000':s.background}
+                  onChange={e=>upd({background:e.target.value})}
+                  style={{ display:'none' }}
+                />
                 <button onClick={()=>upd({background:'transparent'})} style={{ ...sb,fontSize:9 }}>None</button>
               </div>
             </label>
@@ -726,7 +749,6 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
           <Div/>
           {/* Shapes */}
           <TB onClick={()=>addEl(mkShape('rect',160,160,240,120))} title="Rectangle"><Square size={13}/></TB>
-          <TB onClick={()=>addEl(mkShape('circle',220,160,130,130))} title="Circle"><div style={{ width:13,height:13,borderRadius:'50%',border:'2px solid currentColor' }}/></TB>
           <TB onClick={()=>addEl(mkDivider(60,260,840,3))} title="Divider line"><Minus size={13}/></TB>
           <Div/>
           {/* Image â€” trigger file dialog */}
@@ -737,8 +759,6 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
             <>
               <TB onClick={dupEl} title="Duplicate Ctrl+D"><Copy size={13}/><span style={{ fontSize:11 }}>Dupe</span></TB>
               <TB onClick={()=>delEl(selId)} danger title="Delete (Del)"><Trash2 size={13}/></TB>
-              <TB onClick={fwd} title="Bring Forward"><span style={{ fontSize:10 }}>â–² Forward</span></TB>
-              <TB onClick={bwd} title="Send Backward"><span style={{ fontSize:10 }}>â–¼ Back</span></TB>
             </>
           )}
           {/* Zoom */}
