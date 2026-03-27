@@ -1845,7 +1845,8 @@ const ChatInterface = () => {
                       </button>
                     </>
                   )}
-                {selectedChat.channel_type === "group" && (
+                {(selectedChat.channel_type === "group" ||
+                  selectedChat.channel_type === "team") && (
                   <>
                     <button
                       onClick={() =>
@@ -1866,7 +1867,8 @@ const ChatInterface = () => {
                     </button>
                     {groupCall.groupCallState === "idle" &&
                       !groupCallStatus?.active &&
-                      selectedChat.user_role === "admin" && (
+                      (selectedChat.channel_type === "team" ||
+                        selectedChat.user_role === "admin") && (
                         <button
                           onClick={() =>
                             groupCall.startGroupCall(
@@ -1884,12 +1886,14 @@ const ChatInterface = () => {
                           <Phone className="w-4 h-4" />
                         </button>
                       )}
-                    <button
-                      onClick={openChannelSettings}
-                      className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </button>
+                    {selectedChat.channel_type === "group" && (
+                      <button
+                        onClick={openChannelSettings}
+                        className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    )}
                   </>
                 )}
                 {selectedChat?.channel_type !== "team" && selectedChat?.member_count > 2 && (
