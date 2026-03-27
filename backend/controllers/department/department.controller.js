@@ -29,6 +29,27 @@ async function createTeamChannel(department, adminUserId) {
         role: "member",
       }));
 
+    // Ensure assigned team lead is also in the team chat channel
+    if (department.head_id) {
+      const leadEmployee = await Employee.findById(department.head_id).populate(
+        "user_id",
+        "_id"
+      );
+      if (leadEmployee?.user_id?._id) {
+        const leadUserId = String(leadEmployee.user_id._id);
+        const alreadyInDocs = memberDocs.some(
+          (m) => String(m.user_id) === leadUserId
+        );
+        if (!alreadyInDocs) {
+          memberDocs.push({
+            channel_id: channel._id,
+            user_id: leadEmployee.user_id._id,
+            role: "member",
+          });
+        }
+      }
+    }
+
     if (memberDocs.length > 0) {
       await ChannelMember.insertMany(memberDocs, { ordered: false });
     }
@@ -37,6 +58,27 @@ async function createTeamChannel(department, adminUserId) {
   } catch (err) {
     console.error("createTeamChannel error:", err);
     return null;
+  }
+}
+
+async function ensureTeamLeadInChannel(teamDeptId) {
+  const team = await Department.findById(teamDeptId);
+  if (!team || team.type !== "team" || !team.chat_channel_id || !team.head_id) return;
+
+  const leadEmployee = await Employee.findById(team.head_id).populate("user_id", "_id");
+  const leadUserId = leadEmployee?.user_id?._id;
+  if (!leadUserId) return;
+
+  const exists = await ChannelMember.findOne({
+    channel_id: team.chat_channel_id,
+    user_id: leadUserId,
+  });
+  if (!exists) {
+    await ChannelMember.create({
+      channel_id: team.chat_channel_id,
+      user_id: leadUserId,
+      role: "member",
+    });
   }
 }
 
@@ -108,6 +150,7 @@ export const createDepartment = async (req, res) => {
       if (channelId) {
         department.chat_channel_id = channelId;
         await department.save();
+        await ensureTeamLeadInChannel(department._id);
       }
     }
 
@@ -225,6 +268,11 @@ export const updateDepartment = async (req, res) => {
 
     await department.save();
 
+    // If this is a team and head changed, keep head in team chat channel
+    if (department.type === "team" && head_id !== undefined) {
+      await ensureTeamLeadInChannel(department._id);
+    }
+
     // Sync team channel name if it changed
     if (name && department.chat_channel_id) {
       await ChatChannel.findByIdAndUpdate(department.chat_channel_id, { name: department.name });
@@ -331,6 +379,9 @@ export const assignDepartmentHead = async (req, res) => {
 
     department.head_id = head_id || null;
     await department.save();
+
+    // Team lead should always be present in team group chat
+    await ensureTeamLeadInChannel(department._id);
 
     const populated = await Department.findById(department._id)
       .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
