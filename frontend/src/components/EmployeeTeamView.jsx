@@ -29,34 +29,11 @@ export default function EmployeeTeamView() {
     setLoading(true);
     setNoTeam(false);
     try {
-      // 1. Get current employee profile
-      const { data: profileResp } = await axios.get(
-        `${BACKEND_URL}/auth/profile`,
-        { headers: getAuthHeaders() }
-      );
-      
-      const empId = profileResp?.employee?.id;
-      const deptRaw = profileResp?.employee?.department;
-      const assignedDeptId = typeof deptRaw === "object" && deptRaw !== null
-        ? (deptRaw._id || deptRaw)
-        : deptRaw;
-
-      // 2. Fetch all departments to find teams led by this employee
-      const { data: deptsData } = await axios.get(
-        `${BACKEND_URL}/departments`,
-        { headers: getAuthHeaders() }
-      );
-      const allDepts = deptsData?.departments || [];
-
-      // 3. Filter for teams the employee belongs to OR leads
-      const relevantTeams = allDepts.filter((dept) => {
-        if (dept.type !== "team") return false;
-        const isAssigned = String(dept._id) === String(assignedDeptId);
-        const isLead =
-          dept.head_id &&
-          String(dept.head_id._id || dept.head_id) === String(empId);
-        return isAssigned || isLead;
+      // Get teams where current user is a member (ChannelMember) or is the team head
+      const { data } = await axios.get(`${BACKEND_URL}/departments/my-teams`, {
+        headers: getAuthHeaders(),
       });
+      const relevantTeams = data?.teams || [];
 
       if (relevantTeams.length === 0) {
         setNoTeam(true);
@@ -66,11 +43,11 @@ export default function EmployeeTeamView() {
       // 4. Fetch members for all relevant teams
       const teamsWithMembers = await Promise.all(
         relevantTeams.map(async (team) => {
-          const { data: empData } = await axios.get(
-            `${BACKEND_URL}/employees?department=${team._id}&is_active=true`,
+          const { data: membersResp } = await axios.get(
+            `${BACKEND_URL}/departments/${team._id}/members`,
             { headers: getAuthHeaders() }
           );
-          return { team, members: empData?.employees || [] };
+          return { team, members: membersResp?.members || [] };
         })
       );
 

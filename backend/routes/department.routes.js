@@ -8,6 +8,7 @@ import {
   getOrgTree,
   assignDepartmentHead,
   getDepartmentMembers,
+  getMyTeams,
   assignTeamMembers,
 } from "../controllers/department/department.controller.js";
 import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
@@ -17,6 +18,7 @@ const router = express.Router();
 router.use(verifyToken);
 
 router.get("/", getAllDepartments);
+router.get("/my-teams", getMyTeams);
 router.get("/org-tree", getOrgTree);
 router.get("/:id", getDepartmentById);
 router.get("/:id/members", getDepartmentMembers);

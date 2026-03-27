@@ -101,6 +101,35 @@ async function getDepartmentMembersByType(dept) {
   }).populate("user_id", "first_name last_name email profile_picture");
 }
 
+/**
+ * GET /api/departments/my-teams - List teams where current user is a member (or head).
+ * Uses team chat channel membership (ChannelMember) to support multi-team membership.
+ */
+export const getMyTeams = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const teams = await Department.find({ type: "team" })
+      .populate({ path: "head_id", populate: { path: "user_id", select: "first_name last_name email profile_picture" } })
+      .populate("parent_department_id", "name code type");
+
+    if (!teams?.length) return res.json({ teams: [] });
+
+    const myMemberChannels = await ChannelMember.find({ user_id: userId }).select("channel_id");
+    const myChannelIds = new Set(myMemberChannels.map((m) => String(m.channel_id)).filter(Boolean));
+
+    const filtered = teams.filter((t) => {
+      const isHead = t.head_id && String(t.head_id?.user_id?._id || t.head_id?.user_id) === String(userId);
+      const inChannel = t.chat_channel_id && myChannelIds.has(String(t.chat_channel_id));
+      return isHead || inChannel;
+    });
+
+    return res.json({ teams: filtered });
+  } catch (error) {
+    console.error("getMyTeams error:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 // ─── Internal helper: delete team chat channel ───
 async function deleteTeamChannel(channelId) {
   if (!channelId) return;
