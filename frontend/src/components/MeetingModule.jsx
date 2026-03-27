@@ -512,7 +512,9 @@ const MeetingRoom = ({
               </div>
               <p className="text-white text-sm font-medium">{tile.name}</p>
               {!tile.stream && !tile.isLocal && (
-                <p className="text-xs text-zinc-500 mt-0.5">Connecting...</p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {tile.isVideoOff ? "Joined with camera off" : "Connecting..."}
+                </p>
               )}
             </div>
           </div>
@@ -706,7 +708,9 @@ const MeetingRoom = ({
         {/* ---- Main content area ---- */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Video area */}
-          <div className="relative flex-1 flex flex-col min-h-0 min-w-0">
+          <div
+            className={`relative flex flex-col min-h-0 min-w-0 ${showSidebar ? "basis-[70%]" : "flex-1"}`}
+          >
             <div className="flex-1 p-2 min-h-0 flex gap-2">
               {pinnedTile ? (
                 <>
@@ -953,7 +957,7 @@ const MeetingRoom = ({
 
           {/* ---- Sidebar ---- */}
           {showSidebar && (
-            <div className="w-80 border-l border-zinc-800 flex flex-col bg-zinc-900/60">
+            <div className="basis-[30%] min-w-0 border-l border-zinc-800 flex flex-col bg-zinc-900/60">
               {/* Sidebar tabs */}
               <div className="flex border-b border-zinc-800">
                 <button
@@ -1887,6 +1891,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [localMediaStream, setLocalMediaStream] = useState(null);
+  const localMediaStreamRef = useRef(null);
+  const activeMeetingRef = useRef(null);
+  const recordingUploadInFlightRef = useRef(false);
   const [meetingSearchQuery, setMeetingSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showInstantMeetingDialog, setShowInstantMeetingDialog] = useState(false);
@@ -1908,7 +1915,11 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   // Keep activeMeetingIdRef in sync with activeMeeting state
   useEffect(() => {
     activeMeetingIdRef.current = activeMeeting ? String(activeMeeting._id) : null;
+    activeMeetingRef.current = activeMeeting || null;
   }, [activeMeeting]);
+  useEffect(() => {
+    localMediaStreamRef.current = localMediaStream || null;
+  }, [localMediaStream]);
 
   const videoRefs = useRef({});
   const localVideoRef = useRef(null);
@@ -2138,19 +2149,29 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     const handleEnded = (payload) => {
       const currentMeetingId = activeMeetingIdRef.current;
       if (!currentMeetingId || String(payload.meetingId) !== currentMeetingId) return;
-      setLiveCaptions([]);
-      toast("Meeting ended by host", { icon: "ℹ️" });
-      if (localMediaStream) {
-        localMediaStream.getTracks().forEach((t) => t.stop());
-        setLocalMediaStream(null);
-      }
-      meetingCall.cleanup();
-      setActiveMeeting(null);
-      activeMeetingIdRef.current = null;
-      setLobbyRequests([]);
-      setRoomParticipants([]);
-      setChatMessages([]);
-      setChatInput("");
+      const currentMeeting = activeMeetingRef.current;
+      (async () => {
+        if (currentMeeting?.isHost && meetingCall.isRecording) {
+          await stopAndUploadRecordingIfNeeded(currentMeeting._id);
+        }
+      })().finally(() => {
+        setLiveCaptions([]);
+        toast("Meeting ended by host", { icon: "ℹ️" });
+        const local = localMediaStreamRef.current;
+        if (local) {
+          local.getTracks().forEach((t) => t.stop());
+          setLocalMediaStream(null);
+          localMediaStreamRef.current = null;
+        }
+        meetingCall.cleanup();
+        setActiveMeeting(null);
+        activeMeetingIdRef.current = null;
+        activeMeetingRef.current = null;
+        setLobbyRequests([]);
+        setRoomParticipants([]);
+        setChatMessages([]);
+        setChatInput("");
+      });
     };
 
     const handleLobbyRequest = (payload) => {
@@ -2197,7 +2218,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
       socket.off("meeting-lobby-left", handleLobbyLeft);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, currentUserId]);
+  }, [socket, currentUserId, meetingCall]);
 
   // Guest in lobby: listen for admission or meeting ended
   useEffect(() => {
@@ -2546,11 +2567,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     setCreatingInstant(true);
     let stream;
     try {
-      stream = await meetingCall.startMedia();
-      setLocalMediaStream(stream);
-      if (stream && stream.getTracks().length === 0) {
-        toast.error("Camera/microphone access denied. Joining without media.", { duration: 4000 });
-      }
+      stream = await ensureJoinMedia();
     } catch (err) {
       toast.error(meetingCall.mediaError || "Camera/microphone access denied");
       setCreatingInstant(false);
@@ -2707,6 +2724,35 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     return nowTick >= start && nowTick < start + fiveMinutesMs;
   };
 
+  const ensureJoinMedia = useCallback(async () => {
+    const stream = await meetingCall.startMedia();
+    setLocalMediaStream(stream);
+    if (stream && stream.getTracks().length === 0) {
+      toast.info("Joining with camera and microphone off.", { duration: 3500 });
+    }
+    return stream;
+  }, [meetingCall]);
+
+  async function stopAndUploadRecordingIfNeeded(meetingId, { silent = false } = {}) {
+    if (!meetingId || !meetingCall.isRecording || recordingUploadInFlightRef.current) {
+      return;
+    }
+    recordingUploadInFlightRef.current = true;
+    try {
+      if (!silent) toast.info("Stopping recording and uploading...");
+      const segments = await meetingCall.stopRecording();
+      if (segments.length > 0) {
+        await handleUploadRecordings(meetingId, segments);
+        if (!silent) toast.success("Recording uploaded successfully");
+      }
+    } catch (e) {
+      console.error("Failed to upload recording:", e);
+      if (!silent) toast.error("Failed to upload recording");
+    } finally {
+      recordingUploadInFlightRef.current = false;
+    }
+  }
+
   // ---- Enter / Leave meeting room ----
   const handleEnterMeeting = async (meeting) => {
     if (!socket) {
@@ -2732,11 +2778,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
 
     let stream;
     try {
-      stream = await meetingCall.startMedia();
-      setLocalMediaStream(stream);
-      if (stream && stream.getTracks().length === 0) {
-        toast.error("Camera/microphone access denied. Joining without media.", { duration: 4000 });
-      }
+      stream = await ensureJoinMedia();
     } catch (err) {
       toast.error(meetingCall.mediaError || "Camera/microphone access denied");
       return;
@@ -2803,19 +2845,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
       if (!window.confirm("End this meeting for all participants?")) return;
     }
 
-    // Auto-stop recording if active and upload before cleanup
     if (meetingCall.isRecording && activeMeeting.isHost) {
-      try {
-        toast.info("Stopping recording and uploading...");
-        const segments = await meetingCall.stopRecording();
-        if (segments.length > 0) {
-          await handleUploadRecordings(activeMeeting._id, segments);
-          toast.success("Recording uploaded successfully");
-        }
-      } catch (e) {
-        console.error("Failed to upload recording on leave:", e);
-        toast.error("Failed to upload recording");
-      }
+      await stopAndUploadRecordingIfNeeded(activeMeeting._id);
     }
 
     if (localMediaStream) {
@@ -2855,6 +2886,20 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     setChatInput("");
     setLiveCaptions([]);
   };
+
+  useEffect(() => {
+    const flushRecordingOnPageHide = () => {
+      const currentMeeting = activeMeetingRef.current;
+      if (!currentMeeting?.isHost || !currentMeeting?._id || !meetingCall.isRecording) return;
+      void stopAndUploadRecordingIfNeeded(currentMeeting._id, { silent: true });
+    };
+    window.addEventListener("pagehide", flushRecordingOnPageHide);
+    window.addEventListener("beforeunload", flushRecordingOnPageHide);
+    return () => {
+      window.removeEventListener("pagehide", flushRecordingOnPageHide);
+      window.removeEventListener("beforeunload", flushRecordingOnPageHide);
+    };
+  }, [meetingCall.isRecording]);
 
   // Notify parent about active meeting state changes (includes call controls)
   useEffect(() => {
@@ -2911,6 +2956,12 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
       }
       if (meeting.status === "ended") {
         toast.error("This meeting has already ended");
+        return;
+      }
+      const meetingHostId = String(meeting.host_id?._id || meeting.host_id);
+      const isMeetingHost = meetingHostId === String(currentUserId);
+      if (meeting.status !== "active" && !isMeetingHost) {
+        toast.error("The host has not started this meeting yet. Please wait for the host to start.");
         return;
       }
       setJoinCodeInput("");
@@ -3257,9 +3308,9 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           </div>
 
           {/* Calendar + list: fills remaining space, no page scroll */}
-          <div className="flex-1 min-h-0 flex flex-col xl:flex-row gap-6 overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-row gap-4 overflow-hidden">
             {/* Calendar */}
-            <div className="flex-shrink-0 bg-zinc-900 rounded-xl border border-zinc-700/50 p-5 w-full xl:max-w-[1000px] overflow-y-auto max-h-[calc(100vh-12rem)]">
+            <div className="basis-[70%] min-w-0 bg-zinc-900 rounded-xl border border-zinc-700/50 p-5 overflow-y-auto max-h-[calc(100vh-12rem)]">
               <div className="flex items-center justify-between mb-4">
                 <button
                   type="button"
@@ -3346,7 +3397,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
             </div>
 
             {/* Selected day meeting list: fills remaining height, scrolls internally */}
-            <div className="flex-1 min-h-0 flex flex-col min-w-0 w-full xl:w-[480px] bg-zinc-900 rounded-xl border border-zinc-700/50 p-4 overflow-hidden">
+            <div className="basis-[30%] min-w-0 min-h-0 flex flex-col bg-zinc-900 rounded-xl border border-zinc-700/50 p-4 overflow-hidden">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-xs text-zinc-400 mb-0.5">Selected day</p>

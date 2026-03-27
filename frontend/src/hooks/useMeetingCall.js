@@ -394,6 +394,13 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       setIsVideoOff(false);
       setIsMuted(false);
       setHandRaised(false);
+      if (socketRef.current?.connected && meetingIdRef.current) {
+        socketRef.current.emit("meeting-media-state", {
+          meetingId: meetingIdRef.current,
+          isMuted: false,
+          isVideoOff: false,
+        });
+      }
       return stream;
     } catch (err) {
       const msg =
@@ -408,6 +415,13 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       const emptyStream = new MediaStream();
       localStreamRef.current = emptyStream;
       setLocalStream(emptyStream);
+      if (socketRef.current?.connected && meetingIdRef.current) {
+        socketRef.current.emit("meeting-media-state", {
+          meetingId: meetingIdRef.current,
+          isMuted: true,
+          isVideoOff: true,
+        });
+      }
       return emptyStream;
     }
   }, []);

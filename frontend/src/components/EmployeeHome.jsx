@@ -95,8 +95,10 @@ export default function EmployeeHome({ onNavigate }) {
     }
   };
 
+  const sessions = todayAttendance?.sessions || [];
   const hasCheckedIn = !!todayAttendance?.check_in;
   const hasCheckedOut = !!todayAttendance?.check_out;
+  const hasOpenSession = sessions.some((s) => s.check_in && !s.check_out);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -260,12 +262,12 @@ export default function EmployeeHome({ onNavigate }) {
         <div className="rounded-2xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 p-5 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`size-12 rounded-xl flex items-center justify-center ${hasCheckedOut ? "bg-emerald-500/15" : hasCheckedIn ? "bg-amber-500/15" : "bg-indigo-500/15"
+              <div className={`size-12 rounded-xl flex items-center justify-center ${hasOpenSession ? "bg-amber-500/15" : hasCheckedIn ? "bg-emerald-500/15" : "bg-indigo-500/15"
                 }`}>
-                {hasCheckedOut ? (
-                  <CheckCircle2 className="size-6 text-emerald-400" />
-                ) : hasCheckedIn ? (
+                {hasOpenSession ? (
                   <Clock className="size-6 text-amber-400" />
+                ) : hasCheckedIn ? (
+                  <CheckCircle2 className="size-6 text-emerald-400" />
                 ) : (
                   <CalendarCheck className="size-6 text-indigo-400" />
                 )}
@@ -274,16 +276,16 @@ export default function EmployeeHome({ onNavigate }) {
                 <h3 className="text-sm font-semibold text-zinc-200">
                   {attendanceLoading
                     ? "Loading..."
-                    : hasCheckedOut
-                      ? "Day Complete"
-                      : hasCheckedIn
+                    : hasOpenSession
                         ? "You're clocked in"
+                        : hasCheckedIn
+                          ? "Ready for next session"
                         : "You haven't clocked in yet"}
                 </h3>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  {hasCheckedIn && todayAttendance?.check_in
+                  {hasOpenSession && todayAttendance?.check_in
                     ? `Checked in at ${new Date(todayAttendance.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`
-                    : hasCheckedOut
+                    : hasCheckedIn
                       ? `${todayAttendance?.total_hours || 0}h logged today`
                       : "Start your day by checking in"}
                 </p>
@@ -292,21 +294,7 @@ export default function EmployeeHome({ onNavigate }) {
 
             {!attendanceLoading && (
               <div className="flex items-center gap-2">
-                {!hasCheckedIn && (
-                  <>
-
-                    <button
-                      onClick={handleCheckIn}
-                      disabled={checkingIn}
-                      className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                      <LogIn className="size-4" />
-                      {checkingIn ? "Checking In..." : "Check In"}
-                    </button>
-                  </>
-                )}
-
-                {hasCheckedIn && !hasCheckedOut && (
+                {hasOpenSession ? (
                   <button
                     onClick={handleCheckOut}
                     disabled={checkingOut}
@@ -315,9 +303,18 @@ export default function EmployeeHome({ onNavigate }) {
                     <LogOut className="size-4" />
                     {checkingOut ? "Checking Out..." : "Check Out"}
                   </button>
+                ) : (
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={checkingIn}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    <LogIn className="size-4" />
+                    {checkingIn ? "Checking In..." : hasCheckedIn ? "Check In Again" : "Check In"}
+                  </button>
                 )}
 
-                {hasCheckedOut && (
+                {hasCheckedIn && (
                   <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-medium">
                     <CheckCircle2 className="size-4" />
                     {todayAttendance?.total_hours || 0}h logged

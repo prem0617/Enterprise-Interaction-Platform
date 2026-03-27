@@ -599,16 +599,16 @@ const ChatInterface = () => {
   // };
 
   const markMessagesAsSeenInChannel = async (channelId) => {
-    // Get unseen messages before making the API call
-    const unseenMessages = messages.filter(
-      (msg) =>
-        msg.sender_id !== user?.id &&
-        !msg.seen_by?.some((s) => s.user_id._id === user?.id)
-    );
+    const clearUnreadForChannel = (chats) =>
+      chats.map((chat) =>
+        String(chat._id) === String(channelId)
+          ? { ...chat, unread_count: 0 }
+          : chat
+      );
 
-    if (unseenMessages.length === 0) {
-      return; // No messages to mark as seen
-    }
+    // Clear unread badge immediately for the current user.
+    setDirectChats((prev) => clearUnreadForChannel(prev));
+    setUserChannel((prev) => clearUnreadForChannel(prev));
 
     // Optimistically update UI immediately
     const currentUserSeenEntry = {
@@ -642,14 +642,14 @@ const ChatInterface = () => {
       })
     );
 
-    // Now make the API call
+    // Now make the API call unconditionally to ensure server marks messages as seen
     try {
       await axios.post(
         `${BACKEND_URL}/direct_chat/channels/${channelId}/messages/seen`,
         {},
         axiosConfig
       );
-      // Socket events handle chat list updates automatically
+      // Backend should trigger 'messages_seen' event which updates chat list
     } catch (error) {
       console.error("Error marking messages as seen:", error);
     }
@@ -988,6 +988,36 @@ const ChatInterface = () => {
     return url;
   };
 
+  const handleDownloadAttachment = async (message) => {
+    if (!message?.file_url) return;
+    const fileUrl = getCorrectCloudinaryUrl(message.file_url, message.file_type);
+    const fileName = message.file_name || "attachment";
+
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      // Fallback for providers that block blob downloads
+      const a = document.createElement("a");
+      a.href = fileUrl;
+      a.download = fileName;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  };
+
   // Updated renderFileAttachment function
   const renderFileAttachment = (message) => {
     if (message.message_type !== "file" || !message.file_url) return null;
@@ -1028,7 +1058,7 @@ const ChatInterface = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(fileUrl, "_blank");
+                  handleDownloadAttachment(message);
                 }}
                 className="p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
                 title="Download"
@@ -1060,7 +1090,7 @@ const ChatInterface = () => {
               <Eye className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); window.open(fileUrl, "_blank"); }}
+              onClick={(e) => { e.stopPropagation(); handleDownloadAttachment(message); }}
               className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
               title="Download"
             >
@@ -1131,13 +1161,24 @@ const ChatInterface = () => {
         );
       }
 
+      if (String(seen_by_user_id) === String(user?.id)) {
+        const clearUnreadForChannel = (chats) =>
+          chats.map((chat) =>
+            String(chat._id) === String(channel_id)
+              ? { ...chat, unread_count: 0 }
+              : chat
+          );
+        setDirectChats((prev) => clearUnreadForChannel(prev));
+        setUserChannel((prev) => clearUnreadForChannel(prev));
+      }
+
       fetchDirectChats();
       getUserChannel();
     };
 
     const appendMessage = (data) => {
       const currentChat = selectedChatRef.current;
-      if (currentChat && data.channel_id === currentChat._id) {
+      if (currentChat && String(data.channel_id) === String(currentChat._id)) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === data._id)) return prev;
 
@@ -1163,7 +1204,7 @@ const ChatInterface = () => {
       }
       const updateChatList = (chats) =>
         chats.map((chat) => {
-          if (chat._id === data.channel_id)
+          if (String(chat._id) === String(data.channel_id))
             return {
               ...chat,
               last_message: {
@@ -1171,7 +1212,7 @@ const ChatInterface = () => {
                 sender_id: data.sender_id || chat.last_message?.sender_id,
               },
               unread_count:
-                currentChat?._id === data.channel_id
+                currentChat && String(currentChat._id) === String(data.channel_id)
                   ? 0
                   : (chat.unread_count || 0) + 1,
             };
@@ -1448,6 +1489,7 @@ const ChatInterface = () => {
                 chat.channel_type === "direct" &&
                 isUserOnline(chat.other_user?._id);
               const isActive = selectedChat?._id === chat._id;
+              const displayUnread = isActive ? 0 : chat.unread_count || 0;
               return (
                 <div
                   key={
@@ -1485,7 +1527,7 @@ const ChatInterface = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <h3
-                        className={`text-sm truncate ${chat.unread_count > 0
+                        className={`text-sm truncate ${displayUnread > 0
                           ? "font-semibold text-zinc-100"
                           : "font-medium text-zinc-300"
                           }`}
@@ -1531,16 +1573,16 @@ const ChatInterface = () => {
                     {chat.last_message && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <p
-                          className={`text-xs truncate flex-1 ${chat.unread_count > 0
+                          className={`text-xs truncate flex-1 ${displayUnread > 0
                             ? "text-zinc-200 font-medium"
                             : "text-zinc-500"
                             }`}
                         >
                           {chat.last_message.message_type === "file" ? "📎 File" : chat.last_message.content}
                         </p>
-                        {chat.unread_count > 0 && (
+                        {displayUnread > 0 && (
                           <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] rounded-full font-semibold min-w-[18px] text-center">
-                            {chat.unread_count > 99 ? "99+" : chat.unread_count}
+                            {displayUnread > 99 ? "99+" : displayUnread}
                           </span>
                         )}
                       </div>

@@ -12,7 +12,6 @@ import {
   Briefcase,
   Send,
   XCircle,
-  CheckCircle2,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
@@ -243,8 +242,8 @@ export default function AttendanceModule() {
 
   const now = new Date();
   const greeting = now.getHours() < 12 ? "Good Morning" : now.getHours() < 17 ? "Good Afternoon" : "Good Evening";
-  const hasCheckedIn = !!todayAttendance?.check_in;
-  const hasCheckedOut = !!todayAttendance?.check_out;
+  const sessions = todayAttendance?.sessions || [];
+  const hasOpenSession = sessions.some((s) => s.check_in && !s.check_out);
 
   return (
     <div className="p-6 lg:p-8 w-full space-y-6 overflow-auto">
@@ -299,21 +298,16 @@ export default function AttendanceModule() {
 
                 {/* Action Buttons */}
                 <div className="flex gap-3">
-                  {!hasCheckedIn ? (
-                    <Button className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-500 text-white gap-2" onClick={handleCheckIn} disabled={checkingIn}>
-                      <LogIn className="size-4" />
-                      {checkingIn ? "Checking In..." : "Check In"}
-                    </Button>
-                  ) : !hasCheckedOut ? (
+                  {hasOpenSession ? (
                     <Button className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleCheckOut} disabled={checkingOut}>
                       <LogOut className="size-4" />
                       {checkingOut ? "Checking Out..." : "Check Out"}
                     </Button>
                   ) : (
-                    <div className="flex-1 flex items-center justify-center gap-2 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <CheckCircle2 className="size-4 text-emerald-400" />
-                      <span className="text-sm text-emerald-300 font-medium">Day Complete</span>
-                    </div>
+                    <Button className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-500 text-white gap-2" onClick={handleCheckIn} disabled={checkingIn}>
+                      <LogIn className="size-4" />
+                      {checkingIn ? "Checking In..." : sessions.length > 0 ? "Check In Again" : "Check In"}
+                    </Button>
                   )}
                 </div>
 
@@ -345,6 +339,26 @@ export default function AttendanceModule() {
                       <div className="flex items-center justify-between">
                         <span className="text-zinc-500">Total Hours</span>
                         <span className="tabular-nums font-medium text-zinc-200">{todayAttendance.total_hours}h</span>
+                      </div>
+                    )}
+
+                    {sessions.length > 0 && (
+                      <div className="pt-2 border-t border-zinc-700/60 space-y-1.5">
+                        <div className="text-zinc-500 text-xs font-medium">Work Sessions</div>
+                        {sessions.map((session, idx) => (
+                          <div key={`${session.check_in}-${idx}`} className="flex items-center justify-between text-xs">
+                            <span className="text-zinc-400">Session {idx + 1}</span>
+                            <span className="tabular-nums text-zinc-300">
+                              {session.check_in
+                                ? new Date(session.check_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                                : "—"}
+                              {" - "}
+                              {session.check_out
+                                ? new Date(session.check_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                                : "Open"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

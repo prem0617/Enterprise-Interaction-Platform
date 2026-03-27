@@ -1,6 +1,7 @@
 import Attendance from "../../models/Attendance.js";
 import Employee from "../../models/Employee.js";
 import Holiday from "../../models/Holiday.js";
+import LeaveBalance from "../../models/LeaveBalance.js";
 
 // ─── Helpers ───────────────────────────────────────────
 function startOfDay(date) {
@@ -15,6 +16,76 @@ function endOfDay(date) {
   return d;
 }
 
+function isWeekend(date) {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function dateKey(date) {
+  return startOfDay(date).toISOString();
+}
+
+const DEFAULT_PAID_LEAVE_ALLOCATION = 21;
+
+async function backfillMissedDaysForUser(userId) {
+  const today = startOfDay(new Date());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (yesterday < new Date(today.getFullYear(), 0, 1)) return;
+
+  const latest = await Attendance.findOne({ employee_id: userId })
+    .sort({ date: -1 })
+    .select("date");
+
+  const start = latest?.date
+    ? startOfDay(new Date(latest.date.getTime() + 24 * 60 * 60 * 1000))
+    : startOfDay(new Date(today.getFullYear(), 0, 1));
+
+  if (start > yesterday) return;
+
+  const holidays = await Holiday.find({
+    is_active: true,
+    date: { $gte: start, $lte: yesterday },
+  }).select("date");
+  const holidaySet = new Set(holidays.map((h) => dateKey(h.date)));
+
+  for (let cursor = new Date(start); cursor <= yesterday; cursor.setDate(cursor.getDate() + 1)) {
+    const day = startOfDay(cursor);
+    if (isWeekend(day) || holidaySet.has(dateKey(day))) continue;
+
+    const existing = await Attendance.exists({
+      employee_id: userId,
+      date: day,
+    });
+    if (existing) continue;
+
+    await Attendance.create({
+      employee_id: userId,
+      date: day,
+      status: "absent",
+      marked_by: "admin",
+      notes: "Auto-marked absent due to no check-in",
+    });
+
+    await LeaveBalance.findOneAndUpdate(
+      {
+        employee_id: userId,
+        year: day.getFullYear(),
+        leave_type: "paid",
+      },
+      {
+        $inc: { used: 1 },
+        $setOnInsert: {
+          allocated: DEFAULT_PAID_LEAVE_ALLOCATION,
+          carried_forward: 0,
+        },
+      },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+  }
+}
+
 // ─── 1. Check In ───────────────────────────────────────
 export const checkIn = async (req, res) => {
   try {
@@ -22,14 +93,17 @@ export const checkIn = async (req, res) => {
     const { work_type, notes } = req.body;
     const today = startOfDay(new Date());
 
+    await backfillMissedDaysForUser(userId);
+
     // Check if already checked in today
     let attendance = await Attendance.findOne({
       employee_id: userId,
       date: today,
     });
 
-    if (attendance && attendance.check_in) {
-      return res.status(400).json({ error: "Already checked in today" });
+    const openSession = attendance?.sessions?.find((s) => s.check_in && !s.check_out);
+    if (openSession) {
+      return res.status(400).json({ error: "Already checked in. Please check out first." });
     }
 
     const now = new Date();
@@ -42,7 +116,10 @@ export const checkIn = async (req, res) => {
     }
 
     if (attendance) {
-      attendance.check_in = now;
+      attendance.sessions = attendance.sessions || [];
+      attendance.sessions.push({ check_in: now, check_out: null, total_hours: 0 });
+      if (!attendance.check_in) attendance.check_in = now;
+      attendance.check_out = null;
       attendance.status = status;
       attendance.work_type = work_type || "office";
       attendance.notes = notes || "";
@@ -52,6 +129,7 @@ export const checkIn = async (req, res) => {
         employee_id: userId,
         date: today,
         check_in: now,
+        sessions: [{ check_in: now, check_out: null, total_hours: 0 }],
         status,
         work_type: work_type || "office",
         notes: notes || "",
@@ -75,6 +153,8 @@ export const checkOut = async (req, res) => {
     const userId = req.userId;
     const today = startOfDay(new Date());
 
+    await backfillMissedDaysForUser(userId);
+
     const attendance = await Attendance.findOne({
       employee_id: userId,
       date: today,
@@ -84,16 +164,34 @@ export const checkOut = async (req, res) => {
       return res.status(400).json({ error: "You haven't checked in today" });
     }
 
-    if (attendance.check_out) {
-      return res.status(400).json({ error: "Already checked out today" });
+    // Backward compatibility: older records may only have check_in/check_out fields.
+    if ((!attendance.sessions || attendance.sessions.length === 0) && attendance.check_in && !attendance.check_out) {
+      attendance.sessions = [
+        {
+          check_in: attendance.check_in,
+          check_out: null,
+          total_hours: 0,
+        },
+      ];
+    }
+
+    const openSessionIndex = (attendance.sessions || []).findIndex(
+      (s) => s.check_in && !s.check_out
+    );
+    if (openSessionIndex === -1) {
+      return res.status(400).json({ error: "No active check-in found for checkout" });
     }
 
     const now = new Date();
-    attendance.check_out = now;
+    attendance.sessions[openSessionIndex].check_out = now;
+    const diffMs = now - attendance.sessions[openSessionIndex].check_in;
+    attendance.sessions[openSessionIndex].total_hours =
+      Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
 
-    // Calculate total hours
-    const diffMs = now - attendance.check_in;
-    attendance.total_hours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
+    attendance.check_out = now;
+    attendance.total_hours = Math.round(
+      (attendance.sessions || []).reduce((sum, s) => sum + (s.total_hours || 0), 0) * 100
+    ) / 100;
 
     // If less than 4 hours, mark as half_day
     if (attendance.total_hours < 4 && attendance.status !== "late") {
@@ -111,6 +209,7 @@ export const checkOut = async (req, res) => {
 // ─── 3. Get Today's Attendance (employee) ──────────────
 export const getMyAttendanceToday = async (req, res) => {
   try {
+    await backfillMissedDaysForUser(req.userId);
     const today = startOfDay(new Date());
     const attendance = await Attendance.findOne({
       employee_id: req.userId,
@@ -126,6 +225,7 @@ export const getMyAttendanceToday = async (req, res) => {
 // ─── 4. Get My Attendance History ──────────────────────
 export const getMyAttendanceHistory = async (req, res) => {
   try {
+    await backfillMissedDaysForUser(req.userId);
     const { month, year } = req.query;
     const y = parseInt(year) || new Date().getFullYear();
     const m = parseInt(month) || new Date().getMonth() + 1;
@@ -167,6 +267,11 @@ export const getMyAttendanceHistory = async (req, res) => {
 
 export const getAllAttendance = async (req, res) => {
   try {
+    const activeEmployees = await Employee.find({ is_active: true }).select("user_id");
+    await Promise.all(
+      activeEmployees.map((emp) => backfillMissedDaysForUser(emp.user_id))
+    );
+
     const { date } = req.query;
     const targetDate = date ? startOfDay(new Date(date)) : startOfDay(new Date());
 
@@ -176,7 +281,7 @@ export const getAllAttendance = async (req, res) => {
       .populate("employee_id", "first_name last_name email profile_picture")
       .sort({ check_in: -1 });
 
-    const totalEmployees = await Employee.countDocuments({ is_active: true });
+    const totalEmployees = activeEmployees.length;
 
     const stats = {
       total: totalEmployees,
