@@ -82,6 +82,25 @@ async function ensureTeamLeadInChannel(teamDeptId) {
   }
 }
 
+async function getDepartmentMembersByType(dept) {
+  if (!dept) return [];
+  if (dept.type === "team" && dept.chat_channel_id) {
+    const channelMembers = await ChannelMember.find({
+      channel_id: dept.chat_channel_id,
+    }).select("user_id");
+    const userIds = channelMembers.map((m) => m.user_id).filter(Boolean);
+    if (userIds.length === 0) return [];
+    return Employee.find({
+      user_id: { $in: userIds },
+      is_active: true,
+    }).populate("user_id", "first_name last_name email profile_picture");
+  }
+  return Employee.find({
+    department: dept._id,
+    is_active: true,
+  }).populate("user_id", "first_name last_name email profile_picture");
+}
+
 // ─── Internal helper: delete team chat channel ───
 async function deleteTeamChannel(channelId) {
   if (!channelId) return;
@@ -403,68 +422,80 @@ export const assignDepartmentHead = async (req, res) => {
   }
 };
 
+// ─── Get members for department/team ───
+export const getDepartmentMembers = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const dept = await Department.findById(id);
+    if (!dept) return res.status(404).json({ error: "Department not found" });
+    const members = await getDepartmentMembersByType(dept);
+    res.json({ members });
+  } catch (error) {
+    console.error("Get department members error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // ─── Assign Team Members (add/remove employees from a team) ───
 export const assignTeamMembers = async (req, res) => {
   try {
     const { id } = req.params;
     const { add = [], remove = [] } = req.body; // arrays of employee IDs
 
-    const team = await Department.findById(id);
-    if (!team) return res.status(404).json({ error: "Team not found" });
-    if (team.type !== "team") return res.status(400).json({ error: "This endpoint is only for teams" });
+    const dept = await Department.findById(id);
+    if (!dept) return res.status(404).json({ error: "Department not found" });
 
     const errors = [];
 
-    // ── Add employees to team channel only (supports multi-team membership) ──
+    // ── Team: manage chat-channel membership (supports multi-team membership)
+    // ── Department: manage primary department assignment
     for (const empId of add) {
       const emp = await Employee.findById(empId);
       if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
 
-      // Add to the team's chat channel if it exists
-      if (team.chat_channel_id && emp.user_id) {
+      if (dept.type === "team") {
+        if (!dept.chat_channel_id || !emp.user_id) continue;
         const alreadyMember = await ChannelMember.findOne({
-          channel_id: team.chat_channel_id,
+          channel_id: dept.chat_channel_id,
           user_id: emp.user_id,
         });
         if (!alreadyMember) {
           await ChannelMember.create({
-            channel_id: team.chat_channel_id,
+            channel_id: dept.chat_channel_id,
             user_id: emp.user_id,
             role: "member",
           });
         }
+      } else {
+        emp.department = dept._id;
+        await emp.save();
       }
     }
 
-    // ── Remove employees from team channel only ──
+    // ── Remove members based on type ──
     for (const empId of remove) {
       const emp = await Employee.findById(empId);
       if (!emp) { errors.push(`Employee ${empId} not found`); continue; }
 
-      // Remove from chat channel
-      if (team.chat_channel_id && emp.user_id) {
+      if (dept.type === "team") {
+        if (!dept.chat_channel_id || !emp.user_id) continue;
         await ChannelMember.findOneAndDelete({
-          channel_id: team.chat_channel_id,
+          channel_id: dept.chat_channel_id,
           user_id: emp.user_id,
         });
+      } else {
+        // Keep valid assignment by moving to parent if available
+        if (dept.parent_department_id) {
+          emp.department = dept.parent_department_id;
+          await emp.save();
+        }
       }
     }
 
-    // Return updated team members from channel membership (multi-team friendly)
-    let members = [];
-    if (team.chat_channel_id) {
-      const channelMembers = await ChannelMember.find({
-        channel_id: team.chat_channel_id,
-      }).select("user_id");
-      const userIds = channelMembers.map((m) => m.user_id).filter(Boolean);
-      members = await Employee.find({
-        user_id: { $in: userIds },
-        is_active: true,
-      }).populate("user_id", "first_name last_name email profile_picture");
-    }
+    const members = await getDepartmentMembersByType(dept);
 
     res.json({
-      message: "Team members updated",
+      message: `${dept.type === "team" ? "Team" : "Department"} members updated`,
       members,
       errors: errors.length > 0 ? errors : undefined,
     });

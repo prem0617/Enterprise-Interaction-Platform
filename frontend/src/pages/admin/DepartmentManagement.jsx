@@ -254,8 +254,8 @@ export default function DepartmentManagement() {
 
   // Manage team members
   const [membersModal, setMembersModal] = useState(null); // team dept object
-  const [teamMembers, setTeamMembers] = useState([]);     // employees in the team
-  const [parentMembers, setParentMembers] = useState([]); // employees in parent dept
+  const [teamMembers, setTeamMembers] = useState([]);     // members in selected department/team
+  const [parentMembers, setParentMembers] = useState([]); // available active employees
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersSaving, setMembersSaving] = useState(false);
 
@@ -474,24 +474,21 @@ export default function DepartmentManagement() {
     setTeamMembers([]);
     setParentMembers([]);
     try {
-      const teamRes = await axios.get(
-        `${BACKEND_URL}/employees?department=${team._id}&is_active=true`,
+      const membersRes = await axios.get(
+        `${BACKEND_URL}/departments/${team._id}/members`,
         { headers: getAuthHeaders() }
       );
-      const teamEmps = teamRes.data?.employees || [];
+      const teamEmps = membersRes.data?.members || [];
       setTeamMembers(teamEmps);
 
-      const parentId = team.parent_department_id?._id || team.parent_department_id;
-      if (parentId) {
-        const parentRes = await axios.get(
-          `${BACKEND_URL}/employees?department=${parentId}&is_active=true`,
-          { headers: getAuthHeaders() }
-        );
-        setParentMembers(parentRes.data?.employees || []);
-      }
+      const allActiveRes = await axios.get(
+        `${BACKEND_URL}/employees?is_active=true`,
+        { headers: getAuthHeaders() }
+      );
+      setParentMembers(allActiveRes.data?.employees || []);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to load team members");
+      toast.error("Failed to load members");
     } finally {
       setMembersLoading(false);
     }
@@ -506,7 +503,7 @@ export default function DepartmentManagement() {
         { add: [emp._id], remove: [] },
         { headers: getAuthHeaders() }
       );
-      toast.success(`${emp.user_id?.first_name} added to team`);
+      toast.success(`${emp.user_id?.first_name} added`);
       await openMembersModal(membersModal);
       fetchDepartments();
     } catch (err) {
@@ -525,7 +522,7 @@ export default function DepartmentManagement() {
         { add: [], remove: [emp._id] },
         { headers: getAuthHeaders() }
       );
-      toast.success(`${emp.user_id?.first_name} removed from team`);
+      toast.success(`${emp.user_id?.first_name} removed`);
       await openMembersModal(membersModal);
       fetchDepartments();
     } catch (err) {
@@ -752,15 +749,13 @@ export default function DepartmentManagement() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isTeam && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
-                            className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                            title="Manage Members"
-                          >
-                            <UserPlus className="size-3.5" />
-                          </button>
-                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
+                          className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                          title="Manage Members"
+                        >
+                          <UserPlus className="size-3.5" />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); openEditDialog(dept); }}
                           className="size-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
@@ -820,15 +815,13 @@ export default function DepartmentManagement() {
                     )}
 
                     {/* Manage Members CTA for teams */}
-                    {isTeam && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
-                        className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/5 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                      >
-                        <UserPlus className="size-3" />
-                        Manage Members
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openMembersModal(dept); }}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/5 text-xs text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                    >
+                      <UserPlus className="size-3" />
+                      Manage Members
+                    </button>
                   </div>
                 </div>
               );
@@ -1395,14 +1388,16 @@ export default function DepartmentManagement() {
             </div>
           ) : (
             <div className="flex gap-4 overflow-hidden flex-1 min-h-0 py-2">
-              {/* Current Team Members */}
+              {/* Current Members */}
               <div className="flex-1 flex flex-col min-h-0">
                 <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                  Team Members ({teamMembers.length})
+                  {membersModal?.type === "team" ? "Team" : "Department"} Members ({teamMembers.length})
                 </p>
                 <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
                   {teamMembers.length === 0 ? (
-                    <p className="text-xs text-zinc-600 italic py-4 text-center">No one in this team yet</p>
+                    <p className="text-xs text-zinc-600 italic py-4 text-center">
+                      No members yet
+                    </p>
                   ) : (
                     teamMembers.map((emp) => {
                       const u = emp.user_id || {};
@@ -1423,7 +1418,7 @@ export default function DepartmentManagement() {
                             disabled={membersSaving}
                             onClick={() => handleRemoveFromTeam(emp)}
                             className="size-6 flex-shrink-0 rounded flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                            title="Remove from team"
+                            title="Remove member"
                           >
                             <UserMinus className="size-3.5" />
                           </button>
@@ -1437,7 +1432,7 @@ export default function DepartmentManagement() {
               {/* Divider */}
               <div className="w-px bg-zinc-800/60 flex-shrink-0" />
 
-              {/* Available employees from parent dept */}
+              {/* Available employees */}
               <div className="flex-1 flex flex-col min-h-0">
                 <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
                   Available to Add
@@ -1447,7 +1442,7 @@ export default function DepartmentManagement() {
                     const teamMemberIds = new Set(teamMembers.map((m) => String(m._id)));
                     const available = parentMembers.filter((m) => !teamMemberIds.has(String(m._id)));
                     if (available.length === 0) {
-                      return <p className="text-xs text-zinc-600 italic py-4 text-center">All department members are in this team</p>;
+                      return <p className="text-xs text-zinc-600 italic py-4 text-center">All active employees are already added</p>;
                     }
                     return available.map((emp) => {
                       const u = emp.user_id || {};
@@ -1468,7 +1463,7 @@ export default function DepartmentManagement() {
                             disabled={membersSaving}
                             onClick={() => handleAddToTeam(emp)}
                             className="size-6 flex-shrink-0 rounded flex items-center justify-center text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
-                            title="Add to team"
+                            title="Add member"
                           >
                             <UserPlus className="size-3.5" />
                           </button>
