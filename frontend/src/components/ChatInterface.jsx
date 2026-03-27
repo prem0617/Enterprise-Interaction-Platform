@@ -1892,7 +1892,7 @@ const ChatInterface = () => {
                     </button>
                   </>
                 )}
-                {selectedChat?.member_count > 2 && (
+                {selectedChat?.channel_type !== "team" && selectedChat?.member_count > 2 && (
                   <button
                     onClick={() => leaveGroup(selectedChat._id)}
                     className="p-1.5 text-zinc-500 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all"
