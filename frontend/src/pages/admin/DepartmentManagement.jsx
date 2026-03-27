@@ -481,11 +481,27 @@ export default function DepartmentManagement() {
       const teamEmps = membersRes.data?.members || [];
       setTeamMembers(teamEmps);
 
-      const allActiveRes = await axios.get(
-        `${BACKEND_URL}/employees?is_active=true`,
-        { headers: getAuthHeaders() }
-      );
-      setParentMembers(allActiveRes.data?.employees || []);
+      // For teams, only show employees from the parent department as "Available to Add"
+      if (team.type === "team") {
+        const parentId = team.parent_department_id?._id || team.parent_department_id;
+        if (parentId) {
+          const parentRes = await axios.get(
+            `${BACKEND_URL}/employees?department=${parentId}&is_active=true`,
+            { headers: getAuthHeaders() }
+          );
+          setParentMembers(parentRes.data?.employees || []);
+        } else {
+          setParentMembers([]);
+        }
+      } else {
+        // For departments, show employees already assigned to this department
+        const deptId = team._id;
+        const deptRes = await axios.get(
+          `${BACKEND_URL}/employees?department=${deptId}&is_active=true`,
+          { headers: getAuthHeaders() }
+        );
+        setParentMembers(deptRes.data?.employees || []);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to load members");
@@ -1438,11 +1454,22 @@ export default function DepartmentManagement() {
                   Available to Add
                 </p>
                 <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                  {(() => {
+                    {(() => {
                     const teamMemberIds = new Set(teamMembers.map((m) => String(m._id)));
                     const available = parentMembers.filter((m) => !teamMemberIds.has(String(m._id)));
                     if (available.length === 0) {
-                      return <p className="text-xs text-zinc-600 italic py-4 text-center">All active employees are already added</p>;
+                        if (membersModal?.type === "team") {
+                          return (
+                            <p className="text-xs text-zinc-600 italic py-4 text-center">
+                              All department members are in this team
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-xs text-zinc-600 italic py-4 text-center">
+                            No more members available
+                          </p>
+                        );
                     }
                     return available.map((emp) => {
                       const u = emp.user_id || {};
