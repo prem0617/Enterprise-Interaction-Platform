@@ -1534,11 +1534,6 @@ const ChatInterface = () => {
                       >
                         {displayInfo.name}
                       </h3>
-                      {chat.channel_type === "team" && (
-                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
-                          Team
-                        </span>
-                      )}
                       {chat.channel_type === "group" && (
                         <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
                           Group
@@ -1604,12 +1599,12 @@ const ChatInterface = () => {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${selectedChat.channel_type === "group"
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-medium text-xs overflow-hidden ${selectedChat.channel_type === "group" || selectedChat.channel_type === "team"
                       ? "bg-zinc-800 text-zinc-400"
                       : "bg-indigo-500/20 text-indigo-300"
                       }`}
                   >
-                    {selectedChat.channel_type === "group" ? (
+                    {selectedChat.channel_type === "group" || selectedChat.channel_type === "team" ? (
                       <Users className="w-4 h-4" />
                     ) : selectedChat.other_user?.profile_picture ? (
                       <img
@@ -1633,12 +1628,12 @@ const ChatInterface = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-100">
-                    {selectedChat.channel_type === "group"
+                    {selectedChat.channel_type === "group" || selectedChat.channel_type === "team"
                       ? selectedChat.name
                       : selectedChat.other_user?.full_name}
                   </h3>
                   <p className="text-xs">
-                    {selectedChat.channel_type === "group"
+                    {selectedChat.channel_type === "group" || selectedChat.channel_type === "team"
                       ? <span className="text-zinc-500">{`${selectedChat.member_count || 0} members${selectedChat.department
                         ? ` · ${selectedChat.department?.name || ""}`
                         : ""
@@ -2088,7 +2083,7 @@ const ChatInterface = () => {
                   Start the conversation
                 </p>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  {selectedChat.channel_type === "group"
+                  {selectedChat.channel_type === "group" || selectedChat.channel_type === "team"
                     ? `Send a message to ${selectedChat.name}`
                     : `Send a message to ${selectedChat.other_user?.first_name}`}
                 </p>
@@ -2163,7 +2158,7 @@ const ChatInterface = () => {
                             </div>
                           )}
                           {!message.is_own &&
-                            selectedChat.channel_type === "group" && (
+                            (selectedChat.channel_type === "group" || selectedChat.channel_type === "team") && (
                               <p className="text-[11px] font-semibold text-indigo-400 mb-0.5">
                                 {senderName}
                               </p>
@@ -2189,7 +2184,7 @@ const ChatInterface = () => {
                                   className="flex items-center gap-0.5 hover:opacity-80"
                                 >
                                   <CheckCheck className="w-3 h-3 text-blue-400" />
-                                  {selectedChat?.channel_type === "group" &&
+                                  {(selectedChat?.channel_type === "group" || selectedChat?.channel_type === "team") &&
                                     message.seen_count > 0 && (
                                       <span className="text-[10px]">
                                         {message.seen_count}
