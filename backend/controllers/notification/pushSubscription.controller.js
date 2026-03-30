@@ -15,7 +15,10 @@ export const subscribePush = async (req, res) => {
       return res.status(503).json({ error: "Web Push is not configured on the server" });
     }
     const { endpoint, keys } = req.body || {};
-    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    const p256dh = keys?.p256dh || req.body?.p256dh || req.body?.keys_p256dh;
+    const auth = keys?.auth || req.body?.auth || req.body?.keys_auth;
+
+    if (!endpoint || !p256dh || !auth) {
       return res.status(400).json({ error: "Invalid subscription payload" });
     }
 
@@ -23,8 +26,8 @@ export const subscribePush = async (req, res) => {
     await PushSubscription.create({
       user_id: req.userId,
       endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
+      p256dh,
+      auth,
     });
 
     res.status(201).json({ success: true });

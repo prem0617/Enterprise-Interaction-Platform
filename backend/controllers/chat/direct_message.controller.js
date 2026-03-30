@@ -1315,7 +1315,7 @@ export const uploadFileMessage = async (req, res) => {
       seen_count: 0,
     };
 
-    // ✅ Emit socket event with complete data
+    // ✅ Emit socket event with complete data + create notifications for web push
     if (io) {
       const channelMembers = await ChannelMember.find({
         channel_id: channelId,
@@ -1335,6 +1335,16 @@ export const uploadFileMessage = async (req, res) => {
         if (receiverSocketId) {
           io.to(receiverSocketId).emit("new_message", socketMessage);
         }
+
+        createNotification({
+          recipientId: receiverId,
+          type: "message",
+          priority: "medium",
+          title: `${senderFullName} sent a file`,
+          body: newMessage.file_name || "File attachment",
+          actorId: userId,
+          reference: { kind: "channel", id: channelId },
+        }).catch(() => {});
       });
     }
 

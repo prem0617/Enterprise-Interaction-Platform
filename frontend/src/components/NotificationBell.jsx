@@ -97,11 +97,31 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!token || !pushCapable) return;
     let cancelled = false;
-    getLocalPushSubscription().then((sub) => {
-      if (!cancelled) setPushOn(!!sub);
-    });
-    return () => { cancelled = true; };
-  }, [token, pushCapable, open]);
+
+    (async () => {
+      const sub = await getLocalPushSubscription();
+      if (cancelled) return;
+
+      setPushOn(!!sub);
+
+      // If this browser already has a push subscription (e.g., user switched accounts),
+      // make sure the backend associates that endpoint with the currently logged-in user.
+      if (sub) {
+        try {
+          const json = sub.toJSON();
+          if (json?.endpoint && json?.keys?.p256dh && json?.keys?.auth) {
+            await axios.post(`${BACKEND_URL}/notifications/push/subscribe`, json, { headers: authHeaders() });
+          }
+        } catch {
+          /* ignore push sync failures */
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, pushCapable, authHeaders]);
 
   const handleEnablePush = async () => {
     setPushBusy(true);

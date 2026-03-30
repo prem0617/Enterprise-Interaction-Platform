@@ -34,6 +34,8 @@ export async function sendWebPushToUser(userId, { title, body = "", url = "/", t
   const subs = await PushSubscription.find({ user_id: uid }).lean();
   if (subs.length === 0) return;
 
+  console.log(`[web-push] sending to user ${uid} (${subs.length} sub(s)): "${title}"`);
+
   const payload = JSON.stringify({
     title: title || "Notification",
     body,
@@ -44,12 +46,29 @@ export async function sendWebPushToUser(userId, { title, body = "", url = "/", t
   const AES_128 = webpush.supportedContentEncodings.AES_128_GCM;
   const AES_GCM = webpush.supportedContentEncodings.AES_GCM;
 
+  let sent = 0;
+
   for (const sub of subs) {
+    const p256dh = sub?.p256dh || sub?.keys?.p256dh || sub?.keys_p256dh;
+    const auth = sub?.auth || sub?.keys?.auth || sub?.keys_auth;
+
+    if (!sub?.endpoint || !p256dh || !auth) {
+      console.warn(`[web-push] removing invalid subscription ${sub._id} (missing keys)`);
+      await PushSubscription.deleteOne({ _id: sub._id });
+      continue;
+    }
+
+    if (!sub?.p256dh || !sub?.auth) {
+      await PushSubscription.updateOne(
+        { _id: sub._id },
+        { $set: { p256dh, auth }, $unset: { keys_p256dh: "", keys_auth: "", keys: "" } }
+      );
+    }
+
     const subscription = {
       endpoint: sub.endpoint,
-      keys: { p256dh: sub.p256dh, auth: sub.auth },
+      keys: { p256dh, auth },
     };
-    // Firefox / Mozilla push often expects aesgcm; Chromium prefers aes128gcm. Try both on failure.
     const mozilla = /mozilla\.com|services\.mozilla/i.test(sub.endpoint || "");
     const order = mozilla ? [AES_GCM, AES_128] : [AES_128, AES_GCM];
 
@@ -71,13 +90,23 @@ export async function sendWebPushToUser(userId, { title, body = "", url = "/", t
       }
     }
 
-    if (!lastErr) continue;
+    if (!lastErr) {
+      sent++;
+      continue;
+    }
 
     const code = lastErr?.statusCode;
-    if (code === 404 || code === 410) {
+    if (code === 403 || code === 404 || code === 410) {
+      console.warn(`[web-push] subscription ${sub._id} stale/expired (${code}) — removing`);
       await PushSubscription.deleteOne({ _id: sub._id });
     } else {
-      console.warn("[web-push] send failed:", lastErr?.message || lastErr);
+      console.warn(
+        `[web-push] send failed: status=${code || "n/a"} msg="${lastErr?.message}" body="${lastErr?.body}" endpoint=${sub.endpoint?.slice(0, 80)}…`
+      );
     }
+  }
+
+  if (sent > 0) {
+    console.log(`[web-push] ✓ delivered to ${sent}/${subs.length} endpoint(s) for user ${uid}`);
   }
 }

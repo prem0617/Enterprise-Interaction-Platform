@@ -1,3 +1,8 @@
+// Activate immediately — don't wait for existing tabs to close.
+// Without this, Chromium leaves the SW in "waiting" state and push events are lost.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
@@ -13,10 +18,10 @@ self.addEventListener("push", (event) => {
 
       await self.registration.showNotification(data.title || "Notification", {
         body: data.body || "",
-        icon: "/vite.svg",
-        badge: "/vite.svg",
+        icon: "/favicon.ico",
         tag: data.tag || "eip",
         data: { url: data.url || "/" },
+        requireInteraction: false,
       });
     })()
   );
