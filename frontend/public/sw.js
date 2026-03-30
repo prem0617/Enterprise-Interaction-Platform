@@ -74,6 +74,13 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       try {
+        // Helps debug cases where the push is received but nothing appears.
+        console.log("[SW] showNotification()", {
+          title: payload.title,
+          bodyLen: String(payload.body || "").length,
+          tag: payload.tag,
+          permission: Notification.permission,
+        });
         await self.registration.showNotification(payload.title, options);
       } catch (err) {
         console.error("[SW] showNotification failed:", err);

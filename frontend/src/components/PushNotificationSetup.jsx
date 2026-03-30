@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, X } from "lucide-react";
-import { subscribeUserPush, isPushSupported } from "@/lib/pushNotifications";
+import {
+  enableWebPush,
+  getLocalPushSubscription,
+  isWebPushSupported,
+} from "@/lib/webPushClient";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -13,42 +17,62 @@ export default function PushNotificationSetup() {
   const [status, setStatus] = useState("idle"); // idle | enabling | on | unsupported | denied
   const [supported, setSupported] = useState(true);
 
-  useEffect(() => {
-    isPushSupported().then(setSupported);
-    if (typeof Notification !== "undefined") {
-      if (Notification.permission === "denied") setStatus("denied");
-      // If permission is already granted, try to (re)subscribe so the server
-      // has a fresh, valid PushSubscription (e.g. VAPID keys were set later).
-      else if (Notification.permission === "granted") {
-        setStatus("enabling");
-        subscribeUserPush()
-          .then((ok) => setStatus(ok ? "on" : Notification.permission === "denied" ? "denied" : "idle"))
-          .catch(() => setStatus("idle"));
-      }
-    }
+  const getAuthHeaders = useCallback(() => {
+    const token = localStorage.getItem("token");
+    return { Authorization: `Bearer ${token}` };
   }, []);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    const handler = (event) => {
-      const data = event.data || {};
-      if (data?.type === "EIP_PUSH_RECEIVED") {
-        toast.info(`Push received: ${data.payload?.title || "Notification"}`, {
-          duration: 2500,
-        });
+    setSupported(isWebPushSupported());
+    if (typeof Notification === "undefined") return;
+
+    if (Notification.permission === "denied") {
+      setStatus("denied");
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // If we already have a valid subscription locally, treat it as "on".
+        const existing = await getLocalPushSubscription();
+        if (cancelled) return;
+        if (existing) {
+          setStatus("on");
+          return;
+        }
+
+        // Permission already granted: try to (re)subscribe so the backend gets a fresh subscription.
+        if (Notification.permission === "granted") {
+          setStatus("enabling");
+          const result = await enableWebPush(getAuthHeaders);
+          if (cancelled) return;
+
+          if (result.ok) setStatus("on");
+          else setStatus(Notification.permission === "denied" ? "denied" : "idle");
+
+          if (!result.ok) toast.error("Could not enable notifications", { description: result.reason });
+        }
+      } catch {
+        if (!cancelled) setStatus("idle");
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    navigator.serviceWorker.addEventListener("message", handler);
-    return () => navigator.serviceWorker.removeEventListener("message", handler);
-  }, []);
+  }, [getAuthHeaders]);
 
   const enable = useCallback(async () => {
     setStatus("enabling");
-    const ok = await subscribeUserPush();
-    if (ok) setStatus("on");
+    const result = await enableWebPush(getAuthHeaders);
+    if (result.ok) setStatus("on");
     else if (Notification.permission === "denied") setStatus("denied");
     else setStatus("idle");
-  }, []);
+
+    if (!result.ok) toast.error("Could not enable notifications", { description: result.reason });
+  }, [getAuthHeaders]);
 
   if (!supported || dismissed) return null;
   if (status === "on" && Notification.permission === "granted") return null;

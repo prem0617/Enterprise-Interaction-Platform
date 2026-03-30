@@ -76,57 +76,62 @@ export function getPublicApiBase() {
 export async function sendPushToUser(userId, n) {
   const uid = String(userId);
 
-  // ─── FCM first (more reliable than web-push in many browsers) ───
-  try {
-    const fcmTokens = await FcmToken.find({ user_id: uid }).select("token");
-    if (fcmTokens?.length) {
-      const ok = initFcmIfNeeded();
-      if (ok) {
-        const tokens = fcmTokens.map((t) => t.token).filter(Boolean);
-        console.log("[PUSH][FCM] sending to", { userId: uid, tokens: tokens.length });
-        const title = String(n.title || "Enterprise Platform");
-        const body = String(n.body || "");
-        const data = {
-          title,
-          body,
-          url: String(n.url || getPublicAppUrl()),
-          tag: String(n.tag || "eip-default"),
-          apiBase: String(getPublicApiBase()),
-          ...(n.data || {}),
-        };
+  // By default, deliver using Web Push (VAPID + PushSubscription) rather than FCM.
+  // Set `PUSH_USE_FCM=true` on the backend to re-enable FCM delivery.
+  const useFcm = process.env.PUSH_USE_FCM === "true";
+  if (useFcm) {
+    // ─── FCM (optional) ───
+    try {
+      const fcmTokens = await FcmToken.find({ user_id: uid }).select("token");
+      if (fcmTokens?.length) {
+        const ok = initFcmIfNeeded();
+        if (ok) {
+          const tokens = fcmTokens.map((t) => t.token).filter(Boolean);
+          console.log("[PUSH][FCM] sending to", { userId: uid, tokens: tokens.length });
+          const title = String(n.title || "Enterprise Platform");
+          const body = String(n.body || "");
+          const data = {
+            title,
+            body,
+            url: String(n.url || getPublicAppUrl()),
+            tag: String(n.tag || "eip-default"),
+            apiBase: String(getPublicApiBase()),
+            ...(n.data || {}),
+          };
 
-        if (tokens.length === 1) {
-          await admin.messaging().send({
-            token: tokens[0],
-            notification: { title, body },
-            data,
-          });
-        } else {
-          const messaging = admin.messaging();
-          if (typeof messaging.sendEachForMulticast === "function") {
-            await messaging.sendEachForMulticast({
-              tokens,
-                notification: { title, body },
+          if (tokens.length === 1) {
+            await admin.messaging().send({
+              token: tokens[0],
+              notification: { title, body },
               data,
             });
           } else {
-            // Fallback: send individually
-            await Promise.all(
-              tokens.map((t) =>
-                messaging.send({
-                  token: t,
-                  notification: { title, body },
-                  data,
-                })
-              )
-            );
+            const messaging = admin.messaging();
+            if (typeof messaging.sendEachForMulticast === "function") {
+              await messaging.sendEachForMulticast({
+                tokens,
+                notification: { title, body },
+                data,
+              });
+            } else {
+              // Fallback: send individually
+              await Promise.all(
+                tokens.map((t) =>
+                  messaging.send({
+                    token: t,
+                    notification: { title, body },
+                    data,
+                  })
+                )
+              );
+            }
           }
+          return;
         }
-        return;
       }
+    } catch (err) {
+      console.error("[PUSH][FCM] send failed:", { userId: uid, message: err?.message || err });
     }
-  } catch (err) {
-    console.error("[PUSH][FCM] send failed:", { userId: uid, message: err?.message || err });
   }
 
   configureWebPush();
