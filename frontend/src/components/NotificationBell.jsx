@@ -12,6 +12,7 @@ import {
   isWebPushSupported,
   enableWebPush,
   disableWebPush,
+  restoreWebPush,
   getLocalPushSubscription,
 } from "@/lib/webPushClient";
 
@@ -99,23 +100,20 @@ export default function NotificationBell() {
     let cancelled = false;
 
     (async () => {
-      const sub = await getLocalPushSubscription();
-      if (cancelled) return;
-
-      setPushOn(!!sub);
-
-      // If this browser already has a push subscription (e.g., user switched accounts),
-      // make sure the backend associates that endpoint with the currently logged-in user.
-      if (sub) {
-        try {
-          const json = sub.toJSON();
-          if (json?.endpoint && json?.keys?.p256dh && json?.keys?.auth) {
-            await axios.post(`${BACKEND_URL}/notifications/push/subscribe`, json, { headers: authHeaders() });
-          }
-        } catch {
-          /* ignore push sync failures */
-        }
+      // If the user already granted notification permission, silently restore
+      // the push subscription. Privacy-focused browsers (Helium, Brave, etc.)
+      // clear SW registrations and push subscriptions between sessions — this
+      // re-registers the SW and re-creates the subscription automatically so
+      // the user never has to click "Enable" again after the first time.
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const result = await restoreWebPush(authHeaders);
+        if (!cancelled) setPushOn(result.ok);
+        return;
       }
+
+      // Permission not yet granted — just reflect whatever local state exists.
+      const sub = await getLocalPushSubscription();
+      if (!cancelled) setPushOn(!!sub);
     })();
 
     return () => {
@@ -154,22 +152,22 @@ export default function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${BACKEND_URL}/notifications?limit=20`, { headers });
+      const res = await axios.get(`${BACKEND_URL}/notifications?limit=20`, { headers: authHeaders() });
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unread_count || 0);
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, []);
+  }, [authHeaders]);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await axios.get(`${BACKEND_URL}/notifications/unread-count`, { headers });
+      const res = await axios.get(`${BACKEND_URL}/notifications/unread-count`, { headers: authHeaders() });
       setUnreadCount(res.data.unread_count || 0);
     } catch { /* silent */ }
-  }, []);
+  }, [authHeaders]);
 
-  // Initial load
-  useEffect(() => { fetchUnreadCount(); }, []);
+  // Initial load — only if authenticated
+  useEffect(() => { if (token) fetchUnreadCount(); }, [token]);
 
   // Fetch full list when opening
   useEffect(() => { if (open) fetchNotifications(); }, [open]);
@@ -182,20 +180,38 @@ export default function NotificationBell() {
       setNotifications((prev) => [notification, ...prev].slice(0, 30));
       setUnreadCount((prev) => prev + 1);
 
-      // Show toast for high/urgent priority
+      // Show toast based on priority — "low" is silent (bell update only)
       const priority = notification.priority || "medium";
       if (priority === "urgent") {
         toast.error(notification.title, { description: notification.body });
       } else if (priority === "high") {
         toast.warning(notification.title, { description: notification.body });
-      } else {
+      } else if (priority === "medium") {
         toast(notification.title, { description: notification.body });
       }
+      // "low" priority notifications update the bell counter silently
     };
 
     socket.on("notification", handleNotification);
     return () => socket.off("notification", handleNotification);
   }, [socket]);
+
+  // Handle pushsubscriptionchange fallback: the SW sends this message when it
+  // cannot rotate the subscription itself (no oldEndpoint available). We use
+  // the authenticated subscribe route from the main thread instead.
+  useEffect(() => {
+    if (!token || !pushCapable) return;
+    const handleSWMessage = (event) => {
+      if (event.data?.type === "PUSH_SUBSCRIPTION_CHANGED") {
+        const json = event.data.subscription;
+        if (json?.endpoint && json?.keys?.p256dh && json?.keys?.auth) {
+          axios.post(`${BACKEND_URL}/notifications/push/subscribe`, json, { headers: authHeaders() }).catch(() => {});
+        }
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handleSWMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleSWMessage);
+  }, [token, pushCapable, authHeaders]);
 
   // Close on outside click
   useEffect(() => {

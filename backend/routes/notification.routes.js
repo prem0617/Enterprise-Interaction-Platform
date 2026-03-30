@@ -11,12 +11,15 @@ import {
   getVapidPublicKeyHandler,
   subscribePush,
   unsubscribePush,
+  rotateSubscription,
 } from "../controllers/notification/pushSubscription.controller.js";
 import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 router.get("/push/vapid-public-key", getVapidPublicKeyHandler);
+// No auth — old endpoint URL acts as credential (only the holding browser knows it)
+router.post("/push/rotate-subscription", rotateSubscription);
 
 router.use(verifyToken);
 

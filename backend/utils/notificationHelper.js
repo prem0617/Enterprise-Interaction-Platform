@@ -38,13 +38,18 @@ export async function createNotification({
       .populate("actor_id", "first_name last_name email profile_picture")
       .lean();
 
-    // Push via socket
+    // Push via socket (user is currently connected)
     const socketId = getReceiverSocketId(recipientId.toString());
     if (socketId && io) {
       io.to(socketId).emit("notification", populated);
     }
 
-    // Web Push (works when tab is closed / browser in background)
+    // Web Push — always send when configured.
+    // The service worker suppresses the OS alert when the app window is
+    // already open and focused (the in-app toast covers it in that case).
+    // We cannot reliably detect "tab closed" here: Socket.IO only marks a
+    // user offline after the heartbeat timeout (~20-45 s), so checking
+    // socketId would silently drop pushes in that entire window.
     if (populated && isWebPushConfigured()) {
       void sendWebPushToUser(recipientId, {
         title: populated.title,

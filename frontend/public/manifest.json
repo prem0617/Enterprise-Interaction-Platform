@@ -1,0 +1,17 @@
+{
+  "name": "Enterprise Interaction Platform",
+  "short_name": "EIP",
+  "description": "Internal collaboration platform for teams",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

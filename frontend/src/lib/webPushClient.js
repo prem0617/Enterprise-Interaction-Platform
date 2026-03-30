@@ -26,6 +26,114 @@ export function isWebPushSupported() {
 }
 
 /**
+ * Fetch the VAPID public key from the backend.
+ * Returns the key string or null on failure.
+ */
+async function fetchVapidPublicKey() {
+  try {
+    const res = await axios.get(`${BACKEND_URL}/notifications/push/vapid-public-key`);
+    return String(res.data?.publicKey || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send VAPID key + API base URL into the service worker's Cache API so the SW
+ * can re-subscribe on its own when a `pushsubscriptionchange` event fires
+ * (Firefox, Chrome 138+) even without an open page/auth token.
+ */
+async function savePushConfigToSW(vapidKey) {
+  try {
+    const sw = await navigator.serviceWorker.ready;
+    if (sw.active) {
+      sw.active.postMessage({
+        type: "SAVE_PUSH_CONFIG",
+        vapidKey,
+        apiBase: BACKEND_URL,
+      });
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
+/**
+ * Register (or re-register) the push service worker and wait until it is
+ * active and controlling this page.
+ */
+async function registerAndActivateSW() {
+  const registration = await navigator.serviceWorker.register("/push-sw.js", {
+    scope: "/",
+    updateViaCache: "none",
+  });
+
+  try { await registration.update(); } catch { /* ignore */ }
+
+  if (!navigator.serviceWorker.controller) {
+    await new Promise((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true });
+      setTimeout(resolve, 3000);
+    });
+  }
+  await navigator.serviceWorker.ready;
+  return registration;
+}
+
+/**
+ * Silently restore a push subscription on page load when notification
+ * permission is already "granted" but the browser (e.g. Helium, Brave with
+ * aggressive privacy settings) has cleared the service worker or push
+ * subscription between sessions.
+ *
+ * - No permission prompt is shown (permission was already granted).
+ * - The existing subscription is reused if still valid; otherwise a fresh one
+ *   is created and synced to the backend.
+ *
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export async function restoreWebPush(getAuthHeaders) {
+  if (!isWebPushSupported()) return { ok: false, reason: "not-supported" };
+  if (Notification.permission !== "granted") return { ok: false, reason: "permission-not-granted" };
+
+  try {
+    const publicKey = await fetchVapidPublicKey();
+    if (!publicKey) return { ok: false, reason: "vapid-fetch-failed" };
+
+    const registration = await registerAndActivateSW();
+
+    let sub = await registration.pushManager.getSubscription();
+
+    if (!sub) {
+      // Subscription was cleared by the browser — recreate it silently.
+      // No user gesture needed because permission is already "granted".
+      sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKeyForSubscribe(publicKey),
+      });
+    }
+
+    const json = sub.toJSON();
+    if (json?.endpoint && json?.keys?.p256dh && json?.keys?.auth) {
+      await axios.post(
+        `${BACKEND_URL}/notifications/push/subscribe`,
+        json,
+        { headers: getAuthHeaders() }
+      );
+    }
+
+    // Save config into SW cache so pushsubscriptionchange can re-subscribe
+    // without the main thread (works even with no open windows).
+    await savePushConfigToSW(publicKey);
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err?.message || "unknown" };
+  }
+}
+
+/**
+ * Full enable flow — requests notification permission then subscribes.
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export async function enableWebPush(getAuthHeaders) {
@@ -38,43 +146,15 @@ export async function enableWebPush(getAuthHeaders) {
     return { ok: false, reason: "Notification permission was not granted." };
   }
 
-  let publicKeyRes;
-  try {
-    publicKeyRes = await axios.get(`${BACKEND_URL}/notifications/push/vapid-public-key`);
-  } catch {
+  const publicKey = await fetchVapidPublicKey();
+  if (!publicKey) {
     return {
       ok: false,
       reason: "Server is not configured for Web Push (missing VAPID keys). Ask an admin to set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.",
     };
   }
 
-  const publicKey = String(publicKeyRes.data?.publicKey || "").trim();
-  if (!publicKey) {
-    return { ok: false, reason: "Server did not return a VAPID public key." };
-  }
-
-  const registration = await navigator.serviceWorker.register("/push-sw.js", {
-    scope: "/",
-    updateViaCache: "none",
-  });
-
-  // Force-update the SW so the latest push-sw.js is fetched and activated.
-  try {
-    await registration.update();
-  } catch {
-    /* ignore */
-  }
-
-  // Wait until a service worker is active and controlling this page.
-  // Chromium can leave a new SW in "installed/waiting" without this.
-  if (!navigator.serviceWorker.controller) {
-    await new Promise((resolve) => {
-      navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true });
-      // Safety timeout — don't block forever
-      setTimeout(resolve, 3000);
-    });
-  }
-  await navigator.serviceWorker.ready;
+  const registration = await registerAndActivateSW();
 
   // Unsubscribe any existing push subscription first — this ensures we get a
   // fresh subscription bound to the CURRENT VAPID key. Without this, Chromium
@@ -97,13 +177,16 @@ export async function enableWebPush(getAuthHeaders) {
     const msg = e?.message || String(e);
     return {
       ok: false,
-      reason:
-        `Could not subscribe for push (${msg}). In Firefox: allow notifications for this site (lock icon → Permissions), avoid Private Windows, and ensure dom.push.enabled is on in about:config.`,
+      reason: `Could not subscribe for push (${msg}). In Firefox: allow notifications for this site (lock icon → Permissions), avoid Private Windows, and ensure dom.push.enabled is on in about:config.`,
     };
   }
 
   const json = sub.toJSON();
   await axios.post(`${BACKEND_URL}/notifications/push/subscribe`, json, { headers: getAuthHeaders() });
+
+  // Save config into SW cache so pushsubscriptionchange can re-subscribe
+  // without the main thread (works even with no open windows).
+  await savePushConfigToSW(publicKey);
 
   return { ok: true };
 }

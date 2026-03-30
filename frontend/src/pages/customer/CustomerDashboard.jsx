@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthContext } from "@/context/AuthContextProvider";
+import NotificationBell from "@/components/NotificationBell";
 
 const statusColors = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -335,8 +336,8 @@ if (showWhiteboard) {
           >
             <PenLine className="h-4 w-4" />
           </Button>
+          <NotificationBell />
           <span className="text-sm text-muted-foreground">
-
             {user?.first_name} {user?.last_name}
           </span>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-zinc-400 hover:text-zinc-200">
