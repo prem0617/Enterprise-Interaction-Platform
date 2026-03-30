@@ -673,9 +673,16 @@ io.on("connection", async (socket) => {
     console.log(`[WHITEBOARD] ${socket.userId} left ${room}`);
   });
 
-  socket.on("whiteboard-update", ({ whiteboardId, elements }) => {
+  socket.on("whiteboard-update", ({ whiteboardId, elements, versionNumber }) => {
     if (!whiteboardId || !socket.userId) return;
-    socket.to(`whiteboard:${whiteboardId}`).emit("whiteboard-update", { whiteboardId, elements, senderId: socket.userId });
+    socket
+      .to(`whiteboard:${whiteboardId}`)
+      .emit("whiteboard-update", {
+        whiteboardId,
+        elements,
+        versionNumber: versionNumber ?? null,
+        senderId: socket.userId,
+      });
   });
 
   socket.on("whiteboard-cursor", ({ whiteboardId, cursor, userName }) => {

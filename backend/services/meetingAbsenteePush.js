@@ -17,9 +17,6 @@ export function scheduleMeetingAbsenteePush(meeting) {
   const id = String(meeting._id);
   clearMeetingAbsenteePush(id);
 
-  const hostId = String(meeting.host_id);
-  const participantIds = (meeting.participants || []).map((p) => String(p._id || p));
-
   const delayMs = 2 * 60 * 1000;
   const timeoutId = setTimeout(async () => {
     pendingTimeouts.delete(id);
@@ -27,6 +24,10 @@ export function scheduleMeetingAbsenteePush(meeting) {
       const m = await Meeting.findById(id).lean();
       if (!m || m.status !== "active") return;
 
+      const hostId = String(m.host_id);
+      // Re-read participants at execution time so we also cover users added
+      // after the meeting became active.
+      const participantIds = (m.participants || []).map((p) => String(p._id || p));
       const joined = new Set(getActiveMeetingParticipantIds(id));
       await Promise.all(
         participantIds.map(async (uid) => {

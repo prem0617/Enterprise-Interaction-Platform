@@ -4,6 +4,7 @@ import { ChatChannel } from "../../models/ChatChannel.js";
 import User from "../../models/User.js";
 import { sendPushToUser } from "../../services/pushService.js";
 import { buildMessagesDeepLink } from "../../services/meetingPushNotify.js";
+import { signChatReplyPushToken } from "../../utils/pushActionToken.js";
 
 // Send a message
 export const sendMessage = async (req, res) => {
@@ -68,6 +69,7 @@ export const sendMessage = async (req, res) => {
       const senderName =
         `${senderDoc?.first_name || ""} ${senderDoc?.last_name || ""}`.trim() || "Someone";
       const preview = String(content || "").slice(0, 140);
+      const parentMessageId = String(message._id);
       await Promise.all(
         members.map(async (m) => {
           const uid = String(m.user_id);
@@ -78,11 +80,19 @@ export const sendMessage = async (req, res) => {
             body: `${senderName}: ${preview}`,
             url,
             tag: `eip-ch-${channel_id}-${uid}`,
-            actions: [
-              { action: "open", title: "Open chat" },
-              { action: "reply", title: "Reply" },
-            ],
-            data: { type: "chat_message", channelId: String(channel_id) },
+            actions: [{ action: "reply", title: "Send", type: "text", placeholder: "Type reply…" }],
+            data: {
+              type: "chat_message",
+              chatKind: "group",
+              channelId: String(channel_id),
+              parentMessageId,
+              replyToken: signChatReplyPushToken({
+                userId: uid,
+                channelId: String(channel_id),
+                messageId: message._id,
+                kind: "group",
+              }),
+            },
           });
         })
       );

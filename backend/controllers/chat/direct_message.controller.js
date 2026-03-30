@@ -7,6 +7,7 @@ import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
 import { sendPushToUser } from "../../services/pushService.js";
 import { buildMessagesDeepLink } from "../../services/meetingPushNotify.js";
+import { signChatReplyPushToken } from "../../utils/pushActionToken.js";
 import { cloudinary } from "../../config/cloudinary.js";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
@@ -792,11 +793,19 @@ export const sendMessage = async (req, res) => {
             body: `${senderName}: ${preview}`,
             url,
             tag: `eip-ch-${channelId}-${memberUserId}`,
-            actions: [
-              { action: "open", title: "Open chat" },
-              { action: "reply", title: "Reply" },
-            ],
-            data: { type: "chat_message", channelId: String(channelId) },
+            actions: [{ action: "reply", title: "Send", type: "text", placeholder: "Type reply…" }],
+            data: {
+              type: "chat_message",
+              chatKind: "direct",
+              channelId: String(channelId),
+              parentMessageId: String(messageData._id),
+              replyToken: signChatReplyPushToken({
+                userId: memberUserId,
+                channelId: String(channelId),
+                messageId: messageData._id,
+                kind: "direct",
+              }),
+            },
           });
         })
       );
@@ -1366,11 +1375,19 @@ export const uploadFileMessage = async (req, res) => {
             body: `${senderName}: ${bodyText.slice(0, 140)}`,
             url,
             tag: `eip-ch-${channelId}-${uid}`,
-            actions: [
-              { action: "open", title: "Open chat" },
-              { action: "reply", title: "Reply" },
-            ],
-            data: { type: "chat_message", channelId: String(channelId) },
+            actions: [{ action: "reply", title: "Send", type: "text", placeholder: "Type reply…" }],
+            data: {
+              type: "chat_message",
+              chatKind: "direct",
+              channelId: String(channelId),
+              parentMessageId: String(messageResponse._id),
+              replyToken: signChatReplyPushToken({
+                userId: uid,
+                channelId: String(channelId),
+                messageId: messageResponse._id,
+                kind: "direct",
+              }),
+            },
           });
         })
       );

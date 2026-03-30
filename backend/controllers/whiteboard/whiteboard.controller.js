@@ -6,10 +6,41 @@ function generateSessionCode() {
 }
 
 function canAccessWhiteboard(wb, userId) {
+  const normalizeId = (v) => {
+    if (!v) return null;
+    if (typeof v === "string") return v;
+    if (typeof v === "number") return String(v);
+    if (v._id) return String(v._id);
+    if (v.id) return String(v.id);
+    return String(v);
+  };
+
   return (
-    String(wb.owner_id) === String(userId) ||
-    wb.collaborators.map(String).includes(String(userId))
+    normalizeId(wb.owner_id) === String(userId) ||
+    (wb.collaborators || []).map(normalizeId).includes(String(userId))
   );
+}
+
+async function ensureV1Exists(wb, userIdForCreatedBy) {
+  if (!wb) return wb;
+  if (Array.isArray(wb.versions) && wb.versions.length > 0) return wb;
+
+  const createdBy =
+    userIdForCreatedBy || (wb.owner_id?._id ? wb.owner_id._id : wb.owner_id);
+  wb.version_counter = Math.max(1, Number(wb.version_counter || 0));
+  if (wb.version_counter === 0) wb.version_counter = 1;
+  wb.versions = [
+    {
+      version_number: 1,
+      version_label: "Initial (v1)",
+      created_by: createdBy,
+      elements_snapshot: wb.elements ?? [],
+      canvas_state_snapshot: wb.canvas_state ?? {},
+      createdAt: new Date(),
+    },
+  ];
+  await wb.save();
+  return wb;
 }
 
 // ─── Create ──────────────────────────────────────────────────
@@ -23,6 +54,18 @@ export const createWhiteboard = async (req, res) => {
       collaborators: [req.user.id],
       is_public: is_public !== undefined ? is_public : true,
     });
+    // Create default v1 (manual versioning baseline)
+    wb.version_counter = 1;
+    wb.versions = [
+      {
+        version_number: 1,
+        version_label: "Initial (v1)",
+        created_by: req.user.id,
+        elements_snapshot: wb.elements ?? [],
+        canvas_state_snapshot: wb.canvas_state ?? {},
+      },
+    ];
+    await wb.save();
     const populated = await Whiteboard.findById(wb._id)
       .populate("owner_id", "name email profile_picture")
       .populate("collaborators", "name email profile_picture");
@@ -56,10 +99,16 @@ export const getMyWhiteboards = async (req, res) => {
 // ─── Get by ID ───────────────────────────────────────────────
 export const getWhiteboardById = async (req, res) => {
   try {
-    const wb = await Whiteboard.findById(req.params.id)
+    let wb = await Whiteboard.findById(req.params.id)
       .populate("owner_id", "name email profile_picture")
       .populate("collaborators", "name email profile_picture");
     if (!wb) return res.status(404).json({ error: "Whiteboard not found" });
+    if (!canAccessWhiteboard(wb, req.user.id)) {
+      return res.status(403).json({ error: "Not authorized to view whiteboard" });
+    }
+
+    // Backward compatibility: if board existed before versions, create v1.
+    wb = await ensureV1Exists(wb, req.user.id);
     res.json(wb);
   } catch (error) {
     console.error("Get whiteboard error:", error);
@@ -73,7 +122,7 @@ export const getWhiteboardVersions = async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 10));
     const skip = (page - 1) * limit;
-    const wb = await Whiteboard.findById(req.params.id).populate(
+    let wb = await Whiteboard.findById(req.params.id).populate(
       "versions.created_by",
       "name email"
     );
@@ -81,6 +130,7 @@ export const getWhiteboardVersions = async (req, res) => {
     if (!canAccessWhiteboard(wb, req.user.id)) {
       return res.status(403).json({ error: "Not authorized to view versions" });
     }
+    wb = await ensureV1Exists(wb, req.user.id);
 
     const sortedVersions = [...(wb.versions || [])].sort(
       (a, b) => b.version_number - a.version_number
@@ -122,7 +172,7 @@ export const getWhiteboardVersionSnapshot = async (req, res) => {
     if (!Number.isFinite(versionNumber) || versionNumber < 1) {
       return res.status(400).json({ error: "Invalid version number" });
     }
-    const wb = await Whiteboard.findById(req.params.id).populate(
+    let wb = await Whiteboard.findById(req.params.id).populate(
       "versions.created_by",
       "name email"
     );
@@ -130,6 +180,7 @@ export const getWhiteboardVersionSnapshot = async (req, res) => {
     if (!canAccessWhiteboard(wb, req.user.id)) {
       return res.status(403).json({ error: "Not authorized to view versions" });
     }
+    wb = await ensureV1Exists(wb, req.user.id);
 
     const version = (wb.versions || []).find(
       (v) => Number(v.version_number) === versionNumber
@@ -166,8 +217,9 @@ export const createWhiteboardVersionSnapshot = async (req, res) => {
       return res.status(403).json({ error: "Not authorized to create versions" });
     }
 
-    const nextVersion = (wb.version_counter || 0) + 1;
-    const versionLabel = `v${nextVersion}`;
+    // NOTE: kept for backward compatibility, but prefer POST /:id/versions for manual versioning.
+    const nextVersion = Math.max(1, Number(wb.version_counter || 0)) + 1;
+    const versionLabel = `Snapshot v${nextVersion}`;
     wb.version_counter = nextVersion;
     wb.versions.push({
       version_number: nextVersion,
@@ -230,6 +282,90 @@ export const renameWhiteboardVersion = async (req, res) => {
     });
   } catch (error) {
     console.error("Rename version error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ─── Create manual version (copy-from-base) ───────────────────
+export const createWhiteboardVersion = async (req, res) => {
+  try {
+    const baseVersionNumber = Number(req.body?.base_version_number || 1);
+    const commitMessage = String(req.body?.commit_message || "").trim();
+    if (!commitMessage) {
+      return res.status(400).json({ error: "Commit message is required" });
+    }
+
+    let wb = await Whiteboard.findById(req.params.id);
+    if (!wb) return res.status(404).json({ error: "Whiteboard not found" });
+    if (!canAccessWhiteboard(wb, req.user.id)) {
+      return res.status(403).json({ error: "Not authorized to create versions" });
+    }
+    wb = await ensureV1Exists(wb, req.user.id);
+
+    const base = (wb.versions || []).find(
+      (v) => Number(v.version_number) === baseVersionNumber
+    );
+    if (!base) return res.status(404).json({ error: "Base version not found" });
+
+    const nextVersion = Math.max(1, Number(wb.version_counter || 1)) + 1;
+    wb.version_counter = nextVersion;
+    wb.versions.push({
+      version_number: nextVersion,
+      version_label: commitMessage,
+      created_by: req.user.id,
+      elements_snapshot: base.elements_snapshot ?? [],
+      canvas_state_snapshot: base.canvas_state_snapshot ?? {},
+    });
+    if (wb.versions.length > 1000) wb.versions = wb.versions.slice(-1000);
+    wb.last_edited_by = req.user.id;
+    await wb.save();
+
+    return res.status(201).json({
+      success: true,
+      version_number: nextVersion,
+      version_label: commitMessage,
+      base_version_number: baseVersionNumber,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    console.error("Create whiteboard version error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ─── Save content into a specific version (overwrite) ─────────
+export const saveVersionContent = async (req, res) => {
+  try {
+    const versionNumber = Number(req.params.versionNumber);
+    if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+      return res.status(400).json({ error: "Invalid version number" });
+    }
+    const { elements, canvas_state } = req.body || {};
+
+    let wb = await Whiteboard.findById(req.params.id);
+    if (!wb) return res.status(404).json({ error: "Whiteboard not found" });
+    if (!canAccessWhiteboard(wb, req.user.id)) {
+      return res.status(403).json({ error: "Not authorized to edit whiteboard" });
+    }
+    wb = await ensureV1Exists(wb, req.user.id);
+
+    const version = (wb.versions || []).find(
+      (v) => Number(v.version_number) === versionNumber
+    );
+    if (!version) return res.status(404).json({ error: "Version not found" });
+
+    if (elements !== undefined) version.elements_snapshot = elements;
+    if (canvas_state !== undefined) version.canvas_state_snapshot = canvas_state;
+
+    // Keep top-level content in sync with last edited version for preview/compat.
+    if (elements !== undefined) wb.elements = elements;
+    if (canvas_state !== undefined) wb.canvas_state = canvas_state;
+
+    wb.last_edited_by = req.user.id;
+    await wb.save();
+    return res.json({ success: true, updatedAt: wb.updatedAt, version_number: versionNumber });
+  } catch (error) {
+    console.error("Save version content error:", error);
     res.status(500).json({ error: error.message });
   }
 };

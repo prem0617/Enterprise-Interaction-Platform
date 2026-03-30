@@ -13,6 +13,7 @@ export default function PushCallDeepLink() {
     const token = searchParams.get("pushCall");
     if (!token || doneRef.current) return;
     doneRef.current = true;
+    const autoAccept = searchParams.get("autoAccept") === "1";
 
     const next = new URLSearchParams(searchParams);
     next.delete("pushCall");
@@ -32,6 +33,7 @@ export default function PushCallDeepLink() {
               fromUserId: data.fromUserId,
               fromUserName: data.fromUserName || "Someone",
               callType: data.callType || "audio",
+              autoAccept,
             })
           );
         }

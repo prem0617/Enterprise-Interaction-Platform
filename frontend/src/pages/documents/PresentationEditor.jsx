@@ -266,7 +266,7 @@ function SsBtn({ children, onClick, disabled }) {
 /* â•â• PROPERTIES PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function PropPanel({ el, onChange, theme }) {
   if (!el) return (
-    <div style={{ padding:20,textAlign:'center',color:'rgba(255,255,255,.15)',fontSize:12,fontFamily:'DM Sans,sans-serif' }}>
+    <div style={{ padding:20,textAlign:'center',color:'rgba(255,255,255,.70)',fontSize:12,fontFamily:'DM Sans,sans-serif' }}>
       <Layers size={22} style={{ display:'block',margin:'0 auto 8px',opacity:.2 }}/> Select an element
     </div>
   );
@@ -280,7 +280,7 @@ function PropPanel({ el, onChange, theme }) {
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:5 }}>
           {[['X',el.x,'x'],['Y',el.y,'y'],['W',el.w,'w'],['H',el.h,'h']].map(([l,v,k])=>(
             <label key={k} style={{ display:'flex',flexDirection:'column',gap:3 }}>
-              <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>{l}</span>
+              <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>{l}</span>
               <input type="number" value={Math.round(v||0)} onChange={e=>onChange({[k]:Number(e.target.value)})} style={inp}/>
             </label>
           ))}
@@ -308,11 +308,11 @@ function PropPanel({ el, onChange, theme }) {
           </PSection>
           <PSection label="COLOR">
             <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-              <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Text Color</span>
+              <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Text Color</span>
               <input type="color" value={s.color||'#ffffff'} onChange={e=>upd({color:e.target.value})} style={{ ...inp,height:32,padding:2,cursor:'pointer' }}/>
             </label>
             <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-              <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Background</span>
+              <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Background</span>
               <div style={{ display:'flex',gap:4 }}>
                 {/* Visible square shows transparent by default; actual color picker is hidden */}
                 <button
@@ -343,11 +343,11 @@ function PropPanel({ el, onChange, theme }) {
           </PSection>
           <PSection label="SPACING">
             <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-              <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Line Height: {s.lineHeight||1.4}</span>
+              <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Line Height: {s.lineHeight||1.4}</span>
               <input type="range" min="1" max="3" step="0.05" value={s.lineHeight||1.4} onChange={e=>upd({lineHeight:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
             </label>
             <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-              <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Corner Radius: {s.borderRadius||0}</span>
+              <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Corner Radius: {s.borderRadius||0}</span>
               <input type="range" min="0" max="40" value={s.borderRadius||0} onChange={e=>upd({borderRadius:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
             </label>
           </PSection>
@@ -360,11 +360,11 @@ function PropPanel({ el, onChange, theme }) {
             <option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option>
           </select>
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Corner Radius: {s.borderRadius??8}</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Corner Radius: {s.borderRadius??8}</span>
             <input type="range" min="0" max="200" value={s.borderRadius??8} onChange={e=>upd({borderRadius:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
           </label>
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Opacity: {Math.round((s.opacity??1)*100)}%</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Opacity: {Math.round((s.opacity??1)*100)}%</span>
             <input type="range" min="0.05" max="1" step="0.05" value={s.opacity??1} onChange={e=>upd({opacity:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
           </label>
         </PSection>
@@ -373,15 +373,15 @@ function PropPanel({ el, onChange, theme }) {
       {el.type==='shape'&&(
         <PSection label="SHAPE">
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Fill</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Fill</span>
             <input type="color" value={s.fill||'#3b82f6'} onChange={e=>upd({fill:e.target.value})} style={{ ...inp,height:32,padding:2,cursor:'pointer' }}/>
           </label>
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Corner Radius: {s.borderRadius??8}</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Corner Radius: {s.borderRadius??8}</span>
             <input type="range" min="0" max="200" value={s.borderRadius??8} onChange={e=>upd({borderRadius:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
           </label>
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Opacity: {Math.round((s.opacity??1)*100)}%</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Opacity: {Math.round((s.opacity??1)*100)}%</span>
             <input type="range" min="0.05" max="1" step="0.05" value={s.opacity??1} onChange={e=>upd({opacity:+e.target.value})} style={{ width:'100%',accentColor:'#6366f1' }}/>
           </label>
         </PSection>
@@ -390,7 +390,7 @@ function PropPanel({ el, onChange, theme }) {
       {el.type==='divider'&&(
         <PSection label="DIVIDER">
           <label style={{ display:'flex',flexDirection:'column',gap:3 }}>
-            <span style={{ fontSize:9,color:'#2a3350',fontWeight:700 }}>Color</span>
+            <span style={{ fontSize:9,color:'rgba(255,255,255,.70)',fontWeight:700,letterSpacing:'.08em' }}>Color</span>
             <input type="color" value={(s.color&&s.color.startsWith('#'))?s.color:'#ffffff'} onChange={e=>upd({color:e.target.value})} style={{ ...inp,height:32,padding:2,cursor:'pointer' }}/>
           </label>
         </PSection>
@@ -399,9 +399,9 @@ function PropPanel({ el, onChange, theme }) {
   );
 }
 const inp = { background:'#0d1117',border:'1px solid #1e2535',color:'#9ba6c0',fontSize:11,padding:'4px 7px',borderRadius:5,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'DM Sans,sans-serif' };
-const sb = { background:'rgba(255,255,255,.06)',border:'1px solid #1e2535',color:'#5a6480',fontSize:11,padding:'3px 7px',borderRadius:4,cursor:'pointer',fontFamily:'DM Sans,sans-serif' };
+const sb = { background:'rgba(255,255,255,.06)',border:'1px solid #1e2535',color:'rgba(255,255,255,.72)',fontSize:11,padding:'3px 7px',borderRadius:4,cursor:'pointer',fontFamily:'DM Sans,sans-serif' };
 function PSection({ label, children }) {
-  return <div style={{ display:'flex',flexDirection:'column',gap:6 }}><div style={{ fontSize:9,fontWeight:700,letterSpacing:.8,color:'#2a3350' }}>{label}</div>{children}</div>;
+  return <div style={{ display:'flex',flexDirection:'column',gap:6 }}><div style={{ fontSize:9,fontWeight:700,letterSpacing:.8,color:'rgba(255,255,255,.70)' }}>{label}</div>{children}</div>;
 }
 
 /* â•â• TOOLBAR BUTTON â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -414,7 +414,7 @@ function TB({ children, onClick, disabled, title, danger, active, label }) {
         display:'flex',alignItems:'center',gap:4,padding:'4px 7px',
         background: active ? 'rgba(99,102,241,.15)' : danger ? 'rgba(239,68,68,.07)' : hov&&!disabled ? 'rgba(255,255,255,.05)' : 'transparent',
         border:'1px solid '+(active?'rgba(99,102,241,.25)':danger?'rgba(239,68,68,.15)':'transparent'),
-        borderRadius:5,color:disabled?'#1e2535':active?'#818cf8':danger?'#ef4444':hov?'#9ba6c0':'#4a5880',
+        borderRadius:5,color:disabled?'rgba(255,255,255,.25)':active?'#c7d2fe':danger?'#fca5a5':hov?'rgba(255,255,255,.85)':'rgba(255,255,255,.70)',
         fontSize:12,fontWeight:500,cursor:disabled?'not-allowed':'pointer',
         fontFamily:'DM Sans,sans-serif',whiteSpace:'nowrap',transition:'all .1s',
       }}>
@@ -697,7 +697,7 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
           <div style={{ display:'flex',alignItems:'center',gap:5,padding:'3px 10px',background:'rgba(251,191,36,.07)',border:'1px solid rgba(251,191,36,.12)',borderRadius:6 }}>
             <MonitorPlay size={12} style={{ color:'#d97706' }}/><span style={{ fontSize:11,fontWeight:700,color:'#d97706' }}>Slides</span>
           </div>
-          <span style={{ fontSize:11,color:'#1e2840' }}>{slides.length} slides</span>
+          <span style={{ fontSize:11,color:'rgba(165,180,252,.95)',fontWeight:700 }}>{slides.length} slides</span>
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:6 }}>
           {/* Theme picker */}
@@ -763,9 +763,9 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
           )}
           {/* Zoom */}
           <div style={{ display:'flex',alignItems:'center',gap:4,marginLeft:'auto',background:'rgba(255,255,255,.03)',border:'1px solid #131c28',borderRadius:6,padding:'2px 6px' }}>
-            <button onClick={()=>setZoom(z=>Math.max(.3,+(z-.1).toFixed(1)))} style={{ background:'none',border:'none',color:'#2a3350',cursor:'pointer',padding:0,display:'flex' }}><ZoomOut size={12}/></button>
-            <button onClick={()=>setZoom(1)} style={{ background:'none',border:'none',color:'#3a4560',cursor:'pointer',fontSize:10,fontWeight:700,padding:'0 4px',fontFamily:'DM Sans,sans-serif',width:36,textAlign:'center' }}>{Math.round(zoom*100)}%</button>
-            <button onClick={()=>setZoom(z=>Math.min(2,+(z+.1).toFixed(1)))} style={{ background:'none',border:'none',color:'#2a3350',cursor:'pointer',padding:0,display:'flex' }}><ZoomIn size={12}/></button>
+            <button onClick={()=>setZoom(z=>Math.max(.3,+(z-.1).toFixed(1)))} style={{ background:'none',border:'none',color:'rgba(255,255,255,.75)',cursor:'pointer',padding:0,display:'flex' }}><ZoomOut size={12}/></button>
+            <button onClick={()=>setZoom(1)} style={{ background:'none',border:'none',color:'rgba(255,255,255,.75)',cursor:'pointer',fontSize:10,fontWeight:700,padding:'0 4px',fontFamily:'DM Sans,sans-serif',width:36,textAlign:'center' }}>{Math.round(zoom*100)}%</button>
+            <button onClick={()=>setZoom(z=>Math.min(2,+(z+.1).toFixed(1)))} style={{ background:'none',border:'none',color:'rgba(255,255,255,.75)',cursor:'pointer',padding:0,display:'flex' }}><ZoomIn size={12}/></button>
           </div>
         </div>
       )}
@@ -776,7 +776,7 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
         {/* â”€â”€ Left: Slide list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{ width:190,background:'#09111c',borderRight:'1px solid #131c28',display:'flex',flexDirection:'column',flexShrink:0 }}>
           <div style={{ padding:'7px 10px',borderBottom:'1px solid #131c28',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:4 }}>
-            <span style={{ fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1.2,color:'#1e2840' }}>Slides</span>
+            <span style={{ fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1.2,color:'rgba(255,255,255,.70)' }}>Slides</span>
             {!isReadOnly&&(
               <div style={{ display:'flex',gap:3,flexWrap:'wrap' }}>
                 {[['blank','Blank'],['title','Title'],['content','Content'],['twocol','2-Col'],['quote','Quote']].map(([t,l])=>(
@@ -855,15 +855,15 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
         {/* â”€â”€ Right: Properties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {!isReadOnly&&(
           <div style={{ width:198,background:'#09111c',borderLeft:'1px solid #131c28',display:'flex',flexDirection:'column',flexShrink:0,overflowY:'auto' }}>
-            <div style={{ padding:'8px 10px',borderBottom:'1px solid #131c28',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1.2,color:'#1e2840' }}>Properties</div>
+            <div style={{ padding:'8px 10px',borderBottom:'1px solid #131c28',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1.2,color:'rgba(255,255,255,.70)' }}>Properties</div>
             <PropPanel el={selEl} onChange={p=>updEl(selId,p)} theme={theme}/>
           </div>
         )}
       </div>
 
       {/* â•”â• STATUS BAR â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•— */}
-      <div style={{ display:'flex',alignItems:'center',gap:12,padding:'3px 14px',background:'#070910',borderTop:'1px solid #0d1117',fontSize:10,color:'#1a2335',flexShrink:0,fontFamily:'DM Sans,sans-serif' }}>
-        <span>{slides.length} slides</span><span>Â·</span>
+      <div style={{ display:'flex',alignItems:'center',gap:12,padding:'3px 14px',background:'#070910',borderTop:'1px solid #0d1117',fontSize:10,color:'rgba(165,180,252,.85)',flexShrink:0,fontFamily:'DM Sans,sans-serif' }}>
+        <span>{slides.length} slides</span><span style={{ color:'rgba(165,180,252,.45)' }}>Â·</span>
         <span>{theme.name} theme</span><span>Â·</span>
         <span>{Math.round(zoom*100)}%</span>
         {selEl&&<><span>Â·</span><span style={{ color:'#4a5880' }}>{selEl.type} selected{selEl.type==='text'?' Â· double-click to edit':''}</span></>}

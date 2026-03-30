@@ -8,6 +8,7 @@ import {
   verifyCallToken,
   postCallResponse,
 } from "../controllers/push/push.controller.js";
+import { quickReplyChat } from "../controllers/push/reply.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -22,5 +23,8 @@ router.post("/unsubscribe", verifyToken, unsubscribe);
 // ─── FCM (Firebase Cloud Messaging) ─────────────────────────────
 router.post("/subscribe-fcm", verifyToken, subscribeFcm);
 router.post("/unsubscribe-fcm", verifyToken, unsubscribeFcm);
+
+// ─── Quick reply from Web Push notification (no JWT; uses signed token) ───
+router.post("/reply-chat", quickReplyChat);
 
 export default router;

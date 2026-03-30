@@ -4,6 +4,15 @@ import { toast } from "sonner";
 import { BACKEND_URL } from "../../config";
 import { useAuthContext } from "../context/AuthContextProvider";
 import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
 import { cn } from "../lib/utils";
 import {
   Plus,
@@ -330,7 +339,7 @@ function OnlineUsersPanel({ liveCollaborators, currentUser }) {
           onClick={() => setCollapsed((c) => !c)}
         >
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="text-xs font-semibold text-white">
               {allUsers.length} {allUsers.length === 1 ? "person" : "people"} online
             </span>
@@ -345,7 +354,7 @@ function OnlineUsersPanel({ liveCollaborators, currentUser }) {
               <div key={u.userId} className="flex items-center gap-2.5 px-3 py-2">
                 {/* Avatar */}
                 <div
-                  className="h-7 w-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white shadow"
+                  className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white shadow"
                   style={{
                     backgroundColor: u.isMe ? "#6366f1" : userColor(u.userId),
                   }}
@@ -1241,9 +1250,11 @@ export default function WhiteboardModule({ isVisible = true }) {
   const [editingVersionNumber, setEditingVersionNumber] = useState(null);
   const [editingVersionLabel, setEditingVersionLabel] = useState("");
   const [showVersionsSidebar, setShowVersionsSidebar] = useState(false);
+  const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
+  const [newVersionMessage, setNewVersionMessage] = useState("");
+  const [creatingVersion, setCreatingVersion] = useState(false);
 
   const saveTimerRef = useRef(null);
-  const versionTimerRef = useRef(null);
   const isRemoteRef = useRef(false);
   const VERSIONS_LIMIT = 10;
   const currentUserId = String(user?.id || user?._id || "");
@@ -1252,7 +1263,7 @@ export default function WhiteboardModule({ isVisible = true }) {
     () =>
       axios.create({
         baseURL: `${BACKEND_URL}/whiteboards`,
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }),
     [token]
   );
@@ -1306,20 +1317,38 @@ export default function WhiteboardModule({ isVisible = true }) {
   // ─── Open whiteboard ──────────────────────────────────
   const openWhiteboard = useCallback(async (wb) => {
     try {
+      if (!token) {
+        toast.error("Please log in again (missing token).");
+        return;
+      }
       const { data } = await api.get(`/${wb._id}`);
       setActiveWhiteboard(data);
-      setElements(data.elements || []);
-      setDisplayCanvasState(data.canvas_state || {});
+      // Default editing is always v1 unless user explicitly switches.
+      setSelectedVersionNumber(1);
+      // Load v1 snapshot (backend guarantees v1 exists). If it fails, fall back
+      // to top-level board state so the editor still opens.
+      try {
+        const v1 = await api.get(`/${wb._id}/versions/1`);
+        setElements(Array.isArray(v1.data?.elements) ? v1.data.elements : []);
+        setDisplayCanvasState(v1.data?.canvas_state || {});
+      } catch (e) {
+        console.error("Failed to load v1 snapshot, falling back:", e);
+        setElements(Array.isArray(data.elements) ? data.elements : []);
+        setDisplayCanvasState(data.canvas_state || {});
+      }
       setVersionsPage(1);
-      setSelectedVersionNumber(null);
       setView("editor");
       // NOTE: whiteboard-join is emitted in the socket listeners useEffect
       // (after listeners are registered) to avoid the race condition where
       // the backend broadcasts collaborators before we are listening.
     } catch (err) {
-      toast.error("Failed to open whiteboard");
+      const msg =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to open whiteboard";
+      toast.error(msg);
     }
-  }, [api]);
+  }, [api, token]);
 
   const fetchVersions = useCallback(
     async (whiteboardId, page = 1) => {
@@ -1347,7 +1376,6 @@ export default function WhiteboardModule({ isVisible = true }) {
       socket.emit("whiteboard-leave", { whiteboardId: activeWhiteboard._id });
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (versionTimerRef.current) clearTimeout(versionTimerRef.current);
     setActiveWhiteboard(null);
     setElements([]);
     setDisplayCanvasState({});
@@ -1360,32 +1388,19 @@ export default function WhiteboardModule({ isVisible = true }) {
     setView("list");
   }, [activeWhiteboard, socket]);
 
-  // ─── Save to DB (debounced) ───────────────────────────
+  // ─── Save to DB (debounced) into active version ───────
   const saveContent = useCallback(async (els) => {
     if (!activeWhiteboard) return;
+    const v = Number(selectedVersionNumber || 1);
     try {
-      await api.put(`/${activeWhiteboard._id}/content`, { elements: els });
+      await api.put(`/${activeWhiteboard._id}/versions/${v}/content`, {
+        elements: els,
+        canvas_state: displayCanvasState,
+      });
     } catch (err) {
       console.error("Auto-save failed:", err);
     }
-  }, [activeWhiteboard, api]);
-
-  const createVersionSnapshot = useCallback(
-    async (els) => {
-      if (!activeWhiteboard) return;
-      try {
-        const { data } = await api.post(`/${activeWhiteboard._id}/versions/snapshot`, {
-          elements: els,
-          canvas_state: displayCanvasState,
-        });
-        fetchVersions(activeWhiteboard._id, 1);
-        toast.success(`Snapshot ${data.version_label} created`);
-      } catch (err) {
-        console.error("Version snapshot failed:", err);
-      }
-    },
-    [activeWhiteboard, api, displayCanvasState, fetchVersions]
-  );
+  }, [activeWhiteboard, api, selectedVersionNumber, displayCanvasState]);
 
   useEffect(() => {
     if (view === "editor" && activeWhiteboard?._id) {
@@ -1413,14 +1428,44 @@ export default function WhiteboardModule({ isVisible = true }) {
   const handleBackToLatest = useCallback(async () => {
     if (!activeWhiteboard) return;
     try {
-      const { data } = await api.get(`/${activeWhiteboard._id}`);
-      setElements(data.elements || []);
-      setDisplayCanvasState(data.canvas_state || {});
-      setSelectedVersionNumber(null);
+      // Load the highest version number currently in the list; fallback to v1.
+      const maxV =
+        versions.reduce((m, v) => Math.max(m, Number(v.version_number || 0)), 0) || 1;
+      await handleLoadVersion(maxV);
     } catch (err) {
       toast.error("Failed to load latest version");
     }
-  }, [activeWhiteboard, api]);
+  }, [activeWhiteboard, versions, handleLoadVersion]);
+
+  const handleCreateNewVersion = useCallback(async () => {
+    if (!activeWhiteboard) return;
+    const msg = newVersionMessage.trim();
+    if (!msg) return toast.error("Commit message is required");
+    setCreatingVersion(true);
+    try {
+      const base = Number(selectedVersionNumber || 1);
+      const { data } = await api.post(`/${activeWhiteboard._id}/versions`, {
+        base_version_number: base,
+        commit_message: msg,
+      });
+      toast.success(`Created v${data.version_number}`);
+      setShowNewVersionDialog(false);
+      setNewVersionMessage("");
+      await fetchVersions(activeWhiteboard._id, 1);
+      await handleLoadVersion(data.version_number);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to create version");
+    } finally {
+      setCreatingVersion(false);
+    }
+  }, [
+    activeWhiteboard,
+    api,
+    newVersionMessage,
+    selectedVersionNumber,
+    fetchVersions,
+    handleLoadVersion,
+  ]);
 
   const handleRenameVersion = useCallback(
     async (versionNumber) => {
@@ -1452,14 +1497,16 @@ export default function WhiteboardModule({ isVisible = true }) {
     }
 
     if (socket && activeWhiteboard) {
-      socket.emit("whiteboard-update", { whiteboardId: activeWhiteboard._id, elements: newElements });
+      socket.emit("whiteboard-update", {
+        whiteboardId: activeWhiteboard._id,
+        elements: newElements,
+        versionNumber: selectedVersionNumber || 1,
+      });
     }
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => saveContent(newElements), 2000);
-    if (versionTimerRef.current) clearTimeout(versionTimerRef.current);
-    versionTimerRef.current = setTimeout(() => createVersionSnapshot(newElements), 30000);
-  }, [socket, activeWhiteboard, saveContent, createVersionSnapshot]);
+  }, [socket, activeWhiteboard, selectedVersionNumber, saveContent]);
 
   // ─── Socket listeners ─────────────────────────────────
   useEffect(() => {
@@ -1469,9 +1516,17 @@ export default function WhiteboardModule({ isVisible = true }) {
     // correctly excludes ourselves from the collaborators list.
     const myId = String(user?.id || user?._id || "");
 
-    const handleRemoteUpdate = ({ whiteboardId, elements: remoteEls, senderId }) => {
+    const handleRemoteUpdate = ({
+      whiteboardId,
+      elements: remoteEls,
+      senderId,
+      versionNumber,
+    }) => {
       if (whiteboardId !== activeWhiteboard._id) return;
       if (String(senderId) === myId) return;
+      const activeV = Number(selectedVersionNumber || 1);
+      const incomingV = Number(versionNumber || 1);
+      if (incomingV !== activeV) return;
       isRemoteRef.current = true;
       setElements(remoteEls);
     };
@@ -1509,7 +1564,7 @@ export default function WhiteboardModule({ isVisible = true }) {
       socket.off("whiteboard-collaborators", handleCollaborators);
       socket.off("whiteboard-cursor", handleCursor);
     };
-  }, [socket, activeWhiteboard, user, getDisplayName]);
+  }, [socket, activeWhiteboard, user, getDisplayName, selectedVersionNumber]);
 
   // ─── Send cursor position ─────────────────────────────
   const handleCursorMove = useCallback((wx, wy) => {
@@ -1581,7 +1636,7 @@ export default function WhiteboardModule({ isVisible = true }) {
         /* ─── LIST VIEW ─────────────────────────────────── */
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Header */}
-          <div className="flex-shrink-0 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur px-6 py-4">
+        <div className="shrink-0 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur px-6 py-4">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -1755,7 +1810,7 @@ export default function WhiteboardModule({ isVisible = true }) {
         /* ─── EDITOR VIEW ───────────────────────────────── */
         <div className="flex-1 flex flex-col min-h-0">
           {/* Editor Header */}
-          <div className="flex-shrink-0 h-12 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur flex items-center justify-between px-4 z-10">
+          <div className="shrink-0 h-12 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur flex items-center justify-between px-4 z-10">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={leaveEditor} className="text-zinc-400 hover:text-white">
                 <ArrowLeft className="h-4 w-4 mr-1" /> Back
@@ -1817,7 +1872,9 @@ export default function WhiteboardModule({ isVisible = true }) {
                       <History className="h-4 w-4 text-indigo-400" />
                       Versions
                     </h3>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">30s idle snapshots</p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      Editing {`v${selectedVersionNumber || 1}`} (manual versions)
+                    </p>
                   </div>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
                     {versions.length}
@@ -1825,13 +1882,24 @@ export default function WhiteboardModule({ isVisible = true }) {
                 </div>
               </div>
               <div className="px-3 py-2 border-b border-zinc-800">
-                <button
-                  type="button"
-                  onClick={handleBackToLatest}
-                  className="w-full rounded-lg bg-zinc-800 text-zinc-200 text-xs py-1.5 hover:bg-zinc-700 transition-colors border border-zinc-700/70"
-                >
-                  Load latest
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewVersionDialog(true)}
+                    className="flex-1 rounded-lg bg-indigo-600 text-white text-xs py-1.5 hover:bg-indigo-500 transition-colors border border-indigo-500/30"
+                    title="Create a new version from the currently loaded version"
+                  >
+                    New version
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBackToLatest}
+                    className="flex-1 rounded-lg bg-zinc-800 text-zinc-200 text-xs py-1.5 hover:bg-zinc-700 transition-colors border border-zinc-700/70"
+                    title="Load the latest committed version"
+                  >
+                    Load latest
+                  </button>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
                 {versionsLoading ? (
@@ -1869,7 +1937,7 @@ export default function WhiteboardModule({ isVisible = true }) {
                             />
                           ) : (
                             <p className="text-xs font-semibold text-white truncate">
-                              {v.version_label}
+                              {`v${v.version_number}`} · {v.version_label}
                             </p>
                           )}
                           <p className="text-[11px] text-zinc-400 truncate mt-1">
@@ -1973,6 +2041,44 @@ export default function WhiteboardModule({ isVisible = true }) {
           </div>
         </div>
       )}
+
+      <Dialog open={showNewVersionDialog} onOpenChange={setShowNewVersionDialog}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Create new version</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              This will copy the current {`v${selectedVersionNumber || 1}`} into a new version. Edits after that will be saved into the new version only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-zinc-300">Commit message</label>
+            <Input
+              value={newVersionMessage}
+              onChange={(e) => setNewVersionMessage(e.target.value)}
+              placeholder="e.g. Added onboarding flow diagram"
+              className="bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowNewVersionDialog(false)}
+              className="text-zinc-300"
+              disabled={creatingVersion}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateNewVersion}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+              disabled={creatingVersion}
+            >
+              {creatingVersion ? "Creating..." : "Create version"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

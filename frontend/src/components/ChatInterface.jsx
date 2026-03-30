@@ -120,6 +120,21 @@ const ChatInterface = ({ initialChannelId = null }) => {
     return () => window.clearTimeout(t);
   }, [searchParams, selectedChat, setSearchParams]);
 
+  const draft = searchParams.get("draft");
+  useEffect(() => {
+    if (!draft || !selectedChat) return;
+
+    setNewMessage(draft);
+    setReplyingTo(null);
+
+    const t = window.setTimeout(() => messageInputRef.current?.focus(), 300);
+    const next = new URLSearchParams(searchParams);
+    next.delete("draft");
+    setSearchParams(next, { replace: true });
+
+    return () => window.clearTimeout(t);
+  }, [draft, selectedChat?._id, searchParams, setSearchParams]);
+
   // Add to existing state declarations
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
   const [showMessageSearch, setShowMessageSearch] = useState(false);
@@ -1690,10 +1705,6 @@ const ChatInterface = ({ initialChannelId = null }) => {
                     <>
                       <button
                         onClick={async () => {
-                          if (!isUserOnline(selectedChat.other_user._id)) {
-                            toast.error("User is offline", { duration: 1500 });
-                            return;
-                          }
                           if (groupCall.groupCallState !== "idle") {
                             toast.error("You are currently in a group call", {
                               duration: 1500,
@@ -1744,14 +1755,11 @@ const ChatInterface = ({ initialChannelId = null }) => {
                           audioCall.callState !== "idle" ||
                           videoCall.callState !== "idle" ||
                           !socket ||
-                          groupCall.groupCallState !== "idle" ||
-                          !isUserOnline(selectedChat.other_user._id)
+                          groupCall.groupCallState !== "idle"
                         }
                         className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                         title={
-                          !isUserOnline(selectedChat.other_user._id)
-                            ? "User is offline"
-                            : groupCall.groupCallState !== "idle"
+                          groupCall.groupCallState !== "idle"
                               ? "You are in a group call"
                               : videoCall.callState !== "idle"
                                 ? "You are in a video call"
@@ -1764,10 +1772,6 @@ const ChatInterface = ({ initialChannelId = null }) => {
                       </button>
                       <button
                         onClick={async () => {
-                          if (!isUserOnline(selectedChat.other_user._id)) {
-                            toast.error("User is offline", { duration: 1500 });
-                            return;
-                          }
                           if (groupCall.groupCallState !== "idle") {
                             toast.error("You are currently in a group call", {
                               duration: 1500,
@@ -1842,14 +1846,11 @@ const ChatInterface = ({ initialChannelId = null }) => {
                               String(selectedChat.other_user._id) ===
                               String(videoCall.remoteUser?.id)
                             )) ||
-                          groupCall.groupCallState !== "idle" ||
-                          !isUserOnline(selectedChat.other_user._id)
+                          groupCall.groupCallState !== "idle"
                         }
                         className="p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-all disabled:opacity-40"
                         title={
-                          !isUserOnline(selectedChat.other_user._id)
-                            ? "User is offline"
-                            : groupCall.groupCallState !== "idle"
+                          groupCall.groupCallState !== "idle"
                               ? "You are in a group call"
                               : videoCall.callState !== "idle" &&
                                 String(selectedChat.other_user._id) !==

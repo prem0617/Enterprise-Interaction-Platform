@@ -98,10 +98,21 @@ export function GlobalCallProvider({ children }) {
     sessionStorage.removeItem("eip_push_call");
     try {
       const data = JSON.parse(raw);
+      const autoAccept = data.autoAccept === true;
       if (data.callType === "video") {
         videoRef.current?.simulateIncoming?.(data.fromUserId, data.fromUserName);
+        if (autoAccept) {
+          window.setTimeout(() => {
+            videoRef.current?.acceptCall?.();
+          }, 650);
+        }
       } else {
         audioRef.current?.simulateIncoming?.(data.fromUserId, data.fromUserName);
+        if (autoAccept) {
+          window.setTimeout(() => {
+            audioRef.current?.acceptCall?.();
+          }, 650);
+        }
       }
     } catch {
       /* ignore */

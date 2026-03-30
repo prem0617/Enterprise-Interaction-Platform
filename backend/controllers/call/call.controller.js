@@ -62,19 +62,25 @@ export const requestCall = async (req, res) => {
         : "Someone";
 
     const eventName = callType === "video" ? "incoming-video-call" : "incoming-audio-call";
+    let socketSent = false;
     if (receiverSocketId) {
       io.to(receiverSocketId).emit(eventName, {
         fromUserId: callerUserId,
         fromUserName,
       });
-      return res.json({
-        success: true,
-        message: "Call request sent",
-      });
+      socketSent = true;
     }
 
     const hasPush = await PushSubscription.exists({ user_id: normalizedTo });
     if (!hasPush) {
+      if (socketSent) {
+        return res.json({
+          success: true,
+          message: "Call request sent (socket only)",
+          viaSocket: true,
+          viaPush: false,
+        });
+      }
       return res.status(404).json({
         error: "User unavailable",
         message: "The user is offline and has no push notifications enabled.",
@@ -115,8 +121,11 @@ export const requestCall = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Push notification sent (recipient offline)",
+      message: socketSent
+        ? "Call request sent (socket + push)"
+        : "Push notification sent (recipient offline)",
       viaPush: true,
+      viaSocket: socketSent,
     });
   } catch (error) {
     console.error("[CALL] requestCall error:", error);
