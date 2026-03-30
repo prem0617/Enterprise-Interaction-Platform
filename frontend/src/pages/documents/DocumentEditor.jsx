@@ -212,10 +212,6 @@ ${html}
           <button className="de-tb-btn" title="Undo (Ctrl+Z)" disabled={tb} onClick={() => exec("undo")}>{Ic.undo}</button>
           <button className="de-tb-btn" title="Redo (Ctrl+Y)" disabled={tb} onClick={() => exec("redo")}>{Ic.redo}</button>
         </div>
-        {/* Print */}
-        <div className="de-tb-group">
-          <button className="de-tb-btn" title="Print (Ctrl+P)" onClick={() => window.print()}>{Ic.print}</button>
-        </div>
         {/* Font family */}
         <div className="de-tb-group">
           <select className="de-tb-select" disabled={tb}
@@ -291,35 +287,13 @@ ${html}
           <button className="de-tb-btn" title="Horizontal line" disabled={tb} onClick={() => exec("insertHorizontalRule")}>
             <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 500, color: "#94a3b8" }}>—</span>
           </button>
-          <button className="de-tb-btn" title="Clear formatting" disabled={tb} onClick={() => exec("removeFormat")}>
-            <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>Tx</span>
-          </button>
         </div>
         {/* Table / Image */}
         <div className="de-tb-group">
           <button className="de-tb-btn" title="Insert table" disabled={tb} onClick={insertTable}>{Ic.table}</button>
           <button className="de-tb-btn" title="Insert image" disabled={tb} onClick={insertImage}>{Ic.image}</button>
         </div>
-        {/* Indent / Outdent */}
-        <div className="de-tb-group">
-          <button className="de-tb-btn" title="Outdent" disabled={tb} onClick={() => exec("outdent")}>{Ic.outdent}</button>
-          <button className="de-tb-btn" title="Indent" disabled={tb} onClick={() => exec("indent")}>{Ic.indent}</button>
-        </div>
-        {/* Superscript / Subscript */}
-        <div className="de-tb-group">
-          <button className="de-tb-btn" title="Superscript" disabled={tb} onClick={() => exec("superscript")}>{Ic.superscript}</button>
-          <button className="de-tb-btn" title="Subscript" disabled={tb} onClick={() => exec("subscript")}>{Ic.subscript}</button>
-        </div>
-        {/* Highlight */}
-        <div className="de-tb-group">
-          <div className="de-color-wrap" title="Highlight color" style={{ opacity: tb ? .35 : 1, cursor: tb ? "not-allowed" : "pointer", flexDirection: "column", gap: 1 }}
-            onClick={() => !tb && highlightRef.current?.click()}>
-            <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, color: "#cbd5e1", fontFamily: "Inter,sans-serif" }}>H</span>
-            <div className="de-color-swatch" style={{ background: highlightColor }} />
-            <input ref={highlightRef} type="color" style={{ display: "none" }} value={highlightColor}
-              onChange={e => { setHighlightColor(e.target.value); exec("hiliteColor", e.target.value); }} />
-          </div>
-        </div>
+        
         {/* Find */}
         <div className="de-tb-group">
           <button className="de-tb-btn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFind(f => !f)}>{Ic.find}</button>
