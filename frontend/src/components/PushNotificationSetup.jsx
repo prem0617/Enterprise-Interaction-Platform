@@ -3,11 +3,13 @@ import { Bell, BellOff, X } from "lucide-react";
 import { subscribeUserPush, isPushSupported } from "@/lib/pushNotifications";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function PushNotificationSetup() {
-  const [dismissed, setDismissed] = useState(() =>
-    sessionStorage.getItem("eip_push_banner_dismiss") === "1"
-  );
+  // Show this prompt on platform entry. We intentionally do not persist
+  // the "Later" decision via sessionStorage, so it can appear again after
+  // a user navigates back into the app.
+  const [dismissed, setDismissed] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | enabling | on | unsupported | denied
   const [supported, setSupported] = useState(true);
 
@@ -15,8 +17,29 @@ export default function PushNotificationSetup() {
     isPushSupported().then(setSupported);
     if (typeof Notification !== "undefined") {
       if (Notification.permission === "denied") setStatus("denied");
-      else if (Notification.permission === "granted") setStatus("on");
+      // If permission is already granted, try to (re)subscribe so the server
+      // has a fresh, valid PushSubscription (e.g. VAPID keys were set later).
+      else if (Notification.permission === "granted") {
+        setStatus("enabling");
+        subscribeUserPush()
+          .then((ok) => setStatus(ok ? "on" : Notification.permission === "denied" ? "denied" : "idle"))
+          .catch(() => setStatus("idle"));
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handler = (event) => {
+      const data = event.data || {};
+      if (data?.type === "EIP_PUSH_RECEIVED") {
+        toast.info(`Push received: ${data.payload?.title || "Notification"}`, {
+          duration: 2500,
+        });
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, []);
 
   const enable = useCallback(async () => {
@@ -67,7 +90,6 @@ export default function PushNotificationSetup() {
               variant="ghost"
               className="text-zinc-400 hover:text-zinc-200"
               onClick={() => {
-                sessionStorage.setItem("eip_push_banner_dismiss", "1");
                 setDismissed(true);
               }}
             >
@@ -80,7 +102,6 @@ export default function PushNotificationSetup() {
           aria-label="Dismiss"
           className="text-zinc-500 hover:text-zinc-300 p-1 rounded-md hover:bg-zinc-800/80"
           onClick={() => {
-            sessionStorage.setItem("eip_push_banner_dismiss", "1");
             setDismissed(true);
           }}
         >

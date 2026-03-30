@@ -28,6 +28,38 @@ self.addEventListener("push", (event) => {
     /* ignore */
   }
 
+  try {
+    console.log("[SW] push received", {
+      tag: payload.tag,
+      title: payload.title,
+      bodyLen: String(payload.body || "").length,
+    });
+  } catch (_) {}
+
+  // If any client page is open, also send a debug message to it.
+  // This helps differentiate "push not received" vs "notification blocked".
+  try {
+    event.waitUntil(
+      clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clientList) => {
+          clientList.forEach((c) => {
+            try {
+              c.postMessage({
+                type: "EIP_PUSH_RECEIVED",
+                payload: {
+                  title: payload.title,
+                  body: payload.body,
+                  tag: payload.tag,
+                  url: payload.url,
+                },
+              });
+            } catch (_) {}
+          });
+        })
+    );
+  } catch (_) {}
+
   const options = {
     body: payload.body,
     icon: "/vite.svg",
@@ -39,7 +71,15 @@ self.addEventListener("push", (event) => {
     vibrate: [160, 70, 160],
   };
 
-  event.waitUntil(self.registration.showNotification(payload.title, options));
+  event.waitUntil(
+    (async () => {
+      try {
+        await self.registration.showNotification(payload.title, options);
+      } catch (err) {
+        console.error("[SW] showNotification failed:", err);
+      }
+    })()
+  );
 });
 
 function openOrFocusUrl(url) {

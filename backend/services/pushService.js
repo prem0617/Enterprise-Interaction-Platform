@@ -1,7 +1,42 @@
 import webpush from "web-push";
 import PushSubscription from "../models/PushSubscription.js";
+import FcmToken from "../models/FcmToken.js";
+import admin from "firebase-admin";
+import fs from "node:fs";
 
 let vapidConfigured = false;
+let fcmConfigured = false;
+
+function initFcmIfNeeded() {
+  if (fcmConfigured) return true;
+  try {
+    if (admin.apps?.length) {
+      fcmConfigured = true;
+      return true;
+    }
+    const json = process.env.FCM_SERVICE_ACCOUNT_JSON;
+    const path = process.env.FCM_SERVICE_ACCOUNT_PATH;
+    let serviceAccount = null;
+
+    if (json) {
+      serviceAccount = JSON.parse(json);
+    } else if (path) {
+      const raw = fs.readFileSync(path, "utf8");
+      serviceAccount = JSON.parse(raw);
+    } else {
+      console.warn("[PUSH][FCM] FCM_SERVICE_ACCOUNT_JSON not set");
+      return false;
+    }
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    fcmConfigured = true;
+    return true;
+  } catch (err) {
+    console.error("[PUSH][FCM] init failed:", err?.message || err);
+    return false;
+  }
+}
 
 export function configureWebPush() {
   if (vapidConfigured) return;
@@ -39,12 +74,78 @@ export function getPublicApiBase() {
  * @param {{ title: string, body?: string, url?: string, tag?: string, actions?: array, data?: object }} n
  */
 export async function sendPushToUser(userId, n) {
+  const uid = String(userId);
+
+  // ─── FCM first (more reliable than web-push in many browsers) ───
+  try {
+    const fcmTokens = await FcmToken.find({ user_id: uid }).select("token");
+    if (fcmTokens?.length) {
+      const ok = initFcmIfNeeded();
+      if (ok) {
+        const tokens = fcmTokens.map((t) => t.token).filter(Boolean);
+        console.log("[PUSH][FCM] sending to", { userId: uid, tokens: tokens.length });
+        const title = String(n.title || "Enterprise Platform");
+        const body = String(n.body || "");
+        const data = {
+          title,
+          body,
+          url: String(n.url || getPublicAppUrl()),
+          tag: String(n.tag || "eip-default"),
+          apiBase: String(getPublicApiBase()),
+          ...(n.data || {}),
+        };
+
+        if (tokens.length === 1) {
+          await admin.messaging().send({
+            token: tokens[0],
+            notification: { title, body },
+            data,
+          });
+        } else {
+          const messaging = admin.messaging();
+          if (typeof messaging.sendEachForMulticast === "function") {
+            await messaging.sendEachForMulticast({
+              tokens,
+                notification: { title, body },
+              data,
+            });
+          } else {
+            // Fallback: send individually
+            await Promise.all(
+              tokens.map((t) =>
+                messaging.send({
+                  token: t,
+                  notification: { title, body },
+                  data,
+                })
+              )
+            );
+          }
+        }
+        return;
+      }
+    }
+  } catch (err) {
+    console.error("[PUSH][FCM] send failed:", { userId: uid, message: err?.message || err });
+  }
+
   configureWebPush();
   if (!isPushConfigured() || !vapidConfigured) return;
 
-  const uid = String(userId);
   const subs = await PushSubscription.find({ user_id: uid });
   if (!subs.length) return;
+
+  console.log("[PUSH] sendPushToUser verification", {
+    userId: uid,
+    subsFound: subs.length,
+    vapidConfigured: vapidConfigured ? "yes" : "no",
+    vapidKeysPresent:
+      Boolean(process.env.VAPID_PUBLIC_KEY) && Boolean(process.env.VAPID_PRIVATE_KEY),
+    subscriptionKeyStats: {
+      missingP256dh: subs.filter((s) => !s.keys_p256dh).length,
+      missingAuth: subs.filter((s) => !s.keys_auth).length,
+    },
+  });
 
   const payload = JSON.stringify({
     title: n.title,
@@ -62,6 +163,21 @@ export async function sendPushToUser(userId, n) {
   await Promise.all(
     subs.map(async (sub) => {
       try {
+        if (!sub.keys_p256dh || !sub.keys_auth) {
+          // Older/bad records might exist in DB without keys; remove them so
+          // we don't repeatedly fail sending notifications.
+          console.warn("[PUSH] deleting invalid subscription", {
+            userId: uid,
+            endpoint: String(sub.endpoint || "").slice(0, 40) + "…",
+          });
+          await PushSubscription.deleteOne({ _id: sub._id });
+          return;
+        }
+        console.log("[PUSH] sending notification", {
+          userId: uid,
+          endpoint: String(sub.endpoint || "").slice(0, 60) + "…",
+          tag: n.tag || "eip-default",
+        });
         await webpush.sendNotification(
           {
             endpoint: sub.endpoint,
@@ -69,12 +185,21 @@ export async function sendPushToUser(userId, n) {
           },
           payload
         );
+        console.log("[PUSH] notification sent", {
+          userId: uid,
+          endpoint: String(sub.endpoint || "").slice(0, 60) + "…",
+        });
       } catch (err) {
         const code = err.statusCode;
         if (code === 404 || code === 410) {
           await PushSubscription.deleteOne({ _id: sub._id });
         } else {
-          console.error("[PUSH] send error:", err.message);
+          console.error("[PUSH] send error:", {
+            userId: uid,
+            endpoint: String(sub.endpoint || "").slice(0, 60) + "…",
+            message: err.message,
+            statusCode: err.statusCode,
+          });
         }
       }
     })

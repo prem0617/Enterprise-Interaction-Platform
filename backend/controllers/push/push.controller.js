@@ -1,4 +1,5 @@
 import PushSubscription from "../../models/PushSubscription.js";
+import FcmToken from "../../models/FcmToken.js";
 import {
   getVapidPublicKey,
   isPushConfigured,
@@ -27,6 +28,14 @@ export const subscribe = async (req, res) => {
       return res.status(400).json({ error: "endpoint and keys (p256dh, auth) required" });
     }
 
+    // Verification logs (do not print secrets; only lengths)
+    console.log("[PUSH] subscribe request", {
+      userId: String(userId),
+      endpoint: String(endpoint),
+      keys_p256dh_len: String(keys.p256dh || "").length,
+      keys_auth_len: String(keys.auth || "").length,
+    });
+
     await PushSubscription.findOneAndUpdate(
       { endpoint },
       {
@@ -39,6 +48,7 @@ export const subscribe = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    console.log("[PUSH] subscribe saved", { userId: String(userId), endpoint: String(endpoint) });
     return res.json({ success: true });
   } catch (err) {
     console.error("[PUSH] subscribe error:", err);
@@ -59,6 +69,47 @@ export const unsubscribe = async (req, res) => {
   } catch (err) {
     console.error("[PUSH] unsubscribe error:", err);
     return res.status(500).json({ error: "Failed to remove subscription" });
+  }
+};
+
+// ─── FCM (Firebase Cloud Messaging) ───────────────────────────────
+export const subscribeFcm = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ error: "fcm token is required" });
+    }
+
+    await FcmToken.findOneAndUpdate(
+      { token },
+      { user_id: userId, token, user_agent: req.headers["user-agent"] || "" },
+      { upsert: true, new: true }
+    );
+
+    console.log("[PUSH][FCM] subscribe saved", { userId: String(userId) });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[PUSH][FCM] subscribe error:", err);
+    return res.status(500).json({ error: "Failed to save FCM token" });
+  }
+};
+
+export const unsubscribeFcm = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { token } = req.body || {};
+
+    if (token) {
+      await FcmToken.deleteOne({ user_id: userId, token });
+    } else {
+      await FcmToken.deleteMany({ user_id: userId });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[PUSH][FCM] unsubscribe error:", err);
+    return res.status(500).json({ error: "Failed to remove FCM token" });
   }
 };
 

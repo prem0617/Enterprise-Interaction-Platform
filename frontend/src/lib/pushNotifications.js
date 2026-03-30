@@ -1,14 +1,24 @@
 import { BACKEND_URL } from "../../config";
+import { initializeApp, getApps } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i += 1) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
+// FCM client config (public values)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBn6oyGwcMmkxfAN5oDQYUkazm-7TKiHO0",
+  authDomain: "notification-25684.firebaseapp.com",
+  projectId: "notification-25684",
+  storageBucket: "notification-25684.firebasestorage.app",
+  messagingSenderId: "572073347602",
+  appId: "1:572073347602:web:a23cfb9769182f1759a6cb",
+};
+
+const FIREBASE_VAPID_KEY =
+  "BO9faYhBz9d_XZljy1qc_qE4pX09zy0SNUtAMynYYAApEIZrQxwSjVOIgSQYY3m7fVQyTCq5yl7bucLdWV55Fqc";
+
+let messagingSetupDone = false;
+function initFirebaseApp() {
+  if (getApps().length) return getApps()[0];
+  return initializeApp(FIREBASE_CONFIG);
 }
 
 /**
@@ -16,7 +26,7 @@ function urlBase64ToUint8Array(base64String) {
  * @returns {Promise<boolean>} Whether subscription was saved
  */
 export async function subscribeUserPush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+  if (!("serviceWorker" in navigator)) {
     return false;
   }
 
@@ -25,42 +35,68 @@ export async function subscribeUserPush() {
     return false;
   }
 
-  const registration = await navigator.serviceWorker.register("/sw.js", {
-    scope: "/",
-  });
+  const registration = await navigator.serviceWorker.register(
+    "/firebase-messaging-sw.js",
+    { scope: "/" }
+  );
   await navigator.serviceWorker.ready;
-
-  const vapidRes = await fetch(`${BACKEND_URL}/push/vapid-public`);
-  const vapidJson = await vapidRes.json();
-  if (!vapidJson.configured || !vapidJson.publicKey) {
-    return false;
-  }
-
-  const applicationServerKey = urlBase64ToUint8Array(vapidJson.publicKey);
-  const existing = await registration.pushManager.getSubscription();
-  if (existing) {
-    await existing.unsubscribe();
-  }
-
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey,
-  });
 
   const token = localStorage.getItem("token");
   if (!token) return false;
 
-  const subJson = subscription.toJSON();
-  const res = await fetch(`${BACKEND_URL}/push/subscribe`, {
+  const app = initFirebaseApp();
+  const messaging = getMessaging(app);
+
+  const fcmToken = await getToken(messaging, {
+    vapidKey: FIREBASE_VAPID_KEY,
+    serviceWorkerRegistration: registration,
+  });
+
+  if (!fcmToken) return false;
+
+  console.log("[FCM] got token", {
+    length: String(fcmToken).length,
+    startsWith: String(fcmToken).slice(0, 10),
+  });
+
+  if (!messagingSetupDone) {
+    messagingSetupDone = true;
+    try {
+      onMessage(messaging, (payload) => {
+        const title =
+          payload?.notification?.title || payload?.data?.title || "Enterprise Platform";
+        const body = payload?.notification?.body || payload?.data?.body || "";
+        const tag = payload?.data?.tag || "eip-fcm";
+
+        console.log("[FCM] onMessage foreground payload:", {
+          title,
+          bodyLen: String(body).length,
+          tag,
+        });
+
+        // Show a browser notification while user is on the platform.
+        // (FCM onBackgroundMessage won't fire in foreground.)
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try {
+            // eslint-disable-next-line no-new
+            new Notification(title, { body, tag });
+          } catch (e) {
+            console.warn("[FCM] foreground Notification failed:", e?.message || e);
+          }
+        }
+      });
+    } catch {
+      // ignore (foreground listener may fail on some browsers)
+    }
+  }
+
+  const res = await fetch(`${BACKEND_URL}/push/subscribe-fcm`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      endpoint: subJson.endpoint,
-      keys: subJson.keys,
-    }),
+    body: JSON.stringify({ token: fcmToken }),
   });
 
   return res.ok;
@@ -70,6 +106,6 @@ export async function isPushSupported() {
   return (
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
-    "PushManager" in window
+    typeof Notification !== "undefined"
   );
 }
