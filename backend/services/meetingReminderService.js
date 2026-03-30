@@ -1,4 +1,7 @@
 import { getReceiverSocketId, io } from "../socket/socketServer.js";
+import Meeting from "../models/Meeting.js";
+import { sendPushToUser } from "./pushService.js";
+import { buildMeetingDeepLink } from "./meetingPushNotify.js";
 
 // In-memory store: meetingId -> timeoutIds[]
 const reminderTimeouts = new Map();
@@ -24,10 +27,13 @@ function scheduleRemindersForMeeting(meeting) {
   if (Number.isNaN(scheduledTime)) return;
 
   const reminderDefs = Array.isArray(meeting.reminders)
-    ? meeting.reminders
+    ? [...meeting.reminders]
     : [];
 
-  if (!reminderDefs.length) return;
+  const hasZeroReminder = reminderDefs.some(
+    (r) => Number(r.minutes_before) === 0
+  );
+  if (!hasZeroReminder) reminderDefs.push({ minutes_before: 0 });
 
   const now = Date.now();
   const timeouts = [];
@@ -48,7 +54,7 @@ function scheduleRemindersForMeeting(meeting) {
     const delay = triggerAt - now;
     if (delay <= 0) return;
 
-    const timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(async () => {
       const payload = {
         meetingId,
         title: meeting.title,
@@ -60,12 +66,33 @@ function scheduleRemindersForMeeting(meeting) {
         minutes_before: minutesBefore,
       };
 
+      const fresh = await Meeting.findById(meetingId).lean();
+      if (!fresh || fresh.status === "cancelled") return;
+
+      const when =
+        minutesBefore === 0
+          ? "Starting now"
+          : `In ${minutesBefore} min`;
+
       allParticipantIds.forEach((userId) => {
         const socketId = getReceiverSocketId(userId);
         if (socketId) {
           io.to(socketId).emit("meeting-reminder", payload);
         }
       });
+
+      await Promise.all(
+        [...allParticipantIds].map(async (userId) => {
+          const url = await buildMeetingDeepLink(userId, fresh.meeting_code);
+          return sendPushToUser(userId, {
+            title: `Meeting reminder · ${when}`,
+            body: fresh.title,
+            url,
+            tag: `eip-mtg-rem-${meetingId}-${minutesBefore}-${userId}`,
+            data: { type: "meeting_reminder", meetingId },
+          });
+        })
+      );
     }, delay);
 
     timeouts.push(timeoutId);

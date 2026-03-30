@@ -2,6 +2,9 @@ import { getReceiverSocketId, getOnlineUsers, getUserCallStatus, setUserCallStat
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
 import User from "../../models/User.js";
+import PushSubscription from "../../models/PushSubscription.js";
+import { signCallPushToken } from "../../utils/pushActionToken.js";
+import { sendPushToUser, getPublicAppUrl } from "../../services/pushService.js";
 
 // In-memory: channelId -> { initiatorId, initiatorName, channelName?, participantIds: string[] }
 const activeGroupCalls = {};
@@ -53,30 +56,67 @@ export const requestCall = async (req, res) => {
 
     const receiverSocketId = getReceiverSocketId(normalizedTo);
 
-    if (!receiverSocketId) {
-      return res.status(404).json({
-        error: "User unavailable",
-        message: "The user is not online or not connected.",
-      });
-    }
-
     const fromUserName =
       callerUser?.first_name && callerUser?.last_name
         ? `${callerUser.first_name} ${callerUser.last_name}`
         : "Someone";
 
-    // Note: Call status will be set when call is accepted (in socket handler)
-
-    // Emit appropriate event based on call type
     const eventName = callType === "video" ? "incoming-video-call" : "incoming-audio-call";
-    io.to(receiverSocketId).emit(eventName, {
-      fromUserId: callerUserId,
-      fromUserName,
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit(eventName, {
+        fromUserId: callerUserId,
+        fromUserName,
+      });
+      return res.json({
+        success: true,
+        message: "Call request sent",
+      });
+    }
+
+    const hasPush = await PushSubscription.exists({ user_id: normalizedTo });
+    if (!hasPush) {
+      return res.status(404).json({
+        error: "User unavailable",
+        message: "The user is offline and has no push notifications enabled.",
+      });
+    }
+
+    const ct = callType === "video" ? "video" : "audio";
+    const token = signCallPushToken({
+      fromUserId: callerIdStr,
+      toUserId: normalizedTo,
+      callType: ct,
+    });
+    const callee = await User.findById(normalizedTo).select("user_type").lean();
+    const base = getPublicAppUrl();
+    const pushPath =
+      callee?.user_type === "admin"
+        ? `/adminDashboard?pushCall=${encodeURIComponent(token)}`
+        : `/?pushCall=${encodeURIComponent(token)}`;
+    const openUrl = `${base}${pushPath}`;
+
+    await sendPushToUser(normalizedTo, {
+      title: ct === "video" ? "Incoming video call" : "Incoming audio call",
+      body: `${fromUserName} is calling you`,
+      url: openUrl,
+      tag: `eip-call-${callerIdStr}`,
+      actions: [
+        { action: "accept", title: "Accept" },
+        { action: "reject", title: "Decline" },
+      ],
+      data: {
+        type: "incoming_call",
+        token,
+        callType: ct,
+        fromUserId: callerIdStr,
+        fromUserName,
+      },
     });
 
     return res.json({
       success: true,
-      message: "Call request sent",
+      message: "Push notification sent (recipient offline)",
+      viaPush: true,
     });
   } catch (error) {
     console.error("[CALL] requestCall error:", error);

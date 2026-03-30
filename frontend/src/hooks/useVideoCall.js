@@ -141,6 +141,12 @@ export function useVideoCall(socket, currentUserId, currentUserName, requestCall
     [currentUserId, endCall, requestCallApi]
   );
 
+  const simulateIncoming = useCallback((fromUserId, fromUserName) => {
+    const fromId = fromUserId != null ? String(fromUserId) : fromUserId;
+    setRemoteUser({ id: fromId, name: fromUserName || "Someone" });
+    setCallState("incoming");
+  }, []);
+
   const rejectCall = useCallback(() => {
     const remoteId = remoteUser?.id?.toString?.() ?? remoteUser?.id;
     console.log("[VIDEO_CALL] rejectCall: declining", { toUserId: remoteId });
@@ -422,6 +428,7 @@ export function useVideoCall(socket, currentUserId, currentUserName, requestCall
     startCall,
     acceptCall,
     rejectCall,
+    simulateIncoming,
     endCall,
     toggleMute,
     toggleVideo,

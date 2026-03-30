@@ -14,6 +14,7 @@ import CustomerRegister from "./pages/customer/CustomerRegister";
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 
 import AuthContextProvider from "./context/AuthContextProvider";
+import PushCallDeepLink from "./components/PushCallDeepLink";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
@@ -25,6 +26,7 @@ import { Toaster } from "@/components/ui/sonner";
 function App() {
   return (
     <AuthContextProvider>
+      <PushCallDeepLink />
       <Routes>
         {/* PUBLIC ROUTES */}
         <Route

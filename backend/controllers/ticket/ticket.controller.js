@@ -5,6 +5,7 @@ import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
 import Meeting from "../../models/Meeting.js";
 import { broadcastMeetingEvent } from "../../socket/socketServer.js";
+import { getPublicAppUrl, sendPushToUser, sendPushToAllAdmins } from "../../services/pushService.js";
 
 // Generate unique ticket number
 function generateTicketNumber() {
@@ -45,6 +46,15 @@ export const createTicket = async (req, res) => {
       content: "Ticket created. Waiting for an agent to be assigned.",
       message_type: "system",
     });
+
+    const base = getPublicAppUrl();
+    sendPushToAllAdmins({
+      title: "New support ticket",
+      body: `${ticket.ticket_number}: ${title}`,
+      url: `${base}/adminDashboard?tab=tickets&ticketId=${ticket._id}`,
+      tag: `eip-tkt-admin-${ticket._id}`,
+      data: { type: "ticket_new", ticketId: String(ticket._id) },
+    }).catch((e) => console.error("[PUSH] ticket create:", e.message));
 
     res.status(201).json({
       message: "Ticket created successfully",
@@ -168,6 +178,35 @@ export const assignTicket = async (req, res) => {
         populate: { path: "user_id", select: "first_name last_name email" },
       });
 
+    try {
+      const base = getPublicAppUrl();
+      const empUserId = employee.user_id?._id || employee.user_id;
+      const cust = await Customer.findById(ticket.customer_id)
+        .populate("user_id")
+        .lean();
+      const customerUserId = cust?.user_id?._id || cust?.user_id;
+      if (empUserId) {
+        await sendPushToUser(empUserId, {
+          title: "Ticket assigned to you",
+          body: updatedTicket.title,
+          url: `${base}/?tab=tickets&ticketId=${ticket._id}`,
+          tag: `eip-tkt-emp-${ticket._id}`,
+          data: { type: "ticket_assigned", ticketId: String(ticket._id) },
+        });
+      }
+      if (customerUserId) {
+        await sendPushToUser(customerUserId, {
+          title: "An agent is on your ticket",
+          body: updatedTicket.title,
+          url: `${base}/customer/dashboard?view=tickets&ticketId=${ticket._id}`,
+          tag: `eip-tkt-cust-${ticket._id}`,
+          data: { type: "ticket_assigned_customer", ticketId: String(ticket._id) },
+        });
+      }
+    } catch (e) {
+      console.error("[PUSH] ticket assign:", e.message);
+    }
+
     res.json({
       message: "Ticket assigned successfully",
       ticket: updatedTicket,
@@ -202,6 +241,54 @@ export const updateTicketStatus = async (req, res) => {
       content: `Ticket status changed to "${status}".`,
       message_type: "system",
     });
+
+    try {
+      const populated = await SupportTicket.findById(ticketId)
+        .populate({
+          path: "customer_id",
+          populate: { path: "user_id", select: "_id" },
+        })
+        .populate({
+          path: "assigned_agent_id",
+          populate: { path: "user_id", select: "_id" },
+        })
+        .lean();
+      const actorId = String(req.user._id);
+      const base = getPublicAppUrl();
+      const cUid = populated?.customer_id?.user_id?._id
+        ? String(populated.customer_id.user_id._id)
+        : populated?.customer_id?.user_id
+          ? String(populated.customer_id.user_id)
+          : null;
+      const eUid = populated?.assigned_agent_id?.user_id?._id
+        ? String(populated.assigned_agent_id.user_id._id)
+        : populated?.assigned_agent_id?.user_id
+          ? String(populated.assigned_agent_id.user_id)
+          : null;
+      const title = populated?.title || "Ticket update";
+      const body = `Status: ${status}`;
+
+      if (cUid && cUid !== actorId) {
+        await sendPushToUser(cUid, {
+          title: "Ticket update",
+          body: `${title} — ${body}`,
+          url: `${base}/customer/dashboard?view=tickets&ticketId=${ticketId}`,
+          tag: `eip-tkt-st-${ticketId}-${cUid}`,
+          data: { type: "ticket_status", ticketId: String(ticketId) },
+        });
+      }
+      if (eUid && eUid !== actorId) {
+        await sendPushToUser(eUid, {
+          title: "Ticket update",
+          body: `${title} — ${body}`,
+          url: `${base}/?tab=tickets&ticketId=${ticketId}`,
+          tag: `eip-tkt-st-${ticketId}-${eUid}`,
+          data: { type: "ticket_status", ticketId: String(ticketId) },
+        });
+      }
+    } catch (e) {
+      console.error("[PUSH] ticket status:", e.message);
+    }
 
     res.json({ message: "Ticket status updated", ticket });
   } catch (error) {

@@ -5,6 +5,8 @@ import { ChatChannel } from "../../models/ChatChannel.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
+import { sendPushToUser } from "../../services/pushService.js";
+import { buildMessagesDeepLink } from "../../services/meetingPushNotify.js";
 import { cloudinary } from "../../config/cloudinary.js";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
@@ -769,6 +771,39 @@ export const sendMessage = async (req, res) => {
       }, MESSAGE_DELIVERY_RETRY_MS);
     });
 
+    try {
+      const ch = await ChatChannel.findById(channelId).select("name channel_type").lean();
+      const channelLabel =
+        ch?.channel_type === "direct"
+          ? "Direct message"
+          : ch?.name || "Message";
+      const senderName =
+        messageData.sender?.full_name ||
+        `${messageData.sender?.first_name || ""} ${messageData.sender?.last_name || ""}`.trim() ||
+        "Someone";
+      const preview = String(messageData.content || "").slice(0, 140);
+      await Promise.all(
+        channelMembers.map(async (member) => {
+          const memberUserId = member.user_id.toString();
+          if (memberUserId === currentUserId) return null;
+          const url = await buildMessagesDeepLink(memberUserId, channelId);
+          return sendPushToUser(memberUserId, {
+            title: channelLabel,
+            body: `${senderName}: ${preview}`,
+            url,
+            tag: `eip-ch-${channelId}-${memberUserId}`,
+            actions: [
+              { action: "open", title: "Open chat" },
+              { action: "reply", title: "Reply" },
+            ],
+            data: { type: "chat_message", channelId: String(channelId) },
+          });
+        })
+      );
+    } catch (e) {
+      console.error("[PUSH] dm message:", e.message);
+    }
+
     res.status(201).json({
       message: "Message sent successfully",
       data: {
@@ -1305,6 +1340,42 @@ export const uploadFileMessage = async (req, res) => {
           io.to(receiverSocketId).emit("new_message", socketMessage);
         }
       });
+    }
+
+    try {
+      const allMembers = await ChannelMember.find({ channel_id: channelId })
+        .select("user_id")
+        .lean();
+      const ch = await ChatChannel.findById(channelId).select("name channel_type").lean();
+      const channelLabel =
+        ch?.channel_type === "direct"
+          ? "Direct message"
+          : ch?.name || "Message";
+      const senderName =
+        messageResponse.sender?.full_name ||
+        `${messageResponse.sender?.first_name || ""} ${messageResponse.sender?.last_name || ""}`.trim() ||
+        "Someone";
+      const bodyText = caption || `Sent a file: ${req.file.originalname}`;
+      await Promise.all(
+        allMembers.map(async (member) => {
+          const uid = String(member.user_id);
+          if (uid === String(userId)) return null;
+          const url = await buildMessagesDeepLink(uid, channelId);
+          return sendPushToUser(uid, {
+            title: channelLabel,
+            body: `${senderName}: ${bodyText.slice(0, 140)}`,
+            url,
+            tag: `eip-ch-${channelId}-${uid}`,
+            actions: [
+              { action: "open", title: "Open chat" },
+              { action: "reply", title: "Reply" },
+            ],
+            data: { type: "chat_message", channelId: String(channelId) },
+          });
+        })
+      );
+    } catch (e) {
+      console.error("[PUSH] file message:", e.message);
     }
 
     res.status(201).json({

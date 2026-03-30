@@ -41,6 +41,7 @@ export default function EmployeeDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
   const [searchParams] = useSearchParams();
+  const deepLinkChannelId = searchParams.get("channel");
   const userData = JSON.parse(localStorage.getItem("user"));
   const [activeMeetingInfo, setActiveMeetingInfo] = useState(null);
 
@@ -204,7 +205,9 @@ export default function EmployeeDashboard() {
           )}
 
           {activeTab === "home" && <EmployeeHome onNavigate={setActiveTab} />}
-          {activeTab === "messages" && <ChatInterface />}
+          {activeTab === "messages" && (
+            <ChatInterface initialChannelId={deepLinkChannelId} />
+          )}
 
           {activeTab === "team" && <EmployeeTeamView />}
 

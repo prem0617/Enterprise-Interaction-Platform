@@ -138,6 +138,13 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
     setRemoteUser(null);
   }, [remoteUser?.id, socket]);
 
+  /** Open incoming UI after user returns from a push notification (offline ring). */
+  const simulateIncoming = useCallback((fromUserId, fromUserName) => {
+    const fromId = fromUserId != null ? String(fromUserId) : fromUserId;
+    setRemoteUser({ id: fromId, name: fromUserName || "Someone" });
+    setCallState("incoming");
+  }, []);
+
   const acceptCall = useCallback(async () => {
     const remoteId = remoteUser?.id?.toString?.() ?? remoteUser?.id;
     console.log("[AUDIO_CALL] acceptCall: callee accepting", { remoteUserId: remoteId, socketConnected: !!socket?.connected });
@@ -408,6 +415,7 @@ export function useAudioCall(socket, currentUserId, currentUserName, requestCall
     startCall,
     acceptCall,
     rejectCall,
+    simulateIncoming,
     endCall,
     toggleMute,
     cleanup,

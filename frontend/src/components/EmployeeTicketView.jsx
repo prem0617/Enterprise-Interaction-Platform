@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import {
   Send,
@@ -71,6 +72,7 @@ function MeetingCard({ meta }) {
 }
 
 export default function EmployeeTicketView() {
+  const [searchParams] = useSearchParams();
   const { user, socket } = useAuthContext();
   const [tickets, setTickets] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -125,6 +127,16 @@ export default function EmployeeTicketView() {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  useEffect(() => {
+    const tid = searchParams.get("ticketId");
+    if (!tid || !tickets.length) return;
+    const t = tickets.find((x) => String(x._id) === tid);
+    if (t) {
+      setSelectedTicket(t);
+      fetchMessages(t._id);
+    }
+  }, [searchParams, tickets, fetchMessages]);
 
   useEffect(() => {
     if (!socket || !selectedTicket) return;

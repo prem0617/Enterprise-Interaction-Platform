@@ -956,6 +956,14 @@ export const getReceiverSocketId = (receiverId) => {
   return users[normalized];
 };
 
+/** User IDs currently connected to a meeting room (socket layer). */
+export function getActiveMeetingParticipantIds(meetingId) {
+  const key = String(meetingId);
+  const room = activeMeetings[key];
+  if (!room) return [];
+  return Object.keys(room);
+}
+
 export const getOnlineUsers = () => {
   return Array.from(onlineUsers);
 };

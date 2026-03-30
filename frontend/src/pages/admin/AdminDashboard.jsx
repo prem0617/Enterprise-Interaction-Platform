@@ -119,7 +119,9 @@ export default function AdminDashboard() {
       case "documents":
         return <DocumentsPage />;
       case "messages":
-        return <ChatInterface />;
+        return (
+          <ChatInterface initialChannelId={searchParams.get("channel")} />
+        );
       case "attendance":
         return <AttendanceDashboard />;
       case "tickets":

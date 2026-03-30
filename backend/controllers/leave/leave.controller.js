@@ -2,6 +2,8 @@ import LeaveRequest from "../../models/LeaveRequest.js";
 import LeaveBalance from "../../models/LeaveBalance.js";
 import Attendance from "../../models/Attendance.js";
 import Employee from "../../models/Employee.js";
+import User from "../../models/User.js";
+import { getPublicAppUrl, sendPushToUser, sendPushToAllAdmins } from "../../services/pushService.js";
 
 // Default leave allocation per year
 // 21 Paid Leaves + 2 Floater Leaves + 15 Marriage Leaves + Indian National Holidays
@@ -142,6 +144,21 @@ export const requestLeave = async (req, res) => {
       days_count: computedDays,
       reason,
     });
+
+    try {
+      const u = await User.findById(req.userId).select("first_name last_name").lean();
+      const who = `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "An employee";
+      const base = getPublicAppUrl();
+      sendPushToAllAdmins({
+        title: "New leave request",
+        body: `${who} · ${leave_type} · ${computedDays} day(s)`,
+        url: `${base}/adminDashboard?tab=attendance`,
+        tag: `eip-leave-${leaveRequest._id}`,
+        data: { type: "leave_request", leaveId: String(leaveRequest._id) },
+      }).catch((e) => console.error("[PUSH] leave request:", e.message));
+    } catch (e) {
+      console.error("[PUSH] leave request:", e.message);
+    }
 
     res.status(201).json({ success: true, leaveRequest });
   } catch (error) {
@@ -287,6 +304,23 @@ export const updateLeaveStatus = async (req, res) => {
     const updated = await LeaveRequest.findById(id)
       .populate("employee_id", "first_name last_name email profile_picture")
       .populate("approved_by", "first_name last_name");
+
+    try {
+      const empId = String(leave.employee_id);
+      const base = getPublicAppUrl();
+      await sendPushToUser(empId, {
+        title: status === "approved" ? "Leave approved" : "Leave rejected",
+        body:
+          status === "approved"
+            ? "Your leave request was approved."
+            : `Your leave request was rejected.${admin_remarks ? ` Note: ${admin_remarks}` : ""}`,
+        url: `${base}/?tab=attendance`,
+        tag: `eip-leave-dec-${id}-${empId}`,
+        data: { type: "leave_decision", leaveId: String(id), status },
+      });
+    } catch (e) {
+      console.error("[PUSH] leave decision:", e.message);
+    }
 
     res.json({ success: true, leaveRequest: updated });
   } catch (error) {

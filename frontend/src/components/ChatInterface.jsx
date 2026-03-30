@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   Send,
@@ -52,7 +53,8 @@ import { Input } from "@/components/ui/input";
 import FileUploadModal from "./FileUploadModal";
 import FilePreviewModal from "./FilePreviewModal";
 
-const ChatInterface = () => {
+const ChatInterface = ({ initialChannelId = null }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [userChannel, setUserChannel] = useState([]);
   const [messageSeenStatus, setMessageSeenStatus] = useState({});
@@ -87,6 +89,7 @@ const ChatInterface = () => {
   const [activeGroupCalls, setActiveGroupCalls] = useState({});
   const [removedFromChannelId, setRemovedFromChannelId] = useState(null);
   const messagesEndRef = useRef(null);
+  const messageInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const selectedChatRef = useRef(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
@@ -98,6 +101,24 @@ const ChatInterface = () => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const { socket, user } = useAuthContext();
+
+  useEffect(() => {
+    const cid = initialChannelId || searchParams.get("channel");
+    if (!cid) return;
+    const all = [...userChannel, ...directChats];
+    if (!all.length) return;
+    const found = all.find((c) => String(c._id) === String(cid));
+    if (found) setSelectedChat(found);
+  }, [initialChannelId, searchParams, userChannel, directChats]);
+
+  useEffect(() => {
+    if (searchParams.get("focusComposer") !== "1" || !selectedChat) return;
+    const t = window.setTimeout(() => messageInputRef.current?.focus(), 400);
+    const next = new URLSearchParams(searchParams);
+    next.delete("focusComposer");
+    setSearchParams(next, { replace: true });
+    return () => window.clearTimeout(t);
+  }, [searchParams, selectedChat, setSearchParams]);
 
   // Add to existing state declarations
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
@@ -2314,6 +2335,7 @@ const ChatInterface = () => {
                   )}
 
                   <Input
+                    ref={messageInputRef}
                     type="text"
                     value={editingMessage ? editContent : newMessage}
                     onChange={(e) => editingMessage ? setEditContent(e.target.value) : setNewMessage(e.target.value)}

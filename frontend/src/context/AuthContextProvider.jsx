@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createSocketConnection } from "../hooks/useSocket";
+import PushNotificationSetup from "@/components/PushNotificationSetup";
 
 const AuthContext = createContext(null);
 
@@ -107,6 +108,7 @@ export default function AuthContextProvider({ children }) {
       }}
     >
       {children}
+      {user && !loading && <PushNotificationSetup />}
     </AuthContext.Provider>
   );
 }

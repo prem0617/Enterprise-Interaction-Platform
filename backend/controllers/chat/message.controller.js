@@ -1,6 +1,9 @@
 import { Message } from "../../models/Message.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
+import User from "../../models/User.js";
+import { sendPushToUser } from "../../services/pushService.js";
+import { buildMessagesDeepLink } from "../../services/meetingPushNotify.js";
 
 // Send a message
 export const sendMessage = async (req, res) => {
@@ -53,6 +56,39 @@ export const sendMessage = async (req, res) => {
     const populatedMessage = await Message.findById(message._id)
       .populate("sender_id", "first_name last_name email user_type")
       .populate("parent_message_id");
+
+    try {
+      const channel = await ChatChannel.findById(channel_id).select("name channel_type").lean();
+      const channelLabel =
+        channel?.channel_type === "direct"
+          ? "Direct message"
+          : channel?.name || "Channel";
+      const members = await ChannelMember.find({ channel_id }).select("user_id").lean();
+      const senderDoc = await User.findById(userId).select("first_name last_name").lean();
+      const senderName =
+        `${senderDoc?.first_name || ""} ${senderDoc?.last_name || ""}`.trim() || "Someone";
+      const preview = String(content || "").slice(0, 140);
+      await Promise.all(
+        members.map(async (m) => {
+          const uid = String(m.user_id);
+          if (uid === String(userId)) return null;
+          const url = await buildMessagesDeepLink(uid, channel_id);
+          return sendPushToUser(uid, {
+            title: channelLabel,
+            body: `${senderName}: ${preview}`,
+            url,
+            tag: `eip-ch-${channel_id}-${uid}`,
+            actions: [
+              { action: "open", title: "Open chat" },
+              { action: "reply", title: "Reply" },
+            ],
+            data: { type: "chat_message", channelId: String(channel_id) },
+          });
+        })
+      );
+    } catch (e) {
+      console.error("[PUSH] channel message:", e.message);
+    }
 
     res.status(201).json({
       message: "Message sent successfully",

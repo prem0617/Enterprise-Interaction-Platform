@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import {
   Ticket,
@@ -32,6 +33,7 @@ const priorityColors = {
 };
 
 export default function TicketManagement() {
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,13 @@ export default function TicketManagement() {
     fetchTickets();
     fetchEmployees();
   }, [fetchTickets, fetchEmployees]);
+
+  useEffect(() => {
+    const id = searchParams.get("ticketId");
+    if (!id || !tickets.length) return;
+    const t = tickets.find((x) => String(x._id) === id);
+    if (t) setDetailTicket(t);
+  }, [searchParams, tickets]);
 
   const handleAssign = async () => {
     if (!selectedEmployee || !assignModal) return;

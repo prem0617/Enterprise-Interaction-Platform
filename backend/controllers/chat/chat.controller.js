@@ -4,6 +4,8 @@ import { Message } from "../../models/Message.js";
 import User from "../../models/User.js";
 import { SupportTicket } from "../../models/SupportTicket.js";
 import { getReceiverSocketId, io } from "../../socket/socketServer.js";
+import { sendPushToUser } from "../../services/pushService.js";
+import { buildMessagesDeepLink } from "../../services/meetingPushNotify.js";
 import mongoose from "mongoose";
 
 // Create a new chat channel
@@ -112,6 +114,27 @@ export const createChannel = async (req, res) => {
           io.to(receiverSocketId).emit("group_created", channelData);
         }
       });
+    }
+
+    try {
+      const chName = populatedChannel.name || "Group chat";
+      if (member_ids?.length) {
+        await Promise.all(
+          member_ids.map(async (mid) => {
+            if (String(mid) === String(userId)) return null;
+            const url = await buildMessagesDeepLink(mid, populatedChannel._id);
+            return sendPushToUser(mid, {
+              title: "Added to a group",
+              body: `You're now in "${chName}"`,
+              url,
+              tag: `eip-grp-${populatedChannel._id}-${mid}`,
+              data: { type: "group_add", channelId: String(populatedChannel._id) },
+            });
+          })
+        );
+      }
+    } catch (e) {
+      console.error("[PUSH] createChannel:", e.message);
     }
 
     res.status(201).json({
@@ -314,6 +337,26 @@ export const addChannelMembers = async (req, res) => {
           });
         }
       });
+
+      try {
+        const chan = await ChatChannel.findById(id).select("name").lean();
+        const chName = chan?.name || "Group chat";
+        await Promise.all(
+          addedMembers.map(async (row) => {
+            const mid = row.user_id?._id || row.user_id;
+            const url = await buildMessagesDeepLink(mid, id);
+            return sendPushToUser(mid, {
+              title: "Added to a group",
+              body: `You've been added to "${chName}"`,
+              url,
+              tag: `eip-grp-${id}-${mid}`,
+              data: { type: "group_add", channelId: String(id) },
+            });
+          })
+        );
+      } catch (e) {
+        console.error("[PUSH] addChannelMembers:", e.message);
+      }
     }
 
     res.json({

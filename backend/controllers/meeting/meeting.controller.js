@@ -1,6 +1,10 @@
 import Meeting from "../../models/Meeting.js";
 import MeetingRecording from "../../models/MeetingRecording.js";
+import User from "../../models/User.js";
 import { scheduleRemindersForMeeting, clearRemindersForMeeting } from "../../services/meetingReminderService.js";
+import { scheduleMeetingAbsenteePush, clearMeetingAbsenteePush } from "../../services/meetingAbsenteePush.js";
+import { notifyUsersAddedToMeeting, buildMeetingDeepLink } from "../../services/meetingPushNotify.js";
+import { sendPushToUser } from "../../services/pushService.js";
 import { broadcastMeetingEvent } from "../../socket/socketServer.js";
 
 function generateMeetingCode() {
@@ -75,6 +79,25 @@ export const createMeeting = async (req, res) => {
     await meeting.save();
 
     scheduleRemindersForMeeting(meeting);
+
+    try {
+      const host = await User.findById(userId).select("first_name last_name").lean();
+      const actorName =
+        `${host?.first_name || ""} ${host?.last_name || ""}`.trim() || "Someone";
+      const pIds = (participants || [])
+        .map((p) => String(p))
+        .filter((pid) => pid && pid !== String(userId));
+      if (pIds.length) {
+        notifyUsersAddedToMeeting({
+          meeting,
+          userIds: pIds,
+          actorName,
+        }).catch((e) => console.error("[PUSH] meeting create notify:", e.message));
+      }
+    } catch (e) {
+      console.error("[PUSH] meeting create:", e.message);
+    }
+
     const populated = await Meeting.findById(meeting._id)
       .populate("host_id", "first_name last_name email")
       .populate("participants", "first_name last_name email")
@@ -304,6 +327,11 @@ export const updateMeeting = async (req, res) => {
       }
     }
 
+    const oldParticipantIds = new Set(
+      (meeting.participants || []).map((p) => String(p))
+    );
+    const previousStatus = meeting.status;
+
     const updatableFields = [
       "title",
       "description",
@@ -336,6 +364,49 @@ export const updateMeeting = async (req, res) => {
       scheduleRemindersForMeeting(meeting);
     } else {
       clearRemindersForMeeting(meeting._id);
+    }
+
+    if (["cancelled", "ended"].includes(meeting.status)) {
+      clearMeetingAbsenteePush(meeting._id);
+    }
+
+    try {
+      const newParticipantIds = new Set(
+        (meeting.participants || []).map((p) => String(p))
+      );
+      const added = [...newParticipantIds].filter(
+        (id) => !oldParticipantIds.has(id) && id !== String(userId)
+      );
+      if (added.length) {
+        const host = await User.findById(userId).select("first_name last_name").lean();
+        const actorName =
+          `${host?.first_name || ""} ${host?.last_name || ""}`.trim() || "Someone";
+        notifyUsersAddedToMeeting({
+          meeting,
+          userIds: added,
+          actorName,
+        }).catch((e) => console.error("[PUSH] meeting participants:", e.message));
+      }
+
+      if (meeting.status === "active" && previousStatus !== "active") {
+        scheduleMeetingAbsenteePush(meeting);
+        const notifyIds = [...newParticipantIds, String(meeting.host_id)];
+        const uniq = [...new Set(notifyIds)];
+        await Promise.all(
+          uniq.map(async (pid) => {
+            const url = await buildMeetingDeepLink(pid, meeting.meeting_code);
+            return sendPushToUser(pid, {
+              title: "Meeting is live",
+              body: meeting.title,
+              url,
+              tag: `eip-mtg-start-${meeting._id}-${pid}`,
+              data: { type: "meeting_started", meetingId: String(meeting._id) },
+            });
+          })
+        );
+      }
+    } catch (e) {
+      console.error("[PUSH] meeting update:", e.message);
     }
     const updated = await Meeting.findById(meeting._id)
       .populate("host_id", "first_name last_name email")
@@ -375,6 +446,7 @@ export const cancelMeeting = async (req, res) => {
     await meeting.save();
 
     clearRemindersForMeeting(meeting._id);
+    clearMeetingAbsenteePush(meeting._id);
     const cancelled = await Meeting.findById(meeting._id)
       .populate("host_id", "first_name last_name email")
       .populate("participants", "first_name last_name email")
@@ -515,6 +587,7 @@ export const deleteMeeting = async (req, res) => {
     }
 
     clearRemindersForMeeting(meeting._id);
+    clearMeetingAbsenteePush(meeting._id);
     await Meeting.findByIdAndDelete(id);
     broadcastMeetingEvent("deleted", { _id: id });
 

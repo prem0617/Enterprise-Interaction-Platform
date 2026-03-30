@@ -131,6 +131,20 @@ export default function CustomerDashboard() {
   }, [fetchTickets]);
 
   useEffect(() => {
+    if (searchParams.get("view") === "tickets") {
+      setActiveView("tickets");
+    }
+    const tid = searchParams.get("ticketId");
+    if (!tid || !tickets.length) return;
+    const t = tickets.find((x) => String(x._id) === tid);
+    if (t) {
+      setSelectedTicket(t);
+      fetchMessages(t._id);
+      setShowCreateForm(false);
+    }
+  }, [searchParams, tickets, fetchMessages]);
+
+  useEffect(() => {
     if (!socket || !selectedTicket) return;
     socket.emit("ticket-join", { ticketId: selectedTicket._id });
     return () => {

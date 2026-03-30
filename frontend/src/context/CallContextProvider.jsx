@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuthContext } from "./AuthContextProvider";
@@ -83,6 +83,30 @@ export function GlobalCallProvider({ children }) {
   useEffect(() => {
     if (videoCall.errorMessage) toast.error(videoCall.errorMessage);
   }, [videoCall.errorMessage]);
+
+  const userId = user?.id ?? user?._id;
+
+  const audioRef = useRef(audioCall);
+  const videoRef = useRef(videoCall);
+  audioRef.current = audioCall;
+  videoRef.current = videoCall;
+
+  useEffect(() => {
+    if (!socket?.connected || !userId) return;
+    const raw = sessionStorage.getItem("eip_push_call");
+    if (!raw) return;
+    sessionStorage.removeItem("eip_push_call");
+    try {
+      const data = JSON.parse(raw);
+      if (data.callType === "video") {
+        videoRef.current?.simulateIncoming?.(data.fromUserId, data.fromUserName);
+      } else {
+        audioRef.current?.simulateIncoming?.(data.fromUserId, data.fromUserName);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [socket?.connected, userId]);
 
   const value = useMemo(
     () => ({ audioCall, videoCall }),
