@@ -497,6 +497,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     const handleOffer = async (data) => {
       const { fromUserId, meetingId: evtMeetingId, sdp } = data;
       if (evtMeetingId !== meetingId) return;
+      
       const fromIdStr = String(fromUserId);
       if (fromIdStr === currentUserIdStr) return;
 
@@ -519,9 +520,11 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     const handleAnswer = async (data) => {
       const { fromUserId, meetingId: evtMeetingId, sdp } = data;
       if (evtMeetingId !== meetingId) return;
+      
       const fromIdStr = String(fromUserId);
-      const pc = peerConnectionsRef.current[fromIdStr];
-      if (!pc) return;
+      if (fromIdStr === currentUserIdStr) return;
+      
+      const pc = getOrCreatePeerConnection(fromIdStr);
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
         await drainIceCandidates(fromIdStr);
@@ -533,13 +536,11 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     const handleIce = async (data) => {
       const { fromUserId, meetingId: evtMeetingId, candidate } = data;
       if (evtMeetingId !== meetingId || !candidate) return;
+      
       const fromIdStr = String(fromUserId);
-      const pc = peerConnectionsRef.current[fromIdStr];
-      if (!pc) {
-        if (!iceCandidateBufferRef.current[fromIdStr]) iceCandidateBufferRef.current[fromIdStr] = [];
-        iceCandidateBufferRef.current[fromIdStr].push(candidate);
-        return;
-      }
+      if (fromIdStr === currentUserIdStr) return;
+      
+      const pc = getOrCreatePeerConnection(fromIdStr);
       if (!pc.remoteDescription) {
         if (!iceCandidateBufferRef.current[fromIdStr]) iceCandidateBufferRef.current[fromIdStr] = [];
         iceCandidateBufferRef.current[fromIdStr].push(candidate);
@@ -563,7 +564,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     };
   }, [socket, currentUserIdStr, meetingId, getOrCreatePeerConnection, drainIceCandidates]);
 
-  // ---- Create offers: host to everyone (so joiners get host video); non-hosts to peers with id > self (one offer per pair) ----
+  // ---- Create offers: Everyone to everyone based on ID comparison to ensure 1 pair of offer/answer ----
   useEffect(() => {
     if (!socket || !currentUserIdStr || !meetingId || !localStreamRef.current) return;
 
@@ -571,14 +572,11 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       .map((p) => String(p.userId))
       .filter((id) => id !== currentUserIdStr);
 
-    const shouldOfferTo = (remoteIdStr) => {
-      if (isHost) return true;
-      return remoteIdStr > currentUserIdStr;
-    };
-
     const createOffersTo = async (remoteIdStr) => {
-      if (!shouldOfferTo(remoteIdStr)) return;
+      // Determine offer direction deterministically based on string ID comparison
+      if (remoteIdStr <= currentUserIdStr) return;
       if (peerConnectionsRef.current[remoteIdStr]) return;
+      
       const pc = getOrCreatePeerConnection(remoteIdStr);
       try {
         const offer = await pc.createOffer();
@@ -594,12 +592,9 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     };
 
     const run = () => others.forEach((id) => createOffersTo(id));
-    if (isHost && others.length > 0) {
-      const t = setTimeout(run, 150);
-      return () => clearTimeout(t);
-    }
-    run();
-  }, [socket, currentUserIdStr, meetingId, roomParticipants, localStream, isHost, getOrCreatePeerConnection]);
+    const t = setTimeout(run, 150);
+    return () => clearTimeout(t);
+  }, [socket, currentUserIdStr, meetingId, roomParticipants, localStream, getOrCreatePeerConnection]);
 
   // ---- Remove peer connections for participants who left ----
   useEffect(() => {
