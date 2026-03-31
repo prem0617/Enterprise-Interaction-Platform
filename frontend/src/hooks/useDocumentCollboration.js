@@ -65,10 +65,10 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
     if (!socket || !docId || !currentUserId) return;
 
     // Remote user changed the document content
-    const handleDocUpdate = ({ content, senderId, version }) => {
+    const handleDocUpdate = ({ content, senderId, version, versionNumber }) => {
       if (String(senderId) === String(currentUserId)) return; // ignore own echo
       console.log(`[DOC_COLLAB] doc-update from ${senderId}`);
-      onRemoteUpdateRef.current?.({ content, version });
+      onRemoteUpdateRef.current?.({ content, version, versionNumber: versionNumber ?? null });
     };
 
     // Server sends full content snapshot to late joiners only
@@ -122,9 +122,9 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
     };
 
     // Handle incoming slide patch
-    const handleSlideUpdate = ({ patch, senderId }) => {
+    const handleSlideUpdate = ({ patch, senderId, versionNumber }) => {
       if (String(senderId) === String(currentUserId)) return;
-      onRemoteSlideUpdateRef.current?.({ patch });
+      onRemoteSlideUpdateRef.current?.({ patch, versionNumber: versionNumber ?? null });
     };
 
     socket.on("doc-update", handleDocUpdate);
@@ -189,12 +189,12 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
    * Debounced to 150 ms.
    */
   const broadcastUpdate = useCallback(
-    (content) => {
+    (content, versionNumber = null) => {
       if (!socket?.connected || !docId) return;
       clearTimeout(broadcastTimerRef.current);
       broadcastTimerRef.current = setTimeout(() => {
         console.log(`[DOC_COLLAB] emitting doc-update`);
-        socket.emit("doc-update", { docId, content, version: Date.now() });
+        socket.emit("doc-update", { docId, content, version: Date.now(), versionNumber });
       }, 150);
     },
     [socket, docId]
@@ -216,9 +216,9 @@ export function useDocumentCollaboration(socket, docId, currentUserId, userName)
   );
 
   const broadcastSlideUpdate = useCallback(
-    (patch) => {
+    (patch, versionNumber = null) => {
       if (!socket?.connected || !docId) return;
-      socket.emit("doc-slide-update", { docId, patch });
+      socket.emit("doc-slide-update", { docId, patch, versionNumber });
     },
     [socket, docId]
   );

@@ -200,7 +200,7 @@ Given a transcript of messages a user has not yet read, provide a concise and cl
 export const documentQA = async (req, res) => {
   try {
     const { document_id } = req.params;
-    const { question } = req.body;
+    const { question, version_number } = req.body;
 
     if (!question || !question.trim()) {
       return res.status(400).json({ error: "Question is required" });
@@ -211,8 +211,20 @@ export const documentQA = async (req, res) => {
       return res.status(404).json({ error: "Document not found" });
     }
 
+    // If version_number is provided, answer using that version snapshot.
+    let effectiveContent = doc.content || "";
+    let effectiveTheme = doc.slide_theme || "light";
+    const vNum = Number(version_number);
+    if (Number.isFinite(vNum) && vNum >= 1 && Array.isArray(doc.versions) && doc.versions.length) {
+      const v = doc.versions.find((x) => Number(x.version_number) === vNum);
+      if (v) {
+        effectiveContent = v.content_snapshot ?? effectiveContent;
+        effectiveTheme = v.slide_theme_snapshot ?? effectiveTheme;
+      }
+    }
+
     // Strip HTML tags for cleaner context
-    const textContent = (doc.content || "")
+    const textContent = (effectiveContent || "")
       .replace(/<[^>]*>/g, " ")
       .replace(/&nbsp;/g, " ")
       .replace(/&amp;/g, "&")
@@ -231,7 +243,7 @@ export const documentQA = async (req, res) => {
         },
         {
           role: "user",
-          content: `Document title: "${doc.title || "Untitled"}"\n\nDocument content:\n${textContent}\n\nQuestion: ${question.trim()}`,
+          content: `Document title: "${doc.title || "Untitled"}"\nVersion: v${Number.isFinite(vNum) && vNum >= 1 ? vNum : "latest"}\nSlide theme: ${effectiveTheme}\n\nDocument content:\n${textContent}\n\nQuestion: ${question.trim()}`,
         },
       ],
       max_tokens: 500,

@@ -455,6 +455,9 @@ const S = `
   .de-editor th,.de-editor td{border:1px solid #e2e8f0;padding:8px 12px;text-align:left}
   .de-editor th{background:#f8fafc;font-weight:600}
   .de-editor img{max-width:100%;height:auto;border-radius:6px;margin:12px 0;display:block}
+  .de-img-wrap{display:inline-block;position:relative;max-width:100%;margin:12px 0}
+  .de-img-wrap img{display:block;width:100%;height:auto;border-radius:6px}
+  .de-img-wrap.de-img-selected{outline:2px solid #3b82f6;outline-offset:2px;border-radius:8px}
   .de-editor sub{vertical-align:sub;font-size:smaller}
   .de-editor sup{vertical-align:super;font-size:smaller}
 
@@ -543,6 +546,12 @@ export default function CommonEditor() {
 
   const [doc, setDoc] = useState(null);
   const [myAccess, setMyAccess] = useState("read");
+  const [versions, setVersions] = useState([]);
+  const [selectedVersionNumber, setSelectedVersionNumber] = useState(1);
+  const [showVersionsSidebar, setShowVersionsSidebar] = useState(false);
+  const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
+  const [newVersionMessage, setNewVersionMessage] = useState("");
+  const [creatingVersion, setCreatingVersion] = useState(false);
 
   const docIdForSocket = id || (doc ? doc._id : null);
 
@@ -568,6 +577,27 @@ export default function CommonEditor() {
   const isOwner = myAccess === "owner";
   const tb = isReadOnly;
 
+  const fetchVersions = useCallback(async (docId) => {
+    if (!docId || token) return; // share link is read-only and version UI is hidden
+    try {
+      const r = await axios.get(`${BACKEND_URL}/documents/${docId}/versions`, { headers: authHeader() });
+      setVersions(r.data?.versions || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [token]);
+
+  const loadVersion = useCallback(async (docId, vNum) => {
+    if (!docId || token) return;
+    try {
+      const r = await axios.get(`${BACKEND_URL}/documents/${docId}/versions/${vNum}`, { headers: authHeader() });
+      setSelectedVersionNumber(Number(r.data?.version_number || vNum));
+      setDoc((d) => d ? { ...d, content: r.data?.content ?? "", slide_theme: r.data?.slide_theme ?? d.slide_theme } : d);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [token]);
+
   useEffect(() => {
     // Determine which URL to call based on the route match
     if (token) {
@@ -579,13 +609,19 @@ export default function CommonEditor() {
         });
     } else if (id) {
       axios.get(`${BACKEND_URL}/documents/${id}`, { headers: authHeader() })
-        .then(res => { setDoc(res.data); setMyAccess(res.data.my_access ?? "read"); })
+        .then(async res => {
+          setDoc(res.data);
+          setMyAccess(res.data.my_access ?? "read");
+          setSelectedVersionNumber(1);
+          await fetchVersions(id);
+          await loadVersion(id, 1);
+        })
         .catch(err => {
           console.error(err);
           setErrorMsg(err.response?.data?.error || "Failed to load document");
         });
     }
-  }, [id, token]);
+  }, [id, token, fetchVersions, loadVersion]);
 
   useEffect(() => {
     // For doc_type "doc", the DocumentEditor component will handle content initialization.
@@ -596,14 +632,21 @@ export default function CommonEditor() {
   }, [doc]);
 
   useEffect(() => {
-    registerRemoteSlideUpdateHandler(({ patch }) => {
-      setRemotePatch({ ...patch, _ts: Date.now(), _rand: Math.random() });
+    registerRemoteSlideUpdateHandler(({ patch, versionNumber }) => {
+      // Only apply realtime patches for the currently selected version
+      const incomingV = Number(versionNumber || 1);
+      if (incomingV === Number(selectedVersionNumber || 1)) {
+        setRemotePatch({ ...patch, _ts: Date.now(), _rand: Math.random() });
+      }
     });
-  }, [registerRemoteSlideUpdateHandler]);
+  }, [registerRemoteSlideUpdateHandler, selectedVersionNumber]);
 
   // Handle generic full-text string updates for DocumentEditor and SpreadsheetEditor
   useEffect(() => {
-    registerRemoteUpdateHandler(({ content, isFullState }) => {
+    registerRemoteUpdateHandler(({ content, isFullState, versionNumber }) => {
+      const activeV = Number(selectedVersionNumber || 1);
+      const incomingV = Number(versionNumber || 1);
+      if (incomingV !== activeV) return;
       if (doc?.doc_type === "sheet" || doc?.doc_type === "doc") {
         setDoc(prev => ({ ...prev, content }));
         return;
@@ -621,7 +664,7 @@ export default function CommonEditor() {
         return;
       }
     });
-  }, [registerRemoteUpdateHandler, doc?.doc_type]);
+  }, [registerRemoteUpdateHandler, doc?.doc_type, selectedVersionNumber]);
 
   useEffect(() => {
     registerRemoteTitleUpdateHandler(({ title }) => {
@@ -645,23 +688,38 @@ export default function CommonEditor() {
     try {
       const finalContent = contentToSave;
       const finalTitle = typeof overrideTitle === "string" ? overrideTitle : doc?.title;
-      await axios.put(`${BACKEND_URL}/documents/${id}`, { content: finalContent, title: finalTitle }, { headers: authHeader() });
+      // Title is global; content is versioned.
+      await axios.put(`${BACKEND_URL}/documents/${id}`, { title: finalTitle }, { headers: authHeader() });
+      await axios.put(
+        `${BACKEND_URL}/documents/${id}/versions/${selectedVersionNumber || 1}/content`,
+        { content: finalContent, slide_theme: doc?.slide_theme },
+        { headers: authHeader() }
+      );
       setSaveStatus("saved");
     } catch (err) { console.error(err); setSaveStatus("idle"); }
-  }, [id, doc?.title, isReadOnly]);
+  }, [id, doc?.title, doc?.slide_theme, isReadOnly, selectedVersionNumber]);
+
+  const saveTitle = useCallback(async (title) => {
+    if (isReadOnly) return;
+    try {
+      await axios.put(`${BACKEND_URL}/documents/${id}`, { title }, { headers: authHeader() });
+    } catch (err) {
+      console.error(err);
+    }
+  }, [id, isReadOnly]);
 
   const handleContentChange = useCallback((newContent) => {
     if (isReadOnly) return;
     setDoc(d => ({ ...d, content: newContent }));
     setSaveStatus("Unsaved changes");
-    broadcastUpdate(newContent);
+    broadcastUpdate(newContent, selectedVersionNumber || 1);
     broadcastTyping();
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       save(newContent);
     }, 1500);
-  }, [broadcastUpdate, broadcastTyping, isReadOnly, save]);
+  }, [broadcastUpdate, broadcastTyping, isReadOnly, save, selectedVersionNumber]);
 
   useEffect(() => {
     const onKey = e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(doc?.content); } };
@@ -712,7 +770,7 @@ export default function CommonEditor() {
     try {
       const res = await axios.post(
         `${BACKEND_URL}/ai/documents/${id}/qa`,
-        { question: q },
+        { question: q, version_number: selectedVersionNumber || 1 },
         { headers: authHeader() }
       );
       setChatMessages(prev => [...prev, { role: "assistant", content: res.data.answer }]);
@@ -771,7 +829,7 @@ export default function CommonEditor() {
           }
         }}>{Ic.back}</button>
         {/* Dynamic Logo Based on Doc Type */}
-        <div className={"flex items-center justify-center w-8 h-8 rounded-lg shadow-lg flex-shrink-0 " + (doc.doc_type === "sheet" ? "bg-gradient-to-br from-green-600 to-emerald-600 shadow-green-600/30" : doc.doc_type === "slide" ? "bg-gradient-to-br from-orange-500 to-amber-600 shadow-orange-500/30" : "bg-gradient-to-br from-blue-500 to-violet-600 shadow-blue-500/30")}>
+        <div className={"flex items-center justify-center w-8 h-8 rounded-lg shadow-lg shrink-0 " + (doc.doc_type === "sheet" ? "bg-linear-to-br from-green-600 to-emerald-600 shadow-green-600/30" : doc.doc_type === "slide" ? "bg-linear-to-br from-orange-500 to-amber-600 shadow-orange-500/30" : "bg-linear-to-br from-blue-500 to-violet-600 shadow-blue-500/30")}>
           {doc.doc_type === "sheet" ? (
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="white" fillOpacity="0.95" />
@@ -805,7 +863,7 @@ export default function CommonEditor() {
               broadcastTitleUpdate(newTitle);
               setSaveStatus("Unsaved changes");
               if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = setTimeout(() => save(newTitle), 1500);
+              saveTimerRef.current = setTimeout(() => saveTitle(newTitle), 500);
             }} placeholder="Untitled document" />
         </div>
         <div className="de-menubar-right">
@@ -825,6 +883,27 @@ export default function CommonEditor() {
               )}
             </div>
           )}
+
+          {/* Versions (manual) — visible to all authenticated users */}
+          {!!id && (
+            <button
+              type="button"
+              className="de-share-btn"
+              onClick={() => setShowVersionsSidebar((s) => !s)}
+              style={{
+                background: "rgba(255,255,255,.06)",
+                boxShadow: "none",
+                color: "#e2e8f0",
+                border: "1px solid rgba(255,255,255,.10)",
+                padding: "7px 14px",
+              }}
+              title="Versions"
+            >
+              <span style={{ fontWeight: 800 }}>v{selectedVersionNumber || 1}</span>
+              <span style={{ opacity: 0.8 }}>{showVersionsSidebar ? "Hide" : "Versions"}</span>
+            </button>
+          )}
+
           {!isReadOnly && doc?.doc_type === "doc" && (
             <button
               className="de-tb-btn"
@@ -915,12 +994,12 @@ export default function CommonEditor() {
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
                 setSaveStatus("Unsaved changes");
-                broadcastUpdate(newContent);
+                broadcastUpdate(newContent, selectedVersionNumber || 1);
                 broadcastTyping();
                 if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
                 // Wait a bit longer for sheets to avoid saving mid-stroke
                 saveTimerRef.current = setTimeout(() => {
-                  axios.put(`${BACKEND_URL}/documents/${id}`, { content: newContent }, { headers: authHeader() })
+                  axios.put(`${BACKEND_URL}/documents/${id}/versions/${selectedVersionNumber || 1}/content`, { content: newContent, slide_theme: doc?.slide_theme }, { headers: authHeader() })
                     .then(() => setSaveStatus("saved"))
                     .catch(err => { console.error(err); setSaveStatus("idle"); });
                 }, 2000);
@@ -935,7 +1014,7 @@ export default function CommonEditor() {
               slideTheme={doc.slide_theme || 'light'}
               remotePatch={remotePatch}
               onSlideUpdate={(patch) => {
-                broadcastSlideUpdate(patch);
+                broadcastSlideUpdate(patch, selectedVersionNumber || 1);
                 broadcastTyping();
               }}
               onThemeChange={(newTheme) => {
@@ -945,7 +1024,7 @@ export default function CommonEditor() {
                   socketRef.current.emit('doc-theme-update', { docId: docIdForSocket, theme: newTheme });
                 }
                 // Persist to backend
-                axios.put(`${BACKEND_URL}/documents/${id}`, { slide_theme: newTheme }, { headers: authHeader() }).catch(console.error);
+                axios.put(`${BACKEND_URL}/documents/${id}/versions/${selectedVersionNumber || 1}/content`, { slide_theme: newTheme }, { headers: authHeader() }).catch(console.error);
               }}
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
@@ -956,7 +1035,7 @@ export default function CommonEditor() {
                   if (socketRef.current) {
                     socketRef.current.emit("doc-update-cache", { docId: id, content: newContent, version: Date.now() });
                   }
-                  axios.put(`${BACKEND_URL}/documents/${id}`, { content: newContent }, { headers: authHeader() })
+                  axios.put(`${BACKEND_URL}/documents/${id}/versions/${selectedVersionNumber || 1}/content`, { content: newContent, slide_theme: doc?.slide_theme }, { headers: authHeader() })
                     .then(() => setSaveStatus("saved"))
                     .catch(err => { console.error(err); setSaveStatus("idle"); });
                 }, 3000);
@@ -973,11 +1052,11 @@ export default function CommonEditor() {
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
                 setSaveStatus("Unsaved changes");
-                broadcastUpdate(newContent);
+                broadcastUpdate(newContent, selectedVersionNumber || 1);
                 broadcastTyping();
                 if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
                 saveTimerRef.current = setTimeout(() => {
-                  axios.put(`${BACKEND_URL}/documents/${id}`, { content: newContent }, { headers: authHeader() })
+                  axios.put(`${BACKEND_URL}/documents/${id}/versions/${selectedVersionNumber || 1}/content`, { content: newContent, slide_theme: doc?.slide_theme }, { headers: authHeader() })
                     .then(() => setSaveStatus("saved"))
                     .catch(err => { console.error(err); setSaveStatus("idle"); });
                 }, 1500);
@@ -1022,9 +1101,208 @@ export default function CommonEditor() {
             onPublicToggle={handlePublicToggle}
             onClose={() => setShowShare(false)}
             currentUserId={currentUserId}
+            shareToken={doc?.share_token}
           />
         )
       }
+
+      {/* Versions sidebar + New Version dialog (hidden for share-link view) */}
+      {!!id && (
+        <>
+          {/* Sidebar */}
+          {showVersionsSidebar && (
+            <div
+              style={{
+                position: "fixed",
+                left: 0,
+                top: 56,
+                bottom: 0,
+                width: 320,
+                background: "#0b0f19",
+                borderRight: "1px solid rgba(255,255,255,.08)",
+                zIndex: 55,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0" }}>Versions</div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                      Editing v{selectedVersionNumber || 1} (manual versions)
+                    </div>
+                  </div>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setShowNewVersionDialog(true)}
+                      style={{
+                        background: "linear-gradient(135deg,#3b82f6,#7c3aed)",
+                        border: "none",
+                        color: "#fff",
+                        padding: "7px 10px",
+                        borderRadius: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      New version
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+                {versions.length === 0 ? (
+                  <div style={{ color: "#64748b", fontSize: 12 }}>No versions yet.</div>
+                ) : (
+                  versions.map((v) => {
+                    const active = Number(v.version_number) === Number(selectedVersionNumber || 1);
+                    return (
+                      <button
+                        key={v._id}
+                        type="button"
+                        onClick={() => loadVersion(id, v.version_number)}
+                        style={{
+                          textAlign: "left",
+                          background: active ? "rgba(59,130,246,.12)" : "rgba(255,255,255,.03)",
+                          border: active ? "1px solid rgba(59,130,246,.35)" : "1px solid rgba(255,255,255,.06)",
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc" }}>
+                          v{v.version_number} · {v.version_label}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                          {v.created_by?.name || "Unknown"}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                          {v.createdAt ? new Date(v.createdAt).toLocaleString() : ""}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* New version dialog */}
+          {!isReadOnly && showNewVersionDialog && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 80,
+                background: "rgba(0,0,0,.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 20,
+              }}
+              onClick={(e) => e.target === e.currentTarget && setShowNewVersionDialog(false)}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 520,
+                  background: "#0b0f19",
+                  border: "1px solid rgba(255,255,255,.10)",
+                  borderRadius: 16,
+                  padding: 18,
+                  boxShadow: "0 30px 80px rgba(0,0,0,.7)",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc" }}>Create new version</div>
+                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>
+                  This will copy the current v{selectedVersionNumber || 1} into a new version. Future edits will overwrite the new version only.
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1", marginBottom: 6 }}>Commit message</div>
+                  <input
+                    value={newVersionMessage}
+                    onChange={(e) => setNewVersionMessage(e.target.value)}
+                    placeholder="e.g. Added Q2 roadmap slides"
+                    style={{
+                      width: "100%",
+                      background: "#111827",
+                      border: "1px solid rgba(255,255,255,.10)",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      color: "#e2e8f0",
+                      outline: "none",
+                      fontSize: 13,
+                    }}
+                    autoFocus
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewVersionDialog(false)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,.12)",
+                      color: "#cbd5e1",
+                      padding: "8px 12px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: 12,
+                    }}
+                    disabled={creatingVersion}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const msg = newVersionMessage.trim();
+                      if (!msg) return;
+                      setCreatingVersion(true);
+                      try {
+                        const base = Number(selectedVersionNumber || 1);
+                        const r = await axios.post(
+                          `${BACKEND_URL}/documents/${id}/versions`,
+                          { base_version_number: base, commit_message: msg },
+                          { headers: authHeader() }
+                        );
+                        setNewVersionMessage("");
+                        setShowNewVersionDialog(false);
+                        await fetchVersions(id);
+                        await loadVersion(id, r.data?.version_number || base);
+                      } catch (err) {
+                        console.error(err);
+                      } finally {
+                        setCreatingVersion(false);
+                      }
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg,#3b82f6,#7c3aed)",
+                      border: "none",
+                      color: "#fff",
+                      padding: "8px 12px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      opacity: creatingVersion ? 0.7 : 1,
+                    }}
+                    disabled={creatingVersion}
+                  >
+                    {creatingVersion ? "Creating..." : "Create version"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* ── Chat Assistant Panel ── */}
       {showChat && (

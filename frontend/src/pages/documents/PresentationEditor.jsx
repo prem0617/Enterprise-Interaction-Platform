@@ -439,21 +439,36 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const hRef = useRef([]); const hIdxRef = useRef(-1);
+  const lastLocalContentRef = useRef(null);
 
   const themeKey = (slideTheme && THEMES[slideTheme]) ? slideTheme : 'dark';
   const theme = THEMES[themeKey];
 
   /* â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   useEffect(() => {
+    // Ignore content echoes from our own local edits (prevents re-init loops)
+    if (content && content === lastLocalContentRef.current) return;
+
     try {
       if (content) {
         const p = JSON.parse(content);
-        if (p?.slides?.length) { setSlides(p.slides); return; }
+        if (p?.slides?.length) {
+          setSlides(p.slides);
+          setActiveIdx(0);
+          setSelId(null);
+          // reset undo history for externally loaded state (e.g. version switch)
+          hRef.current = [];
+          hIdxRef.current = -1;
+          setHistArr([]);
+          setHistIdx(-1);
+          return;
+        }
       }
     } catch {}
-    const t = TEMPLATE(theme);
-    setSlides(t);
-  }, []);
+
+    // Only seed a template when there's no content AND we have nothing yet.
+    setSlides((prev) => (prev?.length ? prev : TEMPLATE(theme)));
+  }, [content]);
 
   /* ── Remote Patch Listener ─────────────────────────────────────────────── */
   useEffect(() => {
@@ -496,7 +511,11 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
 
   const sync = useCallback((s, patch = null) => {
     setSlides(s);
-    if(onContentChange) onContentChange(JSON.stringify({ slides:s }));
+    if(onContentChange) {
+      const next = JSON.stringify({ slides:s });
+      lastLocalContentRef.current = next;
+      onContentChange(next);
+    }
     pushH(s);
     if(onSlideUpdate) {
       if(patch) onSlideUpdate(patch);
@@ -507,13 +526,21 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
   const undo = () => { 
     if(hIdxRef.current<=0) return; hIdxRef.current--; setHistIdx(hIdxRef.current); 
     const ns = JSON.parse(hRef.current[hIdxRef.current]); setSlides(ns); 
-    if(onContentChange) onContentChange(JSON.stringify({ slides:ns })); 
+    if(onContentChange) {
+      const next = JSON.stringify({ slides:ns });
+      lastLocalContentRef.current = next;
+      onContentChange(next);
+    }
     if(onSlideUpdate) onSlideUpdate({ type: 'SYNC_ALL', sourceSlides: ns }); 
   };
   const redo = () => { 
     if(hIdxRef.current>=hRef.current.length-1) return; hIdxRef.current++; setHistIdx(hIdxRef.current); 
     const ns = JSON.parse(hRef.current[hIdxRef.current]); setSlides(ns); 
-    if(onContentChange) onContentChange(JSON.stringify({ slides:ns })); 
+    if(onContentChange) {
+      const next = JSON.stringify({ slides:ns });
+      lastLocalContentRef.current = next;
+      onContentChange(next);
+    }
     if(onSlideUpdate) onSlideUpdate({ type: 'SYNC_ALL', sourceSlides: ns }); 
   };
 

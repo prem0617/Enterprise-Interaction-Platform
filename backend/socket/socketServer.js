@@ -734,7 +734,7 @@ io.on("connection", async (socket) => {
    * Payload: { docId, content (HTML string), version }
    * NOT echoed back to sender to avoid cursor-jump issues.
    */
-  socket.on("doc-update", ({ docId, content, version } = {}) => {
+  socket.on("doc-update", ({ docId, content, version, versionNumber } = {}) => {
     if (!docId || !socket.userId || content === undefined) return;
     // Cache the latest content so late joiners can get it via doc-request-state
     if (activeDocuments[docId]) {
@@ -745,6 +745,7 @@ io.on("connection", async (socket) => {
       docId,
       content,
       version: version || Date.now(),
+      versionNumber: versionNumber ?? null,
       senderId: socket.userId,
     });
   });
@@ -763,11 +764,12 @@ io.on("connection", async (socket) => {
   /**
    * Broadcast a granular slide patch to all OTHER users in the room.
    */
-  socket.on("doc-slide-update", ({ docId, patch } = {}) => {
+  socket.on("doc-slide-update", ({ docId, patch, versionNumber } = {}) => {
     if (!docId || !socket.userId || !patch) return;
     socket.to(`doc:${docId}`).emit("doc-slide-update", {
       docId,
       patch,
+      versionNumber: versionNumber ?? null,
       senderId: socket.userId,
     });
   });

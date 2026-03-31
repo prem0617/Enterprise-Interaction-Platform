@@ -24,6 +24,19 @@ const CollaboratorSchema = new mongoose.Schema(
     is_public:    { type: Boolean, default: false },
     share_token:  { type: String, unique: true, sparse: true },
     last_edited_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // Manual version control (v1, v2, ...)
+    version_counter: { type: Number, default: 0 },
+    versions: [
+      {
+        version_number: { type: Number, required: true },
+        version_label: { type: String, required: true }, // commit message
+        created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        content_snapshot: { type: String, default: "" },
+        slide_theme_snapshot: { type: String, default: "light" },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     created_at:   { type: Date, default: Date.now },
     updated_at:   { type: Date, default: Date.now },
   },

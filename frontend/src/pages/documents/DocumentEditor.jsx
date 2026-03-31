@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 
 // Icons
 const Ic = {
@@ -28,6 +29,10 @@ const Ic = {
 export default function DocumentEditor({ content, onContentChange, isReadOnly, docTitle, onSelectionChange }) {
   const tb = isReadOnly;
   const editorRef = useRef(null);
+  const lastRangeRef = useRef(null);
+  const [selectedImageId, setSelectedImageId] = useState(null);
+  const [selectedImageMeta, setSelectedImageMeta] = useState(null); // { x, y, w }
+  const draggingResizeRef = useRef(null);
 
   // Local active states for toolbars
   const colorRef = useRef(null);
@@ -38,6 +43,17 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
   const [showFind, setShowFind] = useState(false);
+  const [showColorPalette, setShowColorPalette] = useState(false);
+  const TEXT_COLORS = [
+    "#111827", // near-black
+    "#475569", // slate
+    "#2563eb", // blue
+    "#7c3aed", // violet
+    "#16a34a", // green
+    "#ea580c", // orange
+    "#dc2626", // red
+    "#0f766e", // teal
+  ];
 
   const isInternalChangeRef = useRef(false);
 
@@ -56,6 +72,21 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
 
   useEffect(() => {
     const handleSelection = () => {
+      // Keep last valid selection inside the editor so toolbar actions
+      // (like color picker) can still apply.
+      try {
+        const sel = window.getSelection();
+        if (
+          sel?.rangeCount > 0 &&
+          editorRef.current &&
+          editorRef.current.contains(sel.anchorNode)
+        ) {
+          lastRangeRef.current = sel.getRangeAt(0).cloneRange();
+        }
+      } catch {
+        /* ignore */
+      }
+
       if (onSelectionChange && editorRef.current) {
         onSelectionChange(window.getSelection(), editorRef);
       }
@@ -63,6 +94,18 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
     document.addEventListener("selectionchange", handleSelection);
     return () => document.removeEventListener("selectionchange", handleSelection);
   }, [onSelectionChange]);
+
+  const restoreSelection = () => {
+    try {
+      const r = lastRangeRef.current;
+      if (!r) return;
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleInput = () => {
     if (!editorRef.current || isInternalChangeRef.current || isReadOnly) return;
@@ -72,6 +115,7 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
 
   const exec = (cmd, val = null) => {
     if (isReadOnly) return;
+    restoreSelection();
     editorRef.current?.focus();
     document.execCommand(cmd, false, val);
     handleInput();
@@ -105,22 +149,156 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
+      toast.error("Please select an image file.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB.");
+      toast.error("Image must be less than 5MB.");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       editorRef.current?.focus();
-      document.execCommand("insertHTML", false, `<img src="${reader.result}" alt="${file.name}" style="max-width:100%" /><p><br></p>`);
+      const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // Wrap in a non-editable span so it can be selected/resized/removed safely.
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<span class="de-img-wrap" contenteditable="false" data-img-id="${id}" style="width:360px;max-width:100%;"><img src="${reader.result}" alt="${file.name}" /></span><p><br></p>`
+      );
       handleInput();
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   };
+
+  const clearImageSelection = () => {
+    setSelectedImageId(null);
+    setSelectedImageMeta(null);
+    try {
+      editorRef.current?.querySelectorAll?.(".de-img-wrap.de-img-selected")?.forEach((n) => {
+        n.classList.remove("de-img-selected");
+      });
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const selectImageWrap = (wrap) => {
+    if (!wrap) return;
+    const id = wrap.getAttribute("data-img-id");
+    if (!id) return;
+
+    // Remove selection class from others
+    try {
+      editorRef.current?.querySelectorAll?.(".de-img-wrap.de-img-selected")?.forEach((n) => {
+        if (n !== wrap) n.classList.remove("de-img-selected");
+      });
+    } catch {
+      /* ignore */
+    }
+
+    wrap.classList.add("de-img-selected");
+    const rect = wrap.getBoundingClientRect();
+    const w = rect.width;
+    setSelectedImageId(id);
+    setSelectedImageMeta({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8,
+      w,
+    });
+  };
+
+  const removeSelectedImage = () => {
+    if (!selectedImageId || !editorRef.current) return;
+    const wrap = editorRef.current.querySelector(`.de-img-wrap[data-img-id="${selectedImageId}"]`);
+    if (wrap) wrap.remove();
+    clearImageSelection();
+    handleInput();
+  };
+
+  const setSelectedImageWidth = (nextWidthPx) => {
+    if (!selectedImageId || !editorRef.current) return;
+    const wrap = editorRef.current.querySelector(`.de-img-wrap[data-img-id="${selectedImageId}"]`);
+    if (!wrap) return;
+    const w = Math.max(120, Math.min(900, Number(nextWidthPx) || 360));
+    wrap.style.width = `${w}px`;
+    const rect = wrap.getBoundingClientRect();
+    setSelectedImageMeta((m) =>
+      m ? { ...m, x: rect.left + rect.width / 2, y: rect.top - 8, w: rect.width } : m
+    );
+    handleInput();
+  };
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    const onClick = (ev) => {
+      if (isReadOnly) return;
+      const target = ev.target;
+      const wrap = target?.closest?.(".de-img-wrap");
+      if (wrap && el.contains(wrap)) {
+        ev.preventDefault();
+        selectImageWrap(wrap);
+        return;
+      }
+      clearImageSelection();
+    };
+
+    const onKeyDown = (ev) => {
+      if (isReadOnly) return;
+      if ((ev.key === "Delete" || ev.key === "Backspace") && selectedImageId) {
+        ev.preventDefault();
+        removeSelectedImage();
+      }
+    };
+
+    const onScrollOrResize = () => {
+      if (!selectedImageId || !el) return;
+      const wrap = el.querySelector(`.de-img-wrap[data-img-id="${selectedImageId}"]`);
+      if (!wrap) return clearImageSelection();
+      const rect = wrap.getBoundingClientRect();
+      setSelectedImageMeta({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        w: rect.width,
+      });
+    };
+
+    el.addEventListener("click", onClick);
+    el.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      el.removeEventListener("click", onClick);
+      el.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [isReadOnly, selectedImageId]);
+
+  useEffect(() => {
+    const move = (ev) => {
+      if (!draggingResizeRef.current) return;
+      const { startX, startW } = draggingResizeRef.current;
+      const dx = ev.clientX - startX;
+      setSelectedImageWidth(startW + dx);
+    };
+    const up = () => {
+      draggingResizeRef.current = null;
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    if (draggingResizeRef.current) {
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    }
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [selectedImageId]);
 
   // Export handling
   useEffect(() => {
@@ -259,14 +437,71 @@ ${html}
           <button className="de-tb-btn" title="Underline (Ctrl+U)" disabled={tb} onClick={() => exec("underline")}>{Ic.under}</button>
           <button className="de-tb-btn" title="Strikethrough" disabled={tb} onClick={() => exec("strikeThrough")}>{Ic.strike}</button>
         </div>
-        {/* Text color */}
+        {/* Text color (palette) */}
         <div className="de-tb-group">
-          <div className="de-color-wrap" title="Text color" style={{ opacity: tb ? .35 : 1, cursor: tb ? "not-allowed" : "pointer", flexDirection: "column", gap: 1 }}
-            onClick={() => !tb && colorRef.current?.click()}>
-            <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1, color: "#cbd5e1", fontFamily: "Inter,sans-serif" }}>A</span>
-            <div className="de-color-swatch" style={{ background: textColor }} />
-            <input ref={colorRef} type="color" style={{ display: "none" }} value={textColor}
-              onChange={e => { setTextColor(e.target.value); exec("foreColor", e.target.value); }} />
+          <div style={{ position: "relative", opacity: tb ? 0.35 : 1 }}>
+            <button
+              type="button"
+              disabled={tb}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => !tb && setShowColorPalette((v) => !v)}
+              className="de-tb-btn"
+              title="Text color"
+              style={{ padding: "0 6px", gap: 4 }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1, color: "#cbd5e1", fontFamily: "Inter,sans-serif" }}>A</span>
+              <span
+                style={{
+                  width: 14,
+                  height: 4,
+                  borderRadius: 999,
+                  background: textColor,
+                  border: "1px solid rgba(15,23,42,.6)",
+                }}
+              />
+            </button>
+            {showColorPalette && !tb && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "110%",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#020617",
+                  borderRadius: 8,
+                  border: "1px solid rgba(148,163,184,.4)",
+                  padding: "6px 8px",
+                  boxShadow: "0 10px 30px rgba(0,0,0,.6)",
+                  display: "flex",
+                  gap: 6,
+                  zIndex: 50,
+                }}
+              >
+                {TEXT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setTextColor(c);
+                      exec("foreColor", c);
+                      setShowColorPalette(false);
+                    }}
+                    title={c}
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 5,
+                      background: c,
+                      border: c === textColor ? "2px solid #e2e8f0" : "1px solid rgba(255,255,255,.18)",
+                      boxShadow: c === textColor ? "0 0 0 1px rgba(59,130,246,.45)" : "none",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
         {/* Alignment */}
@@ -335,6 +570,80 @@ ${html}
             onInput={handleInput}
             spellCheck
           />
+
+          {/* Selected image controls */}
+          {!isReadOnly && selectedImageId && selectedImageMeta && (
+            <div
+              style={{
+                position: "fixed",
+                left: selectedImageMeta.x,
+                top: selectedImageMeta.y,
+                transform: "translate(-50%, -100%)",
+                zIndex: 200,
+                background: "#0f172a",
+                border: "1px solid #334155",
+                borderRadius: 10,
+                padding: "8px 10px",
+                boxShadow: "0 10px 30px rgba(0,0,0,.4)",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>
+                Image
+              </span>
+              <input
+                type="range"
+                min="120"
+                max="900"
+                value={Math.round(selectedImageMeta.w || 360)}
+                onChange={(e) => setSelectedImageWidth(e.target.value)}
+                style={{ width: 140 }}
+                title="Resize"
+              />
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const wrap = editorRef.current?.querySelector(`.de-img-wrap[data-img-id="${selectedImageId}"]`);
+                  const rect = wrap?.getBoundingClientRect();
+                  draggingResizeRef.current = { startX: e.clientX, startW: rect?.width || selectedImageMeta.w || 360 };
+                }}
+                style={{
+                  background: "rgba(59,130,246,.12)",
+                  border: "1px solid rgba(59,130,246,.35)",
+                  color: "#93c5fd",
+                  padding: "4px 8px",
+                  borderRadius: 8,
+                  cursor: "nwse-resize",
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}
+                title="Drag to resize"
+              >
+                Resize
+              </button>
+              <button
+                type="button"
+                onClick={removeSelectedImage}
+                style={{
+                  background: "rgba(239,68,68,.12)",
+                  border: "1px solid rgba(239,68,68,.35)",
+                  color: "#fca5a5",
+                  padding: "4px 8px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}
+                title="Remove image"
+              >
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

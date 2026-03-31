@@ -336,6 +336,7 @@ function timeAgo(dateStr) {
 
 function DocCard({ doc, navigate, isMine, onDelete }) {
   const preview = doc.content ? doc.content.replace(/<[^>]+>/g, "").slice(0, 300) : null;
+  const vnum = doc.version_counter || (Array.isArray(doc.versions) && doc.versions.length ? Math.max(...doc.versions.map(v => v.version_number || 0)) : 1) || 1;
   
   const getDocTypeIcon = () => {
     switch (doc.doc_type) {
@@ -373,6 +374,9 @@ function DocCard({ doc, navigate, isMine, onDelete }) {
         </div>
         <div className="dp-card-meta">
           <span>{timeAgo(doc.updated_at)}</span>
+          <span className="dp-badge" style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.2)" }}>
+            v{vnum}
+          </span>
           {isMine && <><div className="dp-card-dot" /><span className="dp-badge dp-badge-mine">Mine</span></>}
           {doc.is_public && <><div className="dp-card-dot" /><span className="dp-badge dp-badge-public">Public</span></>}
 

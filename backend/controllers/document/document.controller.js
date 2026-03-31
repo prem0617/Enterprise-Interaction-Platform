@@ -28,6 +28,27 @@ function isOwnerOrAdmin(doc, userId, req) {
   return idStr(doc.owner) === String(userId) || req.user?.user_type === "admin";
 }
 
+async function ensureDocV1Exists(doc, userIdForCreatedBy) {
+  if (!doc) return doc;
+  if (Array.isArray(doc.versions) && doc.versions.length > 0) return doc;
+
+  const createdBy = userIdForCreatedBy || doc.owner;
+  doc.version_counter = Math.max(1, Number(doc.version_counter || 0));
+  if (doc.version_counter === 0) doc.version_counter = 1;
+  doc.versions = [
+    {
+      version_number: 1,
+      version_label: "Initial (v1)",
+      created_by: createdBy,
+      content_snapshot: doc.content || "",
+      slide_theme_snapshot: doc.slide_theme || "light",
+      createdAt: new Date(),
+    },
+  ];
+  await doc.save();
+  return doc;
+}
+
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 export const createDocument = async (req, res) => {
@@ -39,11 +60,24 @@ export const createDocument = async (req, res) => {
       title: title || "Untitled document",
       content: content || "",
       doc_type: ["doc", "sheet", "slide"].includes(doc_type) ? doc_type : "doc",
+      slide_theme: "light",
       owner,
       is_public: !!is_public,
       collaborators: [],
     });
 
+    await doc.save();
+    // Default v1 (manual versioning baseline)
+    doc.version_counter = 1;
+    doc.versions = [
+      {
+        version_number: 1,
+        version_label: "Initial (v1)",
+        created_by: owner,
+        content_snapshot: doc.content || "",
+        slide_theme_snapshot: doc.slide_theme || "light",
+      },
+    ];
     await doc.save();
     await doc.populate("owner", "first_name last_name email profile_picture");
     res.status(201).json(doc);
@@ -94,7 +128,7 @@ export const getDocumentById = async (req, res) => {
     const { id } = req.params;
     const userId = getUid(req);
 
-    const doc = await Document.findById(id)
+    let doc = await Document.findById(id)
       .populate("owner", "first_name last_name email profile_picture")
       .populate("collaborators.user", "first_name last_name email profile_picture")
       .populate("last_edited_by", "first_name last_name email profile_picture")
@@ -102,6 +136,17 @@ export const getDocumentById = async (req, res) => {
 
     if (!doc) return res.status(404).json({ error: "Document not found" });
     if (!canRead(doc, userId)) return res.status(403).json({ error: "Access denied" });
+
+    // Backward compatibility: ensure v1 exists for legacy docs
+    if (!Array.isArray(doc.versions) || doc.versions.length === 0) {
+      const mutable = await Document.findById(id);
+      await ensureDocV1Exists(mutable, userId);
+      doc = await Document.findById(id)
+        .populate("owner", "first_name last_name email profile_picture")
+        .populate("collaborators.user", "first_name last_name email profile_picture")
+        .populate("last_edited_by", "first_name last_name email profile_picture")
+        .lean();
+    }
 
     const isOwnerFlag = String(doc.owner?._id ?? doc.owner) === String(userId);
     const collab = (doc.collaborators || []).find(
@@ -429,6 +474,156 @@ export const autoSaveDocument = async (req, res) => {
     res.json({ success: true, updated_at: doc.updated_at });
   } catch (err) {
     console.error("autoSaveDocument:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Manual versions (list / load / create / save) ───────────────────────────
+
+export const getDocumentVersions = async (req, res) => {
+  try {
+    const userId = getUid(req);
+    const doc = await Document.findById(req.params.id).populate(
+      "versions.created_by",
+      "first_name last_name email"
+    );
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canRead(doc, userId)) return res.status(403).json({ error: "Access denied" });
+    await ensureDocV1Exists(doc, userId);
+
+    const versions = [...(doc.versions || [])]
+      .sort((a, b) => b.version_number - a.version_number)
+      .map((v) => ({
+        _id: v._id,
+        version_number: v.version_number,
+        version_label: v.version_label,
+        createdAt: v.createdAt,
+        created_by: v.created_by
+          ? {
+              _id: v.created_by._id,
+              name:
+                `${v.created_by.first_name || ""} ${v.created_by.last_name || ""}`.trim() ||
+                v.created_by.email ||
+                "Unknown",
+              email: v.created_by.email,
+            }
+          : null,
+      }));
+
+    res.json({ versions });
+  } catch (err) {
+    console.error("getDocumentVersions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getDocumentVersionSnapshot = async (req, res) => {
+  try {
+    const userId = getUid(req);
+    const versionNumber = Number(req.params.versionNumber);
+    if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+      return res.status(400).json({ error: "Invalid version number" });
+    }
+
+    const doc = await Document.findById(req.params.id).populate(
+      "versions.created_by",
+      "first_name last_name email"
+    );
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canRead(doc, userId)) return res.status(403).json({ error: "Access denied" });
+    await ensureDocV1Exists(doc, userId);
+
+    const v = (doc.versions || []).find((x) => Number(x.version_number) === versionNumber);
+    if (!v) return res.status(404).json({ error: "Version not found" });
+
+    res.json({
+      version_number: v.version_number,
+      version_label: v.version_label,
+      createdAt: v.createdAt,
+      content: v.content_snapshot ?? "",
+      slide_theme: v.slide_theme_snapshot ?? doc.slide_theme ?? "light",
+    });
+  } catch (err) {
+    console.error("getDocumentVersionSnapshot:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const createDocumentVersion = async (req, res) => {
+  try {
+    const userId = getUid(req);
+    const baseVersionNumber = Number(req.body?.base_version_number || 1);
+    const commitMessage = String(req.body?.commit_message || "").trim();
+    if (!commitMessage) return res.status(400).json({ error: "Commit message is required" });
+
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canWrite(doc, userId)) {
+      return res.status(403).json({ error: "You have read-only access to this document" });
+    }
+    await ensureDocV1Exists(doc, userId);
+
+    const base = (doc.versions || []).find((v) => Number(v.version_number) === baseVersionNumber);
+    if (!base) return res.status(404).json({ error: "Base version not found" });
+
+    const nextVersion = Math.max(1, Number(doc.version_counter || 1)) + 1;
+    doc.version_counter = nextVersion;
+    doc.versions.push({
+      version_number: nextVersion,
+      version_label: commitMessage,
+      created_by: userId,
+      content_snapshot: base.content_snapshot ?? "",
+      slide_theme_snapshot: base.slide_theme_snapshot ?? doc.slide_theme ?? "light",
+    });
+    doc.last_edited_by = userId;
+    await doc.save();
+
+    res.status(201).json({
+      success: true,
+      version_number: nextVersion,
+      version_label: commitMessage,
+      base_version_number: baseVersionNumber,
+      createdAt: new Date(),
+    });
+  } catch (err) {
+    console.error("createDocumentVersion:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const saveDocumentVersionContent = async (req, res) => {
+  try {
+    const userId = getUid(req);
+    const versionNumber = Number(req.params.versionNumber);
+    if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+      return res.status(400).json({ error: "Invalid version number" });
+    }
+    const { content, slide_theme } = req.body || {};
+
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canWrite(doc, userId)) {
+      return res.status(403).json({ error: "You have read-only access to this document" });
+    }
+    await ensureDocV1Exists(doc, userId);
+
+    const v = (doc.versions || []).find((x) => Number(x.version_number) === versionNumber);
+    if (!v) return res.status(404).json({ error: "Version not found" });
+
+    if (content !== undefined) {
+      v.content_snapshot = content;
+      doc.content = content; // keep top-level in sync
+      doc.last_edited_by = userId;
+    }
+    if (slide_theme !== undefined) {
+      v.slide_theme_snapshot = slide_theme;
+      doc.slide_theme = slide_theme; // keep top-level in sync
+    }
+
+    await doc.save();
+    res.json({ success: true, updated_at: doc.updated_at, version_number: versionNumber });
+  } catch (err) {
+    console.error("saveDocumentVersionContent:", err);
     res.status(500).json({ error: err.message });
   }
 };
