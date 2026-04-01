@@ -26,7 +26,7 @@ const Ic = {
   print: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>,
 };
 
-export default function DocumentEditor({ content, onContentChange, isReadOnly, docTitle, onSelectionChange }) {
+export default function DocumentEditor({ content, onContentChange, isReadOnly, docTitle, onSelectionChange, onUploadImage }) {
   const tb = isReadOnly;
   const editorRef = useRef(null);
   const lastRangeRef = useRef(null);
@@ -156,19 +156,26 @@ export default function DocumentEditor({ content, onContentChange, isReadOnly, d
       toast.error("Image must be less than 5MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      editorRef.current?.focus();
-      const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      // Wrap in a non-editable span so it can be selected/resized/removed safely.
-      document.execCommand(
-        "insertHTML",
-        false,
-        `<span class="de-img-wrap" contenteditable="false" data-img-id="${id}" style="width:360px;max-width:100%;"><img src="${reader.result}" alt="${file.name}" /></span><p><br></p>`
-      );
-      handleInput();
-    };
-    reader.readAsDataURL(file);
+    (async () => {
+      try {
+        const url = onUploadImage ? await onUploadImage(file) : null;
+        if (!url) {
+          toast.error("Image upload failed");
+          return;
+        }
+        editorRef.current?.focus();
+        const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        document.execCommand(
+          "insertHTML",
+          false,
+          `<span class="de-img-wrap" contenteditable="false" data-img-id="${id}" style="width:360px;max-width:100%;"><img src="${url}" alt="${file.name}" /></span><p><br></p>`
+        );
+        handleInput();
+      } catch (err) {
+        console.error(err);
+        toast.error("Image upload failed");
+      }
+    })();
     e.target.value = "";
   };
 

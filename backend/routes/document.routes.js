@@ -10,6 +10,8 @@ import {
   getDocumentVersionSnapshot,
   createDocumentVersion,
   saveDocumentVersionContent,
+  uploadDocumentImageMiddleware,
+  uploadDocumentImage,
   getCollaborators,
   addCollaborator,
   updateCollaboratorAccess,
@@ -40,6 +42,7 @@ router.get("/:id/versions", getDocumentVersions);
 router.get("/:id/versions/:versionNumber", getDocumentVersionSnapshot);
 router.post("/:id/versions", createDocumentVersion);
 router.put("/:id/versions/:versionNumber/content", saveDocumentVersionContent);
+router.post("/:id/images", uploadDocumentImageMiddleware, uploadDocumentImage);
 router.get("/:id",   getDocumentById);
 router.put("/:id",   updateDocument);
 router.patch("/:id", autoSaveDocument);

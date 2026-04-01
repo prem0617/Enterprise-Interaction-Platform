@@ -51,6 +51,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   History,
+  Sparkles,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -427,6 +428,7 @@ function DrawingCanvas({
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
   const dragOffset = useRef({ x: 0, y: 0 });
+  const resizeStateRef = useRef(null); // { id, handle, sx, sy, ox, oy, ow, oh }
 
   // Text input (null | { x, y } for new, or { x, y, id, initialText } for edit)
   const [textInput, setTextInput] = useState(null);
@@ -552,6 +554,35 @@ function DrawingCanvas({
           }
         } else {
           ctx.strokeRect((sel.x || 0) - 4, (sel.y || 0) - 4, (sel.w || 200) + 8, (sel.h || 30) + 8);
+
+          // Resize handles for shape/text (not for connector/line/arrow/pen)
+          const canResize =
+            sel.tool === TOOLS.RECT ||
+            sel.tool === TOOLS.ELLIPSE ||
+            sel.tool === TOOLS.TEXT;
+          if (canResize) {
+            const x = sel.x || 0;
+            const y = sel.y || 0;
+            const w = sel.w || 200;
+            const h = sel.h || 30;
+            const size = 8 / c.zoom;
+            const hs = [
+              { k: "nw", x: x, y: y },
+              { k: "ne", x: x + w, y: y },
+              { k: "sw", x: x, y: y + h },
+              { k: "se", x: x + w, y: y + h },
+            ];
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "#6366f1";
+            ctx.lineWidth = 2 / c.zoom;
+            hs.forEach((p) => {
+              ctx.beginPath();
+              ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+              ctx.fill();
+              ctx.stroke();
+            });
+          }
         }
         ctx.restore();
       }
@@ -563,7 +594,7 @@ function DrawingCanvas({
       const connFrom = els.find((e) => e.id === connFromId);
       if (connFrom) {
         ctx.save();
-        ctx.strokeStyle = "#22c55e";
+        ctx.strokeStyle = "#93c5fd";
         ctx.lineWidth = 2 / c.zoom;
         ctx.setLineDash([4 / c.zoom, 4 / c.zoom]);
         if (connFrom.tool === TOOLS.PEN && connFrom.points?.length) {
@@ -677,6 +708,10 @@ function DrawingCanvas({
   // ─── Keyboard shortcuts ────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't hijack keys while user is typing (e.g. AI Diagram dialog input)
+      const t = e.target;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
       if (textInput) return;
       if (e.code === "Space") { spaceDown.current = true; updateCursor(toolRef.current, false); e.preventDefault(); }
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); handleUndo(); }
@@ -699,6 +734,9 @@ function DrawingCanvas({
       if (e.key === "e" || e.key === "9") setTool(TOOLS.ERASER);
     };
     const handleKeyUp = (e) => {
+      const t = e.target;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
       if (e.code === "Space") { spaceDown.current = false; updateCursor(toolRef.current, isPanning.current); }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -763,6 +801,53 @@ function DrawingCanvas({
 
     if (activeTool === TOOLS.SELECT) {
       const els = elementsRef.current;
+
+      // If clicking a resize handle on the currently selected element, start resize.
+      if (selectedIdRef.current) {
+        const sel = els.find((el) => el.id === selectedIdRef.current);
+        const canResize =
+          sel &&
+          (sel.tool === TOOLS.RECT || sel.tool === TOOLS.ELLIPSE || sel.tool === TOOLS.TEXT);
+        if (canResize) {
+          const rx = sel.x || 0;
+          const ry = sel.y || 0;
+          const rw = sel.w ?? 200;
+          const rh = sel.h ?? 30;
+          const x = Math.min(rx, rx + rw);
+          const y = Math.min(ry, ry + rh);
+          const w = Math.abs(rw);
+          const h = Math.abs(rh);
+          const handleSize = 10 / cameraRef.current.zoom;
+          const handles = [
+            { k: "nw", x: x, y: y },
+            { k: "ne", x: x + w, y: y },
+            { k: "sw", x: x, y: y + h },
+            { k: "se", x: x + w, y: y + h },
+          ];
+          const hit = handles.find(
+            (p) =>
+              Math.abs(wx - p.x) <= handleSize / 2 &&
+              Math.abs(wy - p.y) <= handleSize / 2
+          );
+          if (hit) {
+            pushUndo();
+            resizeStateRef.current = {
+              id: sel.id,
+              handle: hit.k,
+              // normalized start box (always positive w/h)
+              sx: wx,
+              sy: wy,
+              x,
+              y,
+              w,
+              h,
+            };
+            isDrawing.current = true;
+            return;
+          }
+        }
+      }
+
       let found = null;
       for (let i = els.length - 1; i >= 0; i--) {
         if (hitTest(wx, wy, els[i], els)) { found = els[i]; break; }
@@ -831,6 +916,38 @@ function DrawingCanvas({
 
     if (!isDrawing.current) return;
 
+    // Resizing selected shape/text
+    if (activeTool === TOOLS.SELECT && resizeStateRef.current) {
+      const st = resizeStateRef.current;
+      const minSize = 20;
+      let left = st.x;
+      let top = st.y;
+      let right = st.x + st.w;
+      let bottom = st.y + st.h;
+
+      // Drag the active corner
+      if (st.handle.includes("w")) left = wx;
+      if (st.handle.includes("e")) right = wx;
+      if (st.handle.includes("n")) top = wy;
+      if (st.handle.includes("s")) bottom = wy;
+
+      // Normalize + enforce min size
+      if (right < left) [left, right] = [right, left];
+      if (bottom < top) [top, bottom] = [bottom, top];
+      if (right - left < minSize) right = left + minSize;
+      if (bottom - top < minSize) bottom = top + minSize;
+
+      const nx = left;
+      const ny = top;
+      const nw = right - left;
+      const nh = bottom - top;
+      const updated = elementsRef.current.map((el) =>
+        el.id === st.id ? { ...el, x: nx, y: ny, w: nw, h: nh } : el
+      );
+      onElementsChange(updated);
+      return;
+    }
+
     // Dragging a selected element (connectors are anchored, skip drag)
     if (activeTool === TOOLS.SELECT && selectedIdRef.current) {
       const sel = elementsRef.current.find((e) => e.id === selectedIdRef.current);
@@ -869,6 +986,32 @@ function DrawingCanvas({
     const activeTool = toolRef.current;
     const els = elementsRef.current;
 
+    // Double-click on a shape (RECT/ELLIPSE) in SELECT → edit its label (stored on shape, moves with it)
+    if (activeTool === TOOLS.SELECT) {
+      let foundShape = null;
+      for (let i = els.length - 1; i >= 0; i--) {
+        const el = els[i];
+        if (el.tool !== TOOLS.RECT && el.tool !== TOOLS.ELLIPSE) continue;
+        if (hitTest(wx, wy, el, els)) { foundShape = el; break; }
+      }
+      if (foundShape) {
+        const x0 = Math.min(foundShape.x || 0, (foundShape.x || 0) + (foundShape.w || 0));
+        const y0 = Math.min(foundShape.y || 0, (foundShape.y || 0) + (foundShape.h || 0));
+        const w0 = Math.abs(foundShape.w || 0);
+        const h0 = Math.abs(foundShape.h || 0);
+        setSelectedId(foundShape.id);
+        setTextInput({
+          mode: "label",
+          id: foundShape.id,
+          x: x0 + w0 / 2,
+          y: y0 + h0 / 2,
+          initialText: foundShape.label || "",
+        });
+        e.preventDefault();
+        return;
+      }
+    }
+
     // Double-click on existing TEXT element → edit it
     if (activeTool === TOOLS.SELECT || activeTool === TOOLS.TEXT) {
       let found = null;
@@ -905,8 +1048,9 @@ function DrawingCanvas({
       return;
     }
 
-    if (toolRef.current === TOOLS.SELECT && isDrawing.current && selectedIdRef.current) {
+    if (toolRef.current === TOOLS.SELECT && isDrawing.current && (selectedIdRef.current || resizeStateRef.current)) {
       isDrawing.current = false;
+      resizeStateRef.current = null;
       return;
     }
 
@@ -959,7 +1103,13 @@ function DrawingCanvas({
   // ─── Commit text ──────────────────────────────────────────
   const commitText = useCallback((text) => {
     const els = elementsRef.current;
-    if (textInput?.id) {
+    if (textInput?.id && textInput?.mode === "label") {
+      pushUndo();
+      const updated = els.map((el) =>
+        el.id === textInput.id ? { ...el, label: text?.trim() || "" } : el
+      );
+      onElementsChange(updated);
+    } else if (textInput?.id) {
       // Edit mode: update existing text element
       pushUndo();
       const updated = els.map((el) =>
@@ -1171,6 +1321,8 @@ function DrawingCanvas({
             left: textInput.x * cameraRef.current.zoom + cameraRef.current.x,
             top: textInput.y * cameraRef.current.zoom + cameraRef.current.y,
             fontSize: 16 * cameraRef.current.zoom,
+            transform: textInput.mode === "label" ? "translate(-50%, -50%)" : undefined,
+            textAlign: textInput.mode === "label" ? "center" : undefined,
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -1253,6 +1405,9 @@ export default function WhiteboardModule({ isVisible = true }) {
   const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
   const [newVersionMessage, setNewVersionMessage] = useState("");
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [showAIDiagram, setShowAIDiagram] = useState(false);
+  const [aiDiagramPrompt, setAiDiagramPrompt] = useState("");
+  const [aiDiagramLoading, setAiDiagramLoading] = useState(false);
 
   const saveTimerRef = useRef(null);
   const isRemoteRef = useRef(false);
@@ -1576,6 +1731,37 @@ export default function WhiteboardModule({ isVisible = true }) {
     });
   }, [socket, activeWhiteboard, user, getDisplayName]);
 
+  const runAIDiagram = useCallback(async () => {
+    if (!activeWhiteboard?._id) return;
+    const prompt = aiDiagramPrompt.trim();
+    if (!prompt) return toast.error("Please describe the diagram you want.");
+    setAiDiagramLoading(true);
+    try {
+      const { data } = await axios.post(
+        `${BACKEND_URL}/ai/whiteboards/${activeWhiteboard._id}/diagram`,
+        {
+          instruction: prompt,
+          elements,
+          canvas_state: displayCanvasState,
+        },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      const nextElements = Array.isArray(data?.elements) ? data.elements : [];
+      const nextCanvas = data?.canvas_state && typeof data.canvas_state === "object" ? data.canvas_state : {};
+
+      setDisplayCanvasState(nextCanvas);
+      handleElementsChange(nextElements); // emits socket + triggers save pipeline
+      toast.success("AI diagram applied");
+      setShowAIDiagram(false);
+      setAiDiagramPrompt("");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "AI diagram failed");
+    } finally {
+      setAiDiagramLoading(false);
+    }
+  }, [activeWhiteboard?._id, aiDiagramPrompt, displayCanvasState, elements, handleElementsChange, token]);
+
   // ─── Helpers ──────────────────────────────────────────
   const handleArchive = async (id, e) => {
     e?.stopPropagation();
@@ -1854,6 +2040,18 @@ export default function WhiteboardModule({ isVisible = true }) {
                     : "Only you"}
                 </span>
               </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-zinc-700 text-zinc-200 hover:bg-zinc-800"
+                onClick={() => setShowAIDiagram(true)}
+                disabled={!activeWhiteboard?._id}
+                title="Generate/update diagram with AI (returns JSON)"
+              >
+                <Sparkles className="h-4 w-4 mr-1 text-indigo-300" />
+                AI Diagram
+              </Button>
             </div>
           </div>
 
@@ -2075,6 +2273,52 @@ export default function WhiteboardModule({ isVisible = true }) {
               disabled={creatingVersion}
             >
               {creatingVersion ? "Creating..." : "Create version"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAIDiagram} onOpenChange={(v) => { setShowAIDiagram(v); if (!v) setAiDiagramLoading(false); }}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-indigo-300" />
+              AI Diagram
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Describe the diagram you want. AI will return <span className="text-zinc-200 font-mono">JSON</span> in the same format this canvas renders.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-zinc-300">Instruction</label>
+            <Input
+              value={aiDiagramPrompt}
+              onChange={(e) => setAiDiagramPrompt(e.target.value)}
+              placeholder='e.g. "Create a flowchart: Login → Dashboard → Settings, with decision node for Auth"'
+              className="bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500"
+              autoFocus
+              onKeyDown={(e) => e.key === "Enter" && runAIDiagram()}
+              disabled={aiDiagramLoading}
+            />
+            <p className="text-[11px] text-zinc-500">
+              Tip: say “use rectangles for steps, diamonds for decisions, connect with arrows”.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowAIDiagram(false)}
+              className="text-zinc-300"
+              disabled={aiDiagramLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={runAIDiagram}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+              disabled={aiDiagramLoading || !aiDiagramPrompt.trim()}
+            >
+              {aiDiagramLoading ? "Generating..." : "Apply diagram"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,5 +1,7 @@
 import Document from "../../models/Document.js";
 import User from "../../models/User.js";
+import multer from "multer";
+import { cloudinary } from "../../config/cloudinary.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -625,5 +627,49 @@ export const saveDocumentVersionContent = async (req, res) => {
   } catch (err) {
     console.error("saveDocumentVersionContent:", err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Document image upload (Cloudinary) ───────────────────────────────────────
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype?.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"), false);
+  },
+});
+
+export const uploadDocumentImageMiddleware = imageUpload.single("file");
+
+export const uploadDocumentImage = async (req, res) => {
+  try {
+    const userId = getUid(req);
+    const { id } = req.params;
+    const doc = await Document.findById(id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    if (!canWrite(doc, userId)) {
+      return res.status(403).json({ error: "You have read-only access to this document" });
+    }
+    if (!req.file?.buffer) return res.status(400).json({ error: "No file uploaded" });
+
+    const b64 = req.file.buffer.toString("base64");
+    const dataUri = `data:${req.file.mimetype};base64,${b64}`;
+    const uploadRes = await cloudinary.uploader.upload(dataUri, {
+      folder: `documents/${doc._id}/images`,
+      resource_type: "image",
+      transformation: [{ quality: "auto", fetch_format: "auto" }],
+    });
+
+    return res.status(201).json({
+      success: true,
+      url: uploadRes.secure_url,
+      public_id: uploadRes.public_id,
+      width: uploadRes.width,
+      height: uploadRes.height,
+    });
+  } catch (err) {
+    console.error("uploadDocumentImage:", err);
+    return res.status(500).json({ error: err.message });
   }
 };

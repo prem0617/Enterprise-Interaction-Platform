@@ -425,7 +425,7 @@ function TB({ children, onClick, disabled, title, danger, active, label }) {
 function Div() { return <div style={{ width:1,height:16,background:'#161d2c',margin:'0 2px',flexShrink:0 }}/>; }
 
 /* â•â• MAIN COMPONENT â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-export default function PresentationEditor({ content, onContentChange, isReadOnly, slideTheme, onThemeChange, remotePatch, onSlideUpdate }) {
+export default function PresentationEditor({ content, onContentChange, isReadOnly, slideTheme, onThemeChange, remotePatch, onSlideUpdate, onUploadImage }) {
   const [slides, setSlides] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [selId, setSelId] = useState(null);
@@ -649,13 +649,18 @@ export default function PresentationEditor({ content, onContentChange, isReadOnl
   const handleImg = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      // center the image on the slide
-      addEl(mkImage(ev.target.result, 160, 100, 400, 280));
-    };
-    reader.onerror = () => console.error('Failed to read image');
-    reader.readAsDataURL(file);
+    (async () => {
+      try {
+        const url = onUploadImage ? await onUploadImage(file) : null;
+        if (!url) {
+          console.error("Image upload failed");
+          return;
+        }
+        addEl(mkImage(url, 160, 100, 400, 280));
+      } catch (err) {
+        console.error("Image upload failed", err);
+      }
+    })();
     // reset so same file can be re-uploaded
     e.target.value = '';
   };

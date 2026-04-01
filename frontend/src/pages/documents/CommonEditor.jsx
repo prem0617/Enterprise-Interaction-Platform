@@ -571,11 +571,46 @@ export default function CommonEditor() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
   const [askAIPopover, setAskAIPopover] = useState({ show: false, x: 0, y: 0, text: "" });
+  const lastSelectionRef = useRef(null); // { range, editorRef, text }
+  const lastEditorRef = useRef(null); // editorRef passed from DocumentEditor
+  const editAiCloseTimerRef = useRef(null);
+  const [editAIPopover, setEditAIPopover] = useState({
+    show: false,
+    open: false,
+    x: 0,
+    y: 0,
+    text: "",
+    prompt: "",
+    loading: false,
+  });
+
+  const openEditAi = useCallback(() => {
+    if (editAiCloseTimerRef.current) clearTimeout(editAiCloseTimerRef.current);
+    editAiCloseTimerRef.current = null;
+    setEditAIPopover((p) => ({ ...p, open: true }));
+  }, []);
+
+  const closeEditAiWithDelay = useCallback((delayMs = 220) => {
+    if (editAiCloseTimerRef.current) clearTimeout(editAiCloseTimerRef.current);
+    editAiCloseTimerRef.current = setTimeout(() => {
+      setEditAIPopover((p) => ({ ...p, open: false }));
+    }, delayMs);
+  }, []);
 
 
   const isReadOnly = myAccess === "read";
   const isOwner = myAccess === "owner";
   const tb = isReadOnly;
+
+  const uploadImageToDoc = useCallback(async (file) => {
+    if (!id) throw new Error("Missing document id");
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await axios.post(`${BACKEND_URL}/documents/${id}/images`, fd, {
+      headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
+    });
+    return r.data?.url;
+  }, [id]);
 
   const fetchVersions = useCallback(async (docId) => {
     if (!docId || token) return; // share link is read-only and version UI is hidden
@@ -735,13 +770,27 @@ export default function CommonEditor() {
   };
 
   const handleSelection = useCallback((selection, editorRef) => {
+    if (editorRef?.current) lastEditorRef.current = editorRef;
+
+    // If AI edit popover is open, don't let selection changes outside the editor
+    // wipe out our cached selection (clicking the textarea would otherwise do that).
+    if (
+      editAIPopover.open &&
+      lastSelectionRef.current?.range &&
+      (!selection || !editorRef?.current?.contains?.(selection?.anchorNode))
+    ) {
+      return;
+    }
+
     if (!selection || selection.isCollapsed || !editorRef.current) {
       setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+      setEditAIPopover((p) => ({ ...p, show: false }));
       return;
     }
 
     if (!editorRef.current.contains(selection.anchorNode)) {
       setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+      setEditAIPopover((p) => ({ ...p, show: false }));
       return;
     }
 
@@ -749,14 +798,36 @@ export default function CommonEditor() {
     if (text.length > 0) {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      let selectionHtml = "";
+      try {
+        const div = document.createElement("div");
+        div.appendChild(range.cloneContents());
+        selectionHtml = div.innerHTML;
+      } catch {
+        selectionHtml = "";
+      }
       setAskAIPopover({
         show: true,
         x: rect.left + rect.width / 2,
         y: rect.top - 10,
         text
       });
+      lastSelectionRef.current = {
+        range: range.cloneRange(),
+        editorRef,
+        text,
+        html: selectionHtml,
+      };
+      setEditAIPopover((p) => ({
+        ...p,
+        show: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 10,
+        text,
+      }));
     } else {
       setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
+      setEditAIPopover((p) => ({ ...p, show: false }));
     }
   }, []);
 
@@ -786,6 +857,78 @@ export default function CommonEditor() {
     setAskAIPopover({ show: false, x: 0, y: 0, text: "" });
     askQuestion(`Explain this from the document:\n"${selText}"`);
   };
+
+  const applyEditedSelection = useCallback((newHtml) => {
+    const info = lastSelectionRef.current;
+    if (!info?.range || !info?.editorRef?.current) return;
+    try {
+      info.editorRef.current.focus();
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(info.range);
+      document.execCommand("insertHTML", false, String(newHtml || ""));
+      setEditAIPopover((p) => ({ ...p, show: false, open: false, prompt: "" }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      // Ensure we persist to state/save pipeline
+      try {
+        const html = info.editorRef.current.innerHTML;
+        handleContentChange(html);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [handleContentChange]);
+
+  const runAiEdit = useCallback(async (mode) => {
+    if (isReadOnly || !id) return;
+    const prompt = String(editAIPopover.prompt || "").trim();
+    if (!prompt) return;
+
+    const info = lastSelectionRef.current;
+    const editorHtml = info?.editorRef?.current?.innerHTML ?? lastEditorRef.current?.current?.innerHTML ?? doc?.content ?? "";
+
+    setEditAIPopover((p) => ({ ...p, loading: true }));
+    try {
+      const res = await axios.post(
+        `${BACKEND_URL}/ai/documents/${id}/edit`,
+        mode === "selection"
+          ? {
+              mode: "selection",
+              instruction: prompt,
+              selection_text: info?.text || editAIPopover.text || "",
+              selection_html: info?.html || "",
+              version_number: selectedVersionNumber || 1,
+            }
+          : {
+              mode: "document",
+              instruction: prompt,
+              full_html: editorHtml,
+              version_number: selectedVersionNumber || 1,
+            },
+        { headers: authHeader() }
+      );
+
+      if (mode === "selection") {
+        const editedHtml = String(res.data?.edited_html ?? "");
+        if (!editedHtml.trim()) throw new Error("Empty edit result");
+        applyEditedSelection(editedHtml);
+        toast.success("Applied AI edit to selection");
+      } else {
+        const editedHtml = String(res.data?.edited_html ?? "");
+        if (!editedHtml.trim()) throw new Error("Empty edit result");
+        setEditAIPopover((p) => ({ ...p, show: false, open: false, prompt: "" }));
+        handleContentChange(editedHtml);
+        toast.success("Applied AI edit to document");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("AI edit failed. Please try again.");
+    } finally {
+      setEditAIPopover((p) => ({ ...p, loading: false }));
+    }
+  }, [applyEditedSelection, authHeader, doc?.content, editAIPopover.prompt, editAIPopover.text, handleContentChange, id, isReadOnly, selectedVersionNumber]);
 
   if (errorMsg) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", backgroundColor: "#0f172a", fontFamily: "sans-serif" }}>
@@ -1013,6 +1156,7 @@ export default function CommonEditor() {
               isReadOnly={isReadOnly}
               slideTheme={doc.slide_theme || 'light'}
               remotePatch={remotePatch}
+              onUploadImage={uploadImageToDoc}
               onSlideUpdate={(patch) => {
                 broadcastSlideUpdate(patch, selectedVersionNumber || 1);
                 broadcastTyping();
@@ -1049,6 +1193,7 @@ export default function CommonEditor() {
               isReadOnly={isReadOnly}
               docTitle={doc.title}
               onSelectionChange={handleSelection}
+              onUploadImage={uploadImageToDoc}
               onContentChange={(newContent) => {
                 setDoc(d => ({ ...d, content: newContent }));
                 setSaveStatus("Unsaved changes");
@@ -1072,23 +1217,357 @@ export default function CommonEditor() {
           <><div className="de-footer-sep" /><span style={{ color: "#60a5fa" }}>{collaborators.length + 1} online</span></>
         )}
         <div className="de-footer-sep" />
-        {doc.doc_type === "doc" && !isReadOnly && (
-          <button
-            className="de-tb-btn"
-            title="Download as DOC"
-            onClick={() => { document.dispatchEvent(new CustomEvent('download-doc')) }}
-            style={{ color: "#94a3b8", padding: "6px 10px", borderRadius: 8, marginLeft: "auto" }}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          {doc.doc_type === "doc" && !isReadOnly && (
+            <button
+              className="de-tb-btn"
+              title="Download as DOC"
+              onClick={() => { document.dispatchEvent(new CustomEvent('download-doc')) }}
+              style={{ color: "#94a3b8", padding: "6px 10px", borderRadius: 8 }}
+            >
+              {Ic.download}
+              <span style={{ fontSize: 11, marginLeft: 4, fontWeight: 500 }}>DOC</span>
+            </button>
+          )}
+
+        {!isReadOnly && doc?.doc_type === "doc" && (
+          <div
+            style={{ position: "relative" }}
+            onMouseEnter={openEditAi}
+            onMouseLeave={() => closeEditAiWithDelay(260)}
+            title="AI Edit"
           >
-            {Ic.download}
-            <span style={{ fontSize: 11, marginLeft: 4, fontWeight: 500 }}>DOC</span>
-          </button>
+            {/* Trigger button */}
+            <button
+              type="button"
+              className="de-tb-btn"
+              aria-label="Open AI Edit"
+              aria-expanded={editAIPopover.open}
+              aria-haspopup="dialog"
+              style={{
+                color: "#cbd5e1",
+                padding: "6px 10px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,.06)",
+                border: "1px solid rgba(255,255,255,.10)",
+                transition: "background .15s ease, border-color .15s ease, transform .1s ease",
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,.10)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,.18)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,.06)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,.10)";
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            </button>
+
+            {/* Popover panel */}
+            {editAIPopover.open && (
+              <div
+                role="dialog"
+                aria-modal="false"
+                aria-label="AI Edit"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  bottom: "calc(100% + 10px)",
+                  width: 310,
+                  background: "#0f172a",
+                  border: "1px solid rgba(255,255,255,.09)",
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  boxShadow: "0 20px 50px rgba(0,0,0,.55)",
+                  zIndex: 120,
+                  animation: "aiPanelIn .15s ease-out",
+                }}
+                onMouseEnter={openEditAi}
+                onMouseLeave={() => closeEditAiWithDelay(260)}
+              >
+                <style>{`
+                  @keyframes aiPanelIn {
+                    from { opacity: 0; transform: translateY(6px) scale(.98); }
+                    to   { opacity: 1; transform: translateY(0)  scale(1);    }
+                  }
+                `}</style>
+
+                {/* Loading bar */}
+                {editAIPopover.loading && (
+                  <div style={{
+                    height: 2,
+                    background: "linear-gradient(90deg, transparent, #60a5fa, #3b82f6, transparent)",
+                    backgroundSize: "200% 100%",
+                    animation: "shimmer 1.2s linear infinite",
+                  }} />
+                )}
+                <style>{`
+                  @keyframes shimmer {
+                    0%   { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
+                  }
+                `}</style>
+
+                {/* Header */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 14px",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: "linear-gradient(135deg,#60a5fa,#3b82f6)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{ width: 13, height: 13 }}>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "#f1f5f9", letterSpacing: ".1px" }}>
+                      AI Edit
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
+                      {lastSelectionRef.current?.text ? "Scope: selection" : "Scope: whole document"}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Close AI Edit"
+                    onClick={() => setEditAIPopover((p) => ({ ...p, open: false }))}
+                    style={{
+                      width: 26, height: 26,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "rgba(255,255,255,.05)",
+                      border: "1px solid rgba(255,255,255,.08)",
+                      borderRadius: 7,
+                      color: "#64748b",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      transition: "background .12s, color .12s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,.09)";
+                      e.currentTarget.style.color = "#cbd5e1";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,.05)";
+                      e.currentTarget.style.color = "#64748b";
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12 }}>
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Scope chips */}
+                {lastSelectionRef.current?.text && (
+                  <div style={{
+                    display: "flex",
+                    gap: 6,
+                    padding: "10px 14px",
+                    borderBottom: "1px solid rgba(255,255,255,.06)",
+                  }}>
+                    {[
+                      { key: "selection", label: "Selection" },
+                      { key: "document",  label: "Whole doc" },
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={editAIPopover.scope === key}
+                        onClick={() => setEditAIPopover((p) => ({ ...p, scope: key }))}
+                        style={{
+                          padding: "4px 12px",
+                          borderRadius: 20,
+                          border: editAIPopover.scope === key
+                            ? "1px solid rgba(59,130,246,.5)"
+                            : "1px solid rgba(255,255,255,.08)",
+                          background: editAIPopover.scope === key
+                            ? "rgba(59,130,246,.15)"
+                            : "rgba(255,255,255,.04)",
+                          color: editAIPopover.scope === key ? "#93c5fd" : "#64748b",
+                          fontSize: 11.5,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          transition: "all .12s ease",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Prompt area */}
+                <div style={{ padding: "12px 14px" }}>
+                  <div style={{ position: "relative" }}>
+                    <textarea
+                      aria-label="Describe your edit"
+                      placeholder='e.g. "Fix grammar and make it concise"'
+                      rows={3}
+                      value={editAIPopover.prompt}
+                      onChange={(e) => setEditAIPopover((p) => ({ ...p, prompt: e.target.value }))}
+                      disabled={editAIPopover.loading}
+                      style={{
+                        width: "100%",
+                        resize: "none",
+                        background: "rgba(255,255,255,.04)",
+                        border: "1px solid rgba(255,255,255,.08)",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        paddingBottom: 26,
+                        color: "#e2e8f0",
+                        fontSize: 12.5,
+                        lineHeight: 1.5,
+                        fontFamily: "inherit",
+                        outline: "none",
+                        transition: "border-color .12s",
+                      }}
+                      onFocus={(e)  => { e.currentTarget.style.borderColor = "rgba(59,130,246,.4)"; }}
+                      onBlur={(e)   => { e.currentTarget.style.borderColor = "rgba(255,255,255,.08)"; }}
+                    />
+                    <span style={{
+                      position: "absolute",
+                      bottom: 8, right: 10,
+                      fontSize: 10.5,
+                      color: "#334155",
+                      pointerEvents: "none",
+                    }}>
+                      {(editAIPopover.prompt || "").length}/500
+                    </span>
+                  </div>
+
+                  {/* Quick suggestion chips */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                    {["Fix grammar", "Make concise", "Simplify", "Formal tone"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setEditAIPopover((p) => ({ ...p, prompt: s }))}
+                        disabled={editAIPopover.loading}
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 20,
+                          border: "1px solid rgba(255,255,255,.08)",
+                          background: "rgba(255,255,255,.04)",
+                          color: "#64748b",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          transition: "background .12s, color .12s, border-color .12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(255,255,255,.07)";
+                          e.currentTarget.style.color = "#94a3b8";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,.14)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "rgba(255,255,255,.04)";
+                          e.currentTarget.style.color = "#64748b";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,.08)";
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Action footer */}
+                <div style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: "10px 14px",
+                  borderTop: "1px solid rgba(255,255,255,.06)",
+                  background: "rgba(255,255,255,.02)",
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => runAiEdit(editAIPopover.scope || (lastSelectionRef.current?.text ? "selection" : "document"))}
+                    disabled={editAIPopover.loading || !String(editAIPopover.prompt || "").trim()}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: 9,
+                      border: "none",
+                      background: editAIPopover.loading
+                        ? "rgba(255,255,255,.07)"
+                        : "linear-gradient(135deg,#60a5fa,#3b82f6)",
+                      color: editAIPopover.loading ? "#475569" : "#fff",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: editAIPopover.loading || !String(editAIPopover.prompt || "").trim()
+                        ? "not-allowed"
+                        : "pointer",
+                      opacity: !String(editAIPopover.prompt || "").trim() ? 0.5 : 1,
+                      transition: "opacity .12s, transform .1s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (editAIPopover.loading) return;
+                      e.currentTarget.style.opacity = "0.88";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (editAIPopover.loading) return;
+                      e.currentTarget.style.opacity = "1";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
+                  >
+                    {editAIPopover.loading ? "Working…" : "Apply"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditAIPopover((p) => ({ ...p, prompt: "" }))}
+                    disabled={editAIPopover.loading || !String(editAIPopover.prompt || "").trim()}
+                    aria-label="Clear prompt"
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 9,
+                      border: "1px solid rgba(255,255,255,.08)",
+                      background: "rgba(255,255,255,.04)",
+                      color: "#475569",
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                      transition: "background .12s, color .12s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,.07)";
+                      e.currentTarget.style.color = "#94a3b8";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,.04)";
+                      e.currentTarget.style.color = "#475569";
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
-        {isReadOnly
-          ? <span style={{ color: "#f59e0b", marginLeft: "auto" }}>View only</span>
-          : <span style={{ color: saveStatus === "Unsaved changes" ? "#fbbf24" : saveStatus === "saving" ? "#60a5fa" : "#34d399", marginLeft: doc.doc_type === "doc" ? "0" : "auto" }}>
-            {saveStatus === "Unsaved changes" ? "Unsaved changes" : saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "All changes saved" : "Saved"}
-          </span>
-        }
+
+          {isReadOnly
+            ? <span style={{ color: "#f59e0b" }}>View only</span>
+            : <span style={{ color: saveStatus === "Unsaved changes" ? "#fbbf24" : saveStatus === "saving" ? "#60a5fa" : "#34d399" }}>
+              {saveStatus === "Unsaved changes" ? "Unsaved changes" : saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "All changes saved" : "Saved"}
+            </span>
+          }
+        </div>
       </div>
 
       {/* Share panel */}
