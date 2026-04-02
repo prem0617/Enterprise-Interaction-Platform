@@ -7,6 +7,64 @@ import { notifyUsersAddedToMeeting, buildMeetingDeepLink } from "../../services/
 import { sendPushToUser } from "../../services/pushService.js";
 import { broadcastMeetingEvent } from "../../socket/socketServer.js";
 
+const PERMISSION_FEATURES = ["mic", "camera", "screenShare"];
+
+function normalizePermissionMode(mode) {
+  if (["everyone", "selected", "none"].includes(mode)) return mode;
+  return "everyone";
+}
+
+function normalizeInstantPermissions(rawPermissions) {
+  if (!rawPermissions || typeof rawPermissions !== "object") return undefined;
+
+  const normalized = {};
+  PERMISSION_FEATURES.forEach((feature) => {
+    const value = rawPermissions[feature];
+
+    if (typeof value === "string") {
+      normalized[feature] = {
+        mode: normalizePermissionMode(value),
+        users: [],
+      };
+      return;
+    }
+
+    if (value && typeof value === "object") {
+      normalized[feature] = {
+        mode: normalizePermissionMode(value.mode),
+        users: Array.isArray(value.users) ? value.users : [],
+      };
+      return;
+    }
+
+    normalized[feature] = { mode: "everyone", users: [] };
+  });
+
+  return normalized;
+}
+
+function normalizeInstantUserPermissions(rawPermissions) {
+  if (!Array.isArray(rawPermissions)) return [];
+
+  return rawPermissions
+    .map((entry) => {
+      const nested = entry?.permissions && typeof entry.permissions === "object"
+        ? entry.permissions
+        : {};
+
+      return {
+        user: entry?.user || entry?.user_id || null,
+        mic: typeof entry?.mic === "boolean" ? entry.mic : !!nested.mic,
+        camera: typeof entry?.camera === "boolean" ? entry.camera : !!nested.camera,
+        screenShare:
+          typeof entry?.screenShare === "boolean"
+            ? entry.screenShare
+            : !!nested.screenShare,
+      };
+    })
+    .filter((entry) => !!entry.user);
+}
+
 function generateMeetingCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -50,7 +108,15 @@ export const createMeeting = async (req, res) => {
       join_link,
       reminders = [],
       open_to_everyone = true,
+      lobby_bypass_users = [],
+      instant_permissions,
+      instant_user_permissions = [],
     } = req.body;
+
+    const normalizedInstantPermissions = normalizeInstantPermissions(instant_permissions);
+    const normalizedInstantUserPermissions = normalizeInstantUserPermissions(
+      instant_user_permissions
+    );
 
     if (!title || !meeting_type) {
       return res.status(400).json({ error: "title and meeting_type are required" });
@@ -73,6 +139,9 @@ export const createMeeting = async (req, res) => {
       join_link,
       reminders,
       open_to_everyone,
+      lobby_bypass_users,
+      instant_permissions: normalizedInstantPermissions,
+      instant_user_permissions: normalizedInstantUserPermissions,
       is_instant: req.body.is_instant || false,
     });
 
@@ -232,7 +301,10 @@ export const getMeetingByCode = async (req, res) => {
 
     // For active/instant meetings, auto-add when open to everyone
     if (!isHost && !alreadyParticipant && meeting.status !== "ended") {
-      if (meeting.open_to_everyone !== false) {
+      const canBypassLobby = (meeting.lobby_bypass_users || []).some(
+        (id) => String(id) === userId
+      );
+      if (meeting.open_to_everyone !== false || (meeting.is_instant && canBypassLobby)) {
         meeting.participants.push(userId);
         await meeting.save();
       } else if (meeting.is_instant) {
@@ -346,10 +418,23 @@ export const updateMeeting = async (req, res) => {
       "status",
       "reminders",
       "open_to_everyone",
+      "lobby_bypass_users",
+      "instant_permissions",
+      "instant_user_permissions",
     ];
 
     updatableFields.forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        if (field === "instant_permissions") {
+          meeting[field] = normalizeInstantPermissions(req.body[field]);
+          return;
+        }
+
+        if (field === "instant_user_permissions") {
+          meeting[field] = normalizeInstantUserPermissions(req.body[field]);
+          return;
+        }
+
         // eslint-disable-next-line no-param-reassign
         meeting[field] =
           field === "scheduled_at" && req.body[field]
@@ -494,7 +579,10 @@ export const joinMeetingById = async (req, res) => {
 
     // For active meetings, auto-add if open_to_everyone; otherwise block non-participants
     if (!isHost && !alreadyParticipant) {
-      if (meeting.open_to_everyone !== false) {
+      const canBypassLobby = (meeting.lobby_bypass_users || []).some(
+        (id) => String(id) === userId
+      );
+      if (meeting.open_to_everyone !== false || (meeting.is_instant && canBypassLobby)) {
         meeting.participants.push(userId);
         await meeting.save();
       } else if (meeting.is_instant) {

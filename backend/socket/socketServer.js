@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import express from "express";
 import { createServer } from "http";
+import Meeting from "../models/Meeting.js";
 
 const app = express();
 const server = createServer(app);
@@ -48,6 +49,28 @@ function forwardToUser(eventName, toUserId, payload) {
   if (socketId) {
     io.to(socketId).emit(eventName, payload);
   }
+}
+
+async function canUseMeetingFeature(meetingId, userId, feature) {
+  const meeting = await Meeting.findById(meetingId)
+    .select("host_id is_instant instant_permissions instant_user_permissions")
+    .lean();
+  if (!meeting) return true;
+  if (String(meeting.host_id) === String(userId)) return true;
+  
+  // Check user-specific overrides first
+  const override = (meeting.instant_user_permissions || []).find(
+    (entry) => String(entry?.user) === String(userId)
+  );
+  if (override && typeof override[feature] === "boolean") return override[feature];
+  
+  // Check default permissions
+  const config = meeting.instant_permissions?.[feature];
+  if (config === "everyone") return true;
+  if (config === "none") return false;
+  
+  // Default to true if no explicit configuration
+  return true;
 }
 
 // Broadcast online users to all connected clients
@@ -522,12 +545,34 @@ io.on("connection", async (socket) => {
   });
 
   // ---------- Meeting media-state broadcast (mute / video / hand raise) ----------
-  socket.on("meeting-media-state", (data) => {
+  socket.on("meeting-media-state", async (data) => {
     const { meetingId, isMuted, isVideoOff } = data || {};
     if (!meetingId || !socket.userId) return;
     const key = String(meetingId);
     const room = activeMeetings[key];
     if (!room || !room[socket.userId]) return;
+    if (isMuted === false) {
+      const canMic = await canUseMeetingFeature(key, socket.userId, "mic");
+      if (!canMic) {
+        socket.emit("meeting-permission-denied", {
+          meetingId: key,
+          feature: "mic",
+          message: "You are not allowed to unmute in this meeting",
+        });
+        return;
+      }
+    }
+    if (isVideoOff === false) {
+      const canCam = await canUseMeetingFeature(key, socket.userId, "camera");
+      if (!canCam) {
+        socket.emit("meeting-permission-denied", {
+          meetingId: key,
+          feature: "camera",
+          message: "You are not allowed to turn on camera in this meeting",
+        });
+        return;
+      }
+    }
     // Store the state so late joiners can see it
     room[socket.userId].isMuted = !!isMuted;
     room[socket.userId].isVideoOff = !!isVideoOff;
@@ -555,12 +600,21 @@ io.on("connection", async (socket) => {
   });
 
   // ---------- Meeting screen sharing ----------
-  socket.on("meeting-screen-share-start", (data) => {
+  socket.on("meeting-screen-share-start", async (data) => {
     const { meetingId } = data || {};
     if (!meetingId || !socket.userId) return;
     const key = String(meetingId);
     const room = activeMeetings[key];
     if (!room) return;
+    const canShare = await canUseMeetingFeature(key, socket.userId, "screenShare");
+    if (!canShare) {
+      socket.emit("meeting-permission-denied", {
+        meetingId: key,
+        feature: "screenShare",
+        message: "You are not allowed to share screen in this meeting",
+      });
+      return;
+    }
     room[socket.userId].screenSharing = true;
     io.to(`meeting:${key}`).emit("meeting-screen-share-start", {
       meetingId: key,

@@ -19,7 +19,7 @@ const ICE_SERVERS = {
  *  - Media-state broadcast (mute / video-off indicators for remote users)
  *  - Hand raise broadcast
  */
-export function useMeetingCall(socket, currentUserId, currentUserName, meetingId, roomParticipants, isHost = false) {
+export function useMeetingCall(socket, currentUserId, currentUserName, meetingId, roomParticipants, isHost = false, mediaPermissions = { mic: true, camera: true, screenShare: true }) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [remoteScreenStreams, setRemoteScreenStreams] = useState({});
@@ -31,6 +31,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
   const [isRecording, setIsRecording] = useState(false);
   // Remote media states { [userId]: { isMuted, isVideoOff, handRaised } }
   const [remoteMediaStates, setRemoteMediaStates] = useState({});
+  const [effectivePermissions, setEffectivePermissions] = useState(mediaPermissions);
 
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
@@ -46,6 +47,13 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
 
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { meetingIdRef.current = meetingId; }, [meetingId]);
+  useEffect(() => {
+    setEffectivePermissions({
+      mic: !!mediaPermissions.mic,
+      camera: !!mediaPermissions.camera,
+      screenShare: !!mediaPermissions.screenShare,
+    });
+  }, [mediaPermissions.mic, mediaPermissions.camera, mediaPermissions.screenShare]);
 
   const drainIceCandidates = useCallback(async (remoteIdStr) => {
     const pc = peerConnectionsRef.current[remoteIdStr];
@@ -172,6 +180,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
 
   // ---- Toggle mute ----
   const toggleMute = useCallback(() => {
+    if (!effectivePermissions.mic) return;
     if (!localStreamRef.current) return;
     const audioTrack = localStreamRef.current.getAudioTracks()[0];
     if (audioTrack) {
@@ -187,10 +196,11 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
         });
       }
     }
-  }, [isMuted, isVideoOff]);
+  }, [isMuted, isVideoOff, effectivePermissions.mic]);
 
   // ---- Toggle video ----
   const toggleVideo = useCallback(() => {
+    if (!effectivePermissions.camera) return;
     if (!localStreamRef.current) return;
     const videoTrack = localStreamRef.current.getVideoTracks()[0];
     if (videoTrack) {
@@ -206,10 +216,14 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
         });
       }
     }
-  }, [isVideoOff, isMuted]);
+  }, [isVideoOff, isMuted, effectivePermissions.camera]);
 
   // ---- Screen sharing ----
   const startScreenShare = useCallback(async () => {
+    if (!effectivePermissions.screenShare) {
+      setMediaError("You are not allowed to share screen in this meeting");
+      return;
+    }
     if (isScreenSharing) return;
     try {
       // Use minimal constraints for maximum compatibility (especially Linux/Wayland).
@@ -305,7 +319,7 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
         setMediaError(msg);
       }
     }
-  }, [isScreenSharing, currentUserIdStr]);
+  }, [isScreenSharing, currentUserIdStr, effectivePermissions.screenShare]);
 
   const stopScreenShare = useCallback(async () => {
     if (!isScreenSharing && !screenStreamRef.current) return;
@@ -390,15 +404,19 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     try {
       const stream = await requestMediaPermissions({ audio: true, video: true });
       localStreamRef.current = stream;
+      const audioTrack = stream.getAudioTracks()[0];
+      const videoTrack = stream.getVideoTracks()[0];
+      if (audioTrack && !effectivePermissions.mic) audioTrack.enabled = false;
+      if (videoTrack && !effectivePermissions.camera) videoTrack.enabled = false;
       setLocalStream(stream);
-      setIsVideoOff(false);
-      setIsMuted(false);
+      setIsVideoOff(!effectivePermissions.camera);
+      setIsMuted(!effectivePermissions.mic);
       setHandRaised(false);
       if (socketRef.current?.connected && meetingIdRef.current) {
         socketRef.current.emit("meeting-media-state", {
           meetingId: meetingIdRef.current,
-          isMuted: false,
-          isVideoOff: false,
+          isMuted: !effectivePermissions.mic,
+          isVideoOff: !effectivePermissions.camera,
         });
       }
       return stream;
@@ -424,7 +442,43 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       }
       return emptyStream;
     }
-  }, []);
+  }, [effectivePermissions.camera, effectivePermissions.mic]);
+
+  useEffect(() => {
+    if (!localStreamRef.current) return;
+    const audioTrack = localStreamRef.current.getAudioTracks()[0];
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    let nextMuted = isMuted;
+    let nextVideoOff = isVideoOff;
+    let shouldBroadcast = false;
+
+    if (!effectivePermissions.mic) {
+      if (audioTrack) audioTrack.enabled = false;
+      if (!isMuted) {
+        setIsMuted(true);
+        nextMuted = true;
+        shouldBroadcast = true;
+      }
+    }
+    if (!effectivePermissions.camera) {
+      if (videoTrack) videoTrack.enabled = false;
+      if (!isVideoOff) {
+        setIsVideoOff(true);
+        nextVideoOff = true;
+        shouldBroadcast = true;
+      }
+    }
+    if (!effectivePermissions.screenShare && isScreenSharing) {
+      stopScreenShare();
+    }
+    if (shouldBroadcast && socketRef.current?.connected && meetingIdRef.current) {
+      socketRef.current.emit("meeting-media-state", {
+        meetingId: meetingIdRef.current,
+        isMuted: nextMuted,
+        isVideoOff: nextVideoOff,
+      });
+    }
+  }, [effectivePermissions, isMuted, isVideoOff, isScreenSharing, stopScreenShare]);
 
   // ---- Listen for remote media-state / hand-raise / screen-share events ----
   useEffect(() => {
@@ -477,16 +531,37 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
       });
     };
 
+    const handlePermissionDenied = (data) => {
+      if (data?.meetingId !== meetingId) return;
+      const feature = data?.feature;
+      if (feature === "mic") {
+        setIsMuted(true);
+        setEffectivePermissions((prev) => ({ ...prev, mic: false }));
+      }
+      if (feature === "camera") {
+        setIsVideoOff(true);
+        setEffectivePermissions((prev) => ({ ...prev, camera: false }));
+      }
+      if (feature === "screenShare") {
+        setIsScreenSharing(false);
+        setScreenShareUserId((prev) => (prev === currentUserIdStr ? null : prev));
+        setEffectivePermissions((prev) => ({ ...prev, screenShare: false }));
+      }
+      if (data?.message) setMediaError(data.message);
+    };
+
     socket.on("meeting-media-state", handleMediaState);
     socket.on("meeting-hand-raise", handleHandRaise);
     socket.on("meeting-screen-share-start", handleScreenStart);
     socket.on("meeting-screen-share-stop", handleScreenStop);
+    socket.on("meeting-permission-denied", handlePermissionDenied);
 
     return () => {
       socket.off("meeting-media-state", handleMediaState);
       socket.off("meeting-hand-raise", handleHandRaise);
       socket.off("meeting-screen-share-start", handleScreenStart);
       socket.off("meeting-screen-share-stop", handleScreenStop);
+      socket.off("meeting-permission-denied", handlePermissionDenied);
     };
   }, [socket, meetingId, currentUserIdStr, isScreenSharing, stopScreenShare]);
 
@@ -870,5 +945,6 @@ export function useMeetingCall(socket, currentUserId, currentUserName, meetingId
     toggleVideo,
     toggleScreenShare,
     toggleHandRaise,
+    effectivePermissions,
   };
 }

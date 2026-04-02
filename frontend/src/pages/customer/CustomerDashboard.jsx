@@ -366,6 +366,8 @@ if (showWhiteboard) {
           isHost={!!activeMeetingInfo.isHost}
           isMuted={!!activeMeetingInfo.isMuted}
           isVideoOff={!!activeMeetingInfo.isVideoOff}
+          canToggleMute={activeMeetingInfo.canToggleMute !== false}
+          canToggleVideo={activeMeetingInfo.canToggleVideo !== false}
           onToggleMute={activeMeetingInfo.toggleMute}
           onToggleVideo={activeMeetingInfo.toggleVideo}
           onLeaveMeeting={activeMeetingInfo.leaveMeeting}

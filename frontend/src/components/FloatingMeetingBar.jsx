@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
  *  - isHost: boolean
  *  - isMuted: boolean
  *  - isVideoOff: boolean
+ *  - canToggleMute: boolean
+ *  - canToggleVideo: boolean
  *  - onToggleMute: () => void
  *  - onToggleVideo: () => void
  *  - onLeaveMeeting: () => void   (leave for participant, end for host)
@@ -30,6 +32,8 @@ export default function FloatingMeetingBar({
   isHost = false,
   isMuted = false,
   isVideoOff = false,
+  canToggleMute = true,
+  canToggleVideo = true,
   onToggleMute,
   onToggleVideo,
   onLeaveMeeting,
@@ -174,13 +178,15 @@ export default function FloatingMeetingBar({
       {/* Mute toggle */}
       <button
         onClick={onToggleMute}
+        disabled={!canToggleMute}
         className={cn(
           "p-2 rounded-xl transition-all duration-150",
           isMuted
             ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100",
+          !canToggleMute && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-zinc-300"
         )}
-        title={isMuted ? "Unmute" : "Mute"}
+        title={canToggleMute ? (isMuted ? "Unmute" : "Mute") : "Mic disabled by host"}
       >
         {isMuted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
       </button>
@@ -188,13 +194,15 @@ export default function FloatingMeetingBar({
       {/* Camera toggle */}
       <button
         onClick={onToggleVideo}
+        disabled={!canToggleVideo}
         className={cn(
           "p-2 rounded-xl transition-all duration-150",
           isVideoOff
             ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100",
+          !canToggleVideo && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-zinc-300"
         )}
-        title={isVideoOff ? "Turn camera on" : "Turn camera off"}
+        title={canToggleVideo ? (isVideoOff ? "Turn camera on" : "Turn camera off") : "Camera disabled by host"}
       >
         {isVideoOff ? (
           <VideoOff className="size-4" />

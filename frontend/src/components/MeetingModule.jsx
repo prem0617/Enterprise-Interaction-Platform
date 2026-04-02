@@ -51,6 +51,7 @@ import {
   Bot,
 } from "lucide-react";
 import axios from "axios";
+import Select from "react-select";
 import { toast } from "sonner";
 import { BACKEND_URL } from "../../config";
 import { useAuthContext } from "../context/AuthContextProvider";
@@ -87,6 +88,18 @@ const MEETING_TYPES = [
 ];
 
 const DEFAULT_REMINDERS = [5, 15, 30];
+
+const INSTANT_JOIN_MODE_OPTIONS = [
+  { value: "everyone", label: "Everyone" },
+  { value: "selected", label: "Selected individuals" },
+  { value: "none", label: "No one" },
+];
+
+const INSTANT_PERMISSION_OPTIONS = [
+  { value: "everyone", label: "Everyone" },
+  { value: "selected", label: "Selected" },
+  { value: "none", label: "No one" },
+];
 
 function startOfDay(date) {
   const d = new Date(date);
@@ -162,6 +175,25 @@ function getRelativeTime(dateStr) {
   }
 }
 
+function resolveInstantPermission(meeting, userId, feature) {
+  if (!meeting) return true;
+  if (meeting?.isHost || String(meeting?.host_id?._id || meeting?.host_id) === String(userId)) return true;
+  
+  // Check user-specific override first
+  const override = (meeting.instant_user_permissions || []).find(
+    (entry) => String(entry?.user?._id || entry?.user) === String(userId)
+  );
+  if (override && typeof override[feature] === "boolean") return override[feature];
+  
+  // Check default permission
+  const defaultPerm = meeting.instant_permissions?.[feature];
+  if (defaultPerm === "everyone") return true;
+  if (defaultPerm === "none") return false;
+  
+  // Fallback to true if no explicit configuration
+  return true;
+}
+
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
   { value: "scheduled", label: "Upcoming" },
@@ -195,6 +227,7 @@ const MeetingRoom = ({
   onAdmitToLobby,
   liveCaptions = [],
   onEmitCaption,
+  myPermissions = { mic: true, camera: true, screenShare: true },
 }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState("chat"); // "chat" | "participants"
@@ -459,15 +492,15 @@ const MeetingRoom = ({
         e.target.isContentEditable
       )
         return;
-      if (e.key === "m" || e.key === "M") meetingCall.toggleMute();
-      if (e.key === "v" || e.key === "V") meetingCall.toggleVideo();
-      if (e.key === "s" || e.key === "S") meetingCall.toggleScreenShare();
+      if ((e.key === "m" || e.key === "M") && myPermissions.mic) meetingCall.toggleMute();
+      if ((e.key === "v" || e.key === "V") && myPermissions.camera) meetingCall.toggleVideo();
+      if ((e.key === "s" || e.key === "S") && myPermissions.screenShare) meetingCall.toggleScreenShare();
       if (e.key === "h" || e.key === "H") meetingCall.toggleHandRaise();
       if (e.key === "c" || e.key === "C") HAS_SPEECH_RECOGNITION && setCaptionsOn((c) => !c);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [meetingCall]);
+  }, [meetingCall, myPermissions]);
 
   // Surface screen-share / media errors as toasts
   useEffect(() => {
@@ -769,11 +802,12 @@ const MeetingRoom = ({
                 <button
                   type="button"
                   onClick={meetingCall.toggleMute}
+                  disabled={!myPermissions.mic}
                   title={meetingCall.isMuted ? "Unmute (m)" : "Mute (m)"}
                   className={`p-3 rounded-full transition-colors ${meetingCall.isMuted
                     ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
                     : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                    }`}
+                    } ${!myPermissions.mic ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
                   {meetingCall.isMuted ? (
                     <MicOff className="w-5 h-5" />
@@ -786,6 +820,7 @@ const MeetingRoom = ({
                 <button
                   type="button"
                   onClick={meetingCall.toggleVideo}
+                  disabled={!myPermissions.camera}
                   title={
                     meetingCall.isVideoOff
                       ? "Turn on camera (v)"
@@ -794,7 +829,7 @@ const MeetingRoom = ({
                   className={`p-3 rounded-full transition-colors ${meetingCall.isVideoOff
                     ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
                     : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                    }`}
+                    } ${!myPermissions.camera ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
                   {meetingCall.isVideoOff ? (
                     <VideoOff className="w-5 h-5" />
@@ -807,13 +842,14 @@ const MeetingRoom = ({
                 <button
                   type="button"
                   onClick={meetingCall.toggleScreenShare}
+                  disabled={!myPermissions.screenShare}
                   title={
                     meetingCall.isScreenSharing ? "Stop sharing" : "Share screen"
                   }
                   className={`p-3 rounded-full transition-colors ${meetingCall.isScreenSharing
                     ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
                     : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                    }`}
+                    } ${!myPermissions.screenShare ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
                   {meetingCall.isScreenSharing ? (
                     <MonitorOff className="w-5 h-5" />
@@ -1897,6 +1933,27 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   const [meetingSearchQuery, setMeetingSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showInstantMeetingDialog, setShowInstantMeetingDialog] = useState(false);
+  const [showInstantCustomSettings, setShowInstantCustomSettings] = useState(false);
+  const [instantJoinMode, setInstantJoinMode] = useState("everyone");
+  const [instantBypassUsers, setInstantBypassUsers] = useState([]);
+  const [instantPermissions, setInstantPermissions] = useState({
+    mic: "everyone",
+    camera: "everyone",
+    screenShare: "everyone",
+  });
+  const [showScheduledPermissionsDialog, setShowScheduledPermissionsDialog] = useState(false);
+  const [scheduledPermissions, setScheduledPermissions] = useState({
+    mic: "everyone",
+    camera: "everyone",
+    screenShare: "everyone",
+  });
+  const [scheduledUserPermissions, setScheduledUserPermissions] = useState([]);
+  const [tempScheduledPermissions, setTempScheduledPermissions] = useState({
+    mic: "everyone",
+    camera: "everyone",
+    screenShare: "everyone",
+  });
+  const [tempScheduledUserPermissions, setTempScheduledUserPermissions] = useState([]);
   const [lobbyMeeting, setLobbyMeeting] = useState(null);
   const [lobbyRequests, setLobbyRequests] = useState([]);
   const [recordingsExpandedId, setRecordingsExpandedId] = useState(null);
@@ -1943,13 +2000,75 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     "You"
     : "You";
 
+  const myMeetingPermissions = useMemo(() => ({
+    mic: resolveInstantPermission(activeMeeting, currentUserId, "mic"),
+    camera: resolveInstantPermission(activeMeeting, currentUserId, "camera"),
+    screenShare: resolveInstantPermission(activeMeeting, currentUserId, "screenShare"),
+  }), [activeMeeting, currentUserId]);
+
   const meetingCall = useMeetingCall(
     socket,
     currentUserId,
     currentUserName,
     activeMeeting?._id,
     roomParticipants,
-    activeMeeting?.isHost ?? false
+    activeMeeting?.isHost ?? false,
+    myMeetingPermissions
+  );
+
+  const effectiveMeetingPermissions = useMemo(
+    () => ({
+      mic:
+        (meetingCall.effectivePermissions?.mic ?? true) && myMeetingPermissions.mic,
+      camera:
+        (meetingCall.effectivePermissions?.camera ?? true) &&
+        myMeetingPermissions.camera,
+      screenShare:
+        (meetingCall.effectivePermissions?.screenShare ?? true) &&
+        myMeetingPermissions.screenShare,
+    }),
+    [
+      meetingCall.effectivePermissions?.mic,
+      meetingCall.effectivePermissions?.camera,
+      meetingCall.effectivePermissions?.screenShare,
+      myMeetingPermissions.mic,
+      myMeetingPermissions.camera,
+      myMeetingPermissions.screenShare,
+    ]
+  );
+
+  const instantSelectStyles = useMemo(
+    () => ({
+      control: (base, state) => ({
+        ...base,
+        backgroundColor: "#27272a",
+        borderColor: state.isFocused ? "#6366f1" : "#3f3f46",
+        minHeight: 36,
+        boxShadow: "none",
+        ":hover": { borderColor: "#52525b" },
+      }),
+      menu: (base) => ({
+        ...base,
+        backgroundColor: "#27272a",
+        border: "1px solid #3f3f46",
+        borderRadius: 8,
+        overflow: "hidden",
+      }),
+      option: (base, state) => ({
+        ...base,
+        backgroundColor: state.isFocused ? "#3f3f46" : "#27272a",
+        color: "#e4e4e7",
+        fontSize: 12,
+        cursor: "pointer",
+      }),
+      singleValue: (base) => ({ ...base, color: "#f4f4f5", fontSize: 13 }),
+      placeholder: (base) => ({ ...base, color: "#a1a1aa", fontSize: 12 }),
+      input: (base) => ({ ...base, color: "#f4f4f5", fontSize: 13 }),
+      dropdownIndicator: (base) => ({ ...base, color: "#a1a1aa", padding: 6 }),
+      indicatorSeparator: () => ({ display: "none" }),
+      valueContainer: (base) => ({ ...base, padding: "0 10px" }),
+    }),
+    []
   );
 
   const [form, setForm] = useState({
@@ -2389,6 +2508,25 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
         ? meeting.reminders.map((r) => Number(r.minutes_before))
         : [],
     });
+    
+    // Load existing default permissions
+    if (meeting.instant_permissions) {
+      setScheduledPermissions({
+        mic: meeting.instant_permissions.mic || "everyone",
+        camera: meeting.instant_permissions.camera || "everyone",
+        screenShare: meeting.instant_permissions.screenShare || "everyone",
+      });
+    } else {
+      setScheduledPermissions({
+        mic: "everyone",
+        camera: "everyone",
+        screenShare: "everyone",
+      });
+    }
+    
+    // Reset user permissions - will be initialized when dialog opens
+    setScheduledUserPermissions([]);
+    
     setShowForm(true);
   };
 
@@ -2399,6 +2537,13 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     setSearchQuery("");
     setSearchResults([]);
     setSearchError("");
+    setShowScheduledPermissionsDialog(false);
+    setScheduledPermissions({
+      mic: "everyone",
+      camera: "everyone",
+      screenShare: "everyone",
+    });
+    setScheduledUserPermissions([]);
   };
 
   const handleFormChange = (field, value) => {
@@ -2435,7 +2580,18 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
         `${BACKEND_URL}/direct_chat/search?query=${encodeURIComponent(query.trim())}`,
         axiosConfig
       );
-      setSearchResults(data.users || []);
+      const mixedResults = data.results || data.users || [];
+      const entityOrder = { team: 0, department: 1, user: 2 };
+      const sortedResults = [...mixedResults].sort((a, b) => {
+        const aRank = entityOrder[a.entityType] ?? 3;
+        const bRank = entityOrder[b.entityType] ?? 3;
+        if (aRank !== bRank) return aRank - bRank;
+
+        const aName = (a.name || a.full_name || a.email || "").toLowerCase();
+        const bName = (b.name || b.full_name || b.email || "").toLowerCase();
+        return aName.localeCompare(bName);
+      });
+      setSearchResults(sortedResults);
     } catch (error) {
       console.error("Failed to search users", error);
       setSearchError("Failed to search users");
@@ -2465,20 +2621,52 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   );
 
   const addParticipant = (u) => {
+    const normalizeParticipant = (item) => ({
+      _id: item._id,
+      full_name: item.full_name,
+      email: item.email,
+      profile_picture: item.profile_picture || "",
+    });
+
     setForm((prev) => {
+      if (u.entityType === "team" || u.entityType === "department") {
+        const incomingMembers = Array.isArray(u.members) ? u.members : [];
+        if (!incomingMembers.length) return prev;
+
+        const existingIds = new Set(prev.participants.map((p) => String(p._id)));
+        const newParticipants = incomingMembers
+          .filter((member) => !existingIds.has(String(member._id)))
+          .map(normalizeParticipant);
+
+        if (!newParticipants.length) return prev;
+
+        return {
+          ...prev,
+          participants: [...prev.participants, ...newParticipants],
+        };
+      }
+
       if (prev.participants.some((p) => p._id === u._id)) return prev;
       return {
         ...prev,
         participants: [
           ...prev.participants,
-          {
-            _id: u._id,
-            full_name: u.full_name,
-            email: u.email,
-          },
+          normalizeParticipant(u),
         ],
       };
     });
+
+    if (u.entityType === "team" || u.entityType === "department") {
+      setSearchResults((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              (item.entityType === "team" || item.entityType === "department") &&
+              String(item._id) === String(u._id)
+            )
+        )
+      );
+    }
   };
 
   // ---- Create / Edit meeting ----
@@ -2512,6 +2700,19 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
         reminders: (form.reminders || []).map((m) => ({
           minutes_before: Number(m),
         })),
+        instant_permissions: {
+          mic: scheduledPermissions.mic,
+          camera: scheduledPermissions.camera,
+          screenShare: scheduledPermissions.screenShare,
+        },
+        instant_user_permissions: scheduledUserPermissions
+          .filter((u) => u.isCustom)
+          .map((u) => ({
+            user: u._id,
+            mic: u.permissions.mic,
+            camera: u.permissions.camera,
+            screenShare: u.permissions.screenShare,
+          })),
       };
 
       if (editingMeeting) {
@@ -2555,10 +2756,182 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
 
   // ---- Instant meeting: dialog then start ----
   const startInstantMeetingFlow = () => {
+    setInstantJoinMode("everyone");
+    setShowInstantCustomSettings(false);
+    setInstantBypassUsers([]);
+    setInstantPermissions({ mic: "everyone", camera: "everyone", screenShare: "everyone" });
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError("");
     setShowInstantMeetingDialog(true);
   };
 
-  const handleInstantMeeting = async (openToEveryone = true) => {
+  const initializeInstantBypassUserPermissions = (p) => {
+    // When adding a user to custom settings, initialize with current default permissions
+    const isDefaultAllowed = (value) => value !== "none";
+    return {
+      ...p,
+      permissions: {
+        mic: isDefaultAllowed(instantPermissions.mic),
+        camera: isDefaultAllowed(instantPermissions.camera),
+        screenShare: isDefaultAllowed(instantPermissions.screenShare),
+      },
+      isCustom: false,
+    };
+  };
+
+  const addInstantBypassUser = (u) => {
+    const usersToAdd =
+      u.entityType === "team" || u.entityType === "department"
+        ? Array.isArray(u.members)
+          ? u.members
+          : []
+        : [u];
+
+    setInstantBypassUsers((prev) =>
+      usersToAdd.reduce((acc, userItem) => {
+        if (acc.some((p) => String(p._id) === String(userItem._id))) {
+          return acc;
+        }
+        return [
+          ...acc,
+          initializeInstantBypassUserPermissions({
+            _id: userItem._id,
+            full_name: userItem.full_name,
+            email: userItem.email,
+            profile_picture: userItem.profile_picture || "",
+          }),
+        ];
+      }, prev)
+    );
+    setSearchQuery("");
+    if (u.entityType === "team" || u.entityType === "department") {
+      setSearchResults((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              (item.entityType === "team" || item.entityType === "department") &&
+              String(item._id) === String(u._id)
+            )
+        )
+      );
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  const removeInstantBypassUser = (id) => {
+    setInstantBypassUsers((prev) => prev.filter((u) => u._id !== id));
+  };
+
+  const updateInstantBypassPermission = (id, feature, value) => {
+    setInstantBypassUsers((prev) =>
+      prev.map((u) =>
+        u._id === id
+          ? { ...u, permissions: { ...u.permissions, [feature]: value }, isCustom: true }
+          : u
+      )
+    );
+  };
+
+  const syncInstantDefaultToUsers = (feature, newDefaultValue) => {
+    // When default permission changes, update all non-custom user permissions
+    const nextAllowed = newDefaultValue !== "none";
+    setInstantBypassUsers((prev) =>
+      prev.map((u) =>
+        !u.isCustom
+          ? { ...u, permissions: { ...u.permissions, [feature]: nextAllowed } }
+          : u
+      )
+    );
+  };
+
+  const updateScheduledPermissionUser = (id, feature, value) => {
+    setTempScheduledUserPermissions((prev) =>
+      prev.map((u) =>
+        u._id === id
+          ? { ...u, permissions: { ...u.permissions, [feature]: value }, isCustom: true }
+          : u
+      )
+    );
+  };
+
+  const openScheduledPermissionsDialog = () => {
+    // Copy current permissions to temp state
+    setTempScheduledPermissions({ ...scheduledPermissions });
+    setTempScheduledUserPermissions(scheduledUserPermissions.map(u => ({ ...u })));
+    // Initialize user permissions from form participants
+    initializeScheduledUserPermissions();
+    setShowScheduledPermissionsDialog(true);
+  };
+
+  const saveScheduledPermissions = () => {
+    // Apply temp changes to actual state
+    setScheduledPermissions({ ...tempScheduledPermissions });
+    setScheduledUserPermissions([...tempScheduledUserPermissions]);
+    setShowScheduledPermissionsDialog(false);
+  };
+
+  const closeScheduledPermissionsDialog = () => {
+    // Discard temp changes without saving
+    setShowScheduledPermissionsDialog(false);
+  };
+
+  const syncScheduledDefaultToUsers = (feature, newDefaultValue) => {
+    // When default permission changes, update all non-custom user permissions in temp
+    setTempScheduledUserPermissions((prev) =>
+      prev.map((u) =>
+        !u.isCustom
+          ? { ...u, permissions: { ...u.permissions, [feature]: newDefaultValue === "everyone" } }
+          : u
+      )
+    );
+  };
+
+  const initializeScheduledUserPermissions = () => {
+    // Initialize from form.participants
+    const existingPerms = new Map(
+      (editingMeeting?.instant_user_permissions || []).map((up) => [
+        String(up.user_id || up._id),
+        up.permissions || { mic: true, camera: true, screenShare: true }
+      ])
+    );
+    
+    const userPerms = form.participants.map((p) => {
+      const existingPermission = existingPerms.get(String(p._id));
+      // If there's an existing permission, use it; otherwise use defaults
+      const permissions = existingPermission || {
+        mic: scheduledPermissions.mic === "everyone",
+        camera: scheduledPermissions.camera === "everyone",
+        screenShare: scheduledPermissions.screenShare === "everyone",
+      };
+      return {
+        _id: p._id,
+        full_name: p.full_name || p.email || "User",
+        email: p.email || "",
+        profile_picture: p.profile_picture || "",
+        permissions,
+        isCustom: !!existingPermission,
+      };
+    });
+    setScheduledUserPermissions(userPerms);
+  };
+
+  const handleInstantDefaultPermissionChange = (feature, newValue) => {
+    // Update the default permission
+    setInstantPermissions((prev) => ({ ...prev, [feature]: newValue }));
+    // Sync to non-custom user permissions
+    syncInstantDefaultToUsers(feature, newValue);
+  };
+
+  const handleScheduledDefaultPermissionChange = (feature, newValue) => {
+    // Update the temp default permission
+    setTempScheduledPermissions((prev) => ({ ...prev, [feature]: newValue }));
+    // Sync to non-custom user permissions in temp
+    syncScheduledDefaultToUsers(feature, newValue);
+  };
+
+  const handleInstantMeeting = async () => {
     setShowInstantMeetingDialog(false);
     if (!socket) {
       toast.error("Connecting... Please wait");
@@ -2586,7 +2959,44 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           scheduled_at: now.toISOString(),
           duration_minutes: 30,
           participants: [],
-          open_to_everyone: openToEveryone,
+          open_to_everyone: instantJoinMode === "everyone",
+          lobby_bypass_users:
+            instantJoinMode === "selected"
+              ? instantBypassUsers.map((u) => u._id)
+              : [],
+          instant_user_permissions: showInstantCustomSettings
+            ? instantBypassUsers
+              .filter((u) => u.isCustom)
+              .map((u) => ({
+                user: u._id,
+                mic: !!u.permissions?.mic,
+                camera: !!u.permissions?.camera,
+                screenShare: !!u.permissions?.screenShare,
+              }))
+            : [],
+          instant_permissions: {
+            mic: {
+              mode: instantPermissions.mic,
+              users:
+                instantPermissions.mic === "selected"
+                  ? instantBypassUsers.map((u) => u._id)
+                  : [],
+            },
+            camera: {
+              mode: instantPermissions.camera,
+              users:
+                instantPermissions.camera === "selected"
+                  ? instantBypassUsers.map((u) => u._id)
+                  : [],
+            },
+            screenShare: {
+              mode: instantPermissions.screenShare,
+              users:
+                instantPermissions.screenShare === "selected"
+                  ? instantBypassUsers.map((u) => u._id)
+                  : [],
+            },
+          },
           is_instant: true,
         },
         axiosConfig
@@ -2911,6 +3321,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           isVideoOff: meetingCall.isVideoOff,
           toggleMute: meetingCall.toggleMute,
           toggleVideo: meetingCall.toggleVideo,
+          canToggleMute: effectiveMeetingPermissions.mic,
+          canToggleVideo: effectiveMeetingPermissions.camera,
           leaveMeeting: handleLeaveMeeting,
         });
       } else {
@@ -2923,6 +3335,8 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
     meetingCall.isVideoOff,
     meetingCall.toggleMute,
     meetingCall.toggleVideo,
+    effectiveMeetingPermissions.mic,
+    effectiveMeetingPermissions.camera,
     onMeetingStateChange,
   ]);
 
@@ -3205,6 +3619,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           onAdmitToLobby={handleAdmitToLobby}
           liveCaptions={liveCaptions}
           onEmitCaption={handleEmitCaption}
+          myPermissions={effectiveMeetingPermissions}
         />
       )}
 
@@ -3214,23 +3629,234 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
           {/* Instant meeting: is it open for everyone with the link? (Yes / No only) */}
           {showInstantMeetingDialog && !readOnly && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
-              <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-xl max-w-sm w-full mx-4">
-                <h3 className="text-lg font-semibold text-white mb-2">Start instant meeting</h3>
-                <p className="text-sm text-zinc-400 mb-6">Is it open for everyone with the link?</p>
+              <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-7 shadow-xl max-w-5xl w-full mx-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">Start instant meeting</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowInstantMeetingDialog(false)}
+                    className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-zinc-400 mb-2">Who can join directly</label>
+                      <div className="max-w-xs">
+                        <Select
+                          isSearchable={false}
+                          value={INSTANT_JOIN_MODE_OPTIONS.find((opt) => opt.value === instantJoinMode)}
+                          onChange={(opt) => {
+                            const next = opt?.value || "everyone";
+                            setInstantJoinMode(next);
+                            if (next === "selected") setShowInstantCustomSettings(true);
+                          }}
+                          options={INSTANT_JOIN_MODE_OPTIONS}
+                          styles={instantSelectStyles}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-2">Default media permissions</p>
+                      <div className="space-y-2">
+                        {[
+                          ["mic", "Microphone", Mic],
+                          ["camera", "Camera", Video],
+                          ["screenShare", "Screen share", Monitor],
+                        ].map(([key, label, Icon]) => (
+                          <div key={key} className="flex items-center justify-between gap-3 py-1">
+                            <span className="inline-flex items-center gap-2 text-sm text-zinc-300">
+                              <Icon className="w-4 h-4 text-zinc-400" />
+                              {label}
+                            </span>
+                            <div className="inline-flex items-center gap-1">
+                              {INSTANT_PERMISSION_OPTIONS.map((opt) => {
+                                const active = instantPermissions[key] === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() =>
+                                      handleInstantDefaultPermissionChange(key, opt.value)
+                                    }
+                                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${active
+                                      ? "bg-zinc-700 text-white border-zinc-500"
+                                      : "bg-transparent text-zinc-400 border-zinc-700 hover:text-zinc-200 hover:border-zinc-600"
+                                      }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowInstantCustomSettings((v) => !v)}
+                      className="inline-flex items-center px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-sm text-zinc-200 hover:bg-zinc-700"
+                    >
+                      {showInstantCustomSettings ? "Hide custom settings" : "Custom settings"}
+                    </button>
+                  </div>
+
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 min-h-[280px]">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-zinc-400">Selected participants</label>
+                      <span className="text-[11px] text-zinc-500">{instantBypassUsers.length} selected</span>
+                    </div>
+
+                    {showInstantCustomSettings ? (
+                      <>
+                        <p className="text-[11px] text-zinc-500 mb-2">Custom mode: set permissions per selected participant.</p>
+                        {instantBypassUsers.length > 0 ? (
+                          <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
+                            {instantBypassUsers.map((u) => (
+                              <div key={u._id} className="px-1 py-2 text-xs text-zinc-200 border-b border-zinc-800/80 last:border-b-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {u.profile_picture ? (
+                                      <img src={u.profile_picture} alt={u.full_name} className="w-7 h-7 rounded-full object-cover border border-zinc-600" />
+                                    ) : (
+                                      <span className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[10px] font-semibold text-zinc-200">{getInitials(u.full_name)}</span>
+                                    )}
+                                    <span className="truncate font-medium">{u.full_name}</span>
+                                  </div>
+                                  <button type="button" onClick={() => removeInstantBypassUser(u._id)} className="text-zinc-400 hover:text-red-400">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => updateInstantBypassPermission(u._id, "mic", !u.permissions?.mic)}
+                                  className={`mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition-colors ${u.permissions?.mic ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                                >
+                                  <Mic className="w-3 h-3" />
+                                  Mic
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateInstantBypassPermission(u._id, "camera", !u.permissions?.camera)}
+                                  className={`mt-2 ml-2 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition-colors ${u.permissions?.camera ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                                >
+                                  <Video className="w-3 h-3" />
+                                  Cam
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateInstantBypassPermission(u._id, "screenShare", !u.permissions?.screenShare)}
+                                  className={`mt-2 ml-2 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition-colors ${u.permissions?.screenShare ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                                >
+                                  <Monitor className="w-3 h-3" />
+                                  Share
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-xs text-zinc-500">No participants selected yet.</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={handleParticipantSearchInput}
+                          placeholder="Search by name, email, team or department"
+                          className="w-full max-w-md px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        {searchResults.length > 0 && (
+                          <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-800">
+                            {searchResults
+                              .filter((u) => {
+                                if (u.entityType !== "team" && u.entityType !== "department") {
+                                  return true;
+                                }
+                                const memberIds = new Set((u.members || []).map((m) => String(m._id)));
+                                if (!memberIds.size) return false;
+                                const selectedIds = new Set(instantBypassUsers.map((p) => String(p._id)));
+                                return ![...memberIds].every((id) => selectedIds.has(id));
+                              })
+                              .map((u) => (
+                              <button
+                                key={`${u.entityType || "user"}:${u._id}`}
+                                type="button"
+                                onClick={() => addInstantBypassUser(u)}
+                                className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-700 flex items-center gap-2"
+                              >
+                                {u.entityType === "team" || u.entityType === "department" ? (
+                                  <span className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-zinc-200">
+                                    <Users className="w-4 h-4" />
+                                  </span>
+                                ) : u.profile_picture ? (
+                                  <img src={u.profile_picture} alt={u.full_name} className="w-7 h-7 rounded-full object-cover border border-zinc-600" />
+                                ) : (
+                                  <span className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[10px] font-semibold text-zinc-200">{getInitials(u.full_name)}</span>
+                                )}
+                                <span className="truncate">
+                                  {u.entityType === "team" || u.entityType === "department"
+                                    ? `${u.name || u.full_name} (${u.member_count || (u.members || []).length} members)`
+                                    : `${u.full_name} (${u.email})`}
+                                </span>
+                                {(u.entityType === "team" || u.entityType === "department") && (
+                                  <span className="ml-auto px-1.5 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/10 text-[10px] text-indigo-300 shrink-0">
+                                    {u.entityType === "team" ? "Team" : "Department"}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {instantBypassUsers.length > 0 ? (
+                          <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
+                            {instantBypassUsers.map((u) => (
+                              <div key={u._id} className="px-1 py-2 text-xs text-zinc-200 border-b border-zinc-800/80 last:border-b-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {u.profile_picture ? (
+                                      <img src={u.profile_picture} alt={u.full_name} className="w-7 h-7 rounded-full object-cover border border-zinc-600" />
+                                    ) : (
+                                      <span className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[10px] font-semibold text-zinc-200">{getInitials(u.full_name)}</span>
+                                    )}
+                                    <span className="truncate font-medium">{u.full_name}</span>
+                                  </div>
+                                  <button type="button" onClick={() => removeInstantBypassUser(u._id)} className="text-zinc-400 hover:text-red-400">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-xs text-zinc-500">No participants selected yet.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     type="button"
-                    onClick={() => handleInstantMeeting(true)}
+                    onClick={handleInstantMeeting}
                     className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-500"
                   >
-                    Yes
+                    Start
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleInstantMeeting(false)}
+                    onClick={() => setShowInstantMeetingDialog(false)}
                     className="flex-1 px-4 py-3 rounded-lg bg-zinc-700 text-white font-medium hover:bg-zinc-600"
                   >
-                    No
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -3855,7 +4481,7 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
                             if (searchQuery.trim()) searchUsers(searchQuery);
                           }
                         }}
-                        placeholder="Search by name or email..."
+                        placeholder="Search by name, email, team or department..."
                         className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
@@ -3869,25 +4495,42 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
                       </div>
                     )}
                     {!searchingUsers && searchQuery.trim() && searchResults.length === 0 && (
-                      <p className="mt-1.5 text-[11px] text-zinc-500">No users found</p>
+                      <p className="mt-1.5 text-[11px] text-zinc-500">No results found</p>
                     )}
                     {!searchingUsers && searchResults.length > 0 && (
                       <div className="mt-1.5 max-h-36 overflow-y-auto border border-zinc-700/60 rounded-lg bg-zinc-900/80 divide-y divide-zinc-700/50">
                         {searchResults
                           .filter(
-                            (u) => !form.participants.some((p) => String(p._id) === String(u._id))
+                            (u) => {
+                              if (u.entityType === "team" || u.entityType === "department") {
+                                const memberIds = new Set((u.members || []).map((m) => String(m._id)));
+                                if (!memberIds.size) return false;
+                                const selectedIds = new Set(form.participants.map((p) => String(p._id)));
+                                return ![...memberIds].every((id) => selectedIds.has(id));
+                              }
+                              return !form.participants.some((p) => String(p._id) === String(u._id));
+                            }
                           )
                           .map((u) => (
                             <button
-                              key={u._id}
+                              key={`${u.entityType || "user"}:${u._id}`}
                               type="button"
                               onClick={() => addParticipant(u)}
                               className="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 transition"
                             >
-                              <span className="truncate font-medium">
-                                {u.full_name || u.email || "User"}
+                              <span className="truncate font-medium flex items-center gap-1.5">
+                                <span className="truncate">
+                                  {u.entityType === "team" || u.entityType === "department"
+                                    ? `${u.name || u.full_name} (${u.member_count || (u.members || []).length} members)`
+                                    : u.full_name || u.email || "User"}
+                                </span>
+                                {(u.entityType === "team" || u.entityType === "department") && (
+                                  <span className="px-1.5 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/10 text-[10px] text-indigo-300 shrink-0">
+                                    {u.entityType === "team" ? "Team" : "Department"}
+                                  </span>
+                                )}
                               </span>
-                              {u.email && (
+                              {u.entityType === "user" && u.email && (
                                 <span className="ml-2 text-[10px] text-zinc-500 truncate shrink-0 max-w-[140px]">
                                   {u.email}
                                 </span>
@@ -3898,6 +4541,16 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
                       </div>
                     )}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openScheduledPermissionsDialog();
+                    }}
+                    className="inline-flex items-center px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-sm text-zinc-200 hover:bg-zinc-700"
+                  >
+                    Set Permissions
+                  </button>
 
                   <div>
                     <label className="block text-[11px] text-zinc-400 mb-1">
@@ -3950,6 +4603,138 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Scheduled Meeting Permissions Dialog */}
+          {showScheduledPermissionsDialog && !readOnly && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
+              <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-7 shadow-xl max-w-5xl w-full mx-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">Set meeting permissions</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeScheduledPermissionsDialog();
+                    }}
+                    className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-2">Default media permissions</p>
+                      <div className="space-y-2">
+                        {[
+                          ["mic", "Microphone", Mic],
+                          ["camera", "Camera", Video],
+                          ["screenShare", "Screen share", Monitor],
+                        ].map(([key, label, Icon]) => (
+                          <div key={key} className="flex items-center justify-between gap-3 py-1">
+                            <span className="inline-flex items-center gap-2 text-sm text-zinc-300">
+                              <Icon className="w-4 h-4 text-zinc-400" />
+                              {label}
+                            </span>
+                            <div className="inline-flex items-center gap-1">
+                              {[
+                                { value: "everyone", label: "Everyone" },
+                                { value: "none", label: "None" },
+                              ].map((opt) => {
+                                const active = tempScheduledPermissions[key] === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() =>
+                                      handleScheduledDefaultPermissionChange(key, opt.value)
+                                    }
+                                    className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${active
+                                      ? "bg-zinc-700 text-white border-zinc-500"
+                                      : "bg-transparent text-zinc-400 border-zinc-700 hover:text-zinc-200 hover:border-zinc-600"
+                                      }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 min-h-[280px]">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-xs text-zinc-400">Participants permissions</label>
+                      <span className="text-[11px] text-zinc-500">{tempScheduledUserPermissions.length} participants</span>
+                    </div>
+
+                    {tempScheduledUserPermissions.length > 0 ? (
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
+                        {tempScheduledUserPermissions.map((u) => (
+                          <div key={u._id} className="px-3 py-2.5 text-xs text-zinc-200 border border-zinc-800 rounded-lg">
+                            <div className="flex items-center gap-2 min-w-0 mb-2">
+                              {u.profile_picture ? (
+                                <img src={u.profile_picture} alt={u.full_name} className="w-6 h-6 rounded-full object-cover border border-zinc-600" />
+                              ) : (
+                                <span className="w-6 h-6 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[9px] font-semibold text-zinc-200">{getInitials(u.full_name)}</span>
+                              )}
+                              <div className="min-w-0">
+                                <div className="truncate font-medium text-zinc-200">{u.full_name}</div>
+                                {u.email && <div className="truncate text-[10px] text-zinc-500">{u.email}</div>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => updateScheduledPermissionUser(u._id, "mic", !u.permissions?.mic)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors ${u.permissions?.mic ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                              >
+                                <Mic className="w-3 h-3" />
+                                Mic
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateScheduledPermissionUser(u._id, "camera", !u.permissions?.camera)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors ${u.permissions?.camera ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                              >
+                                <Video className="w-3 h-3" />
+                                Cam
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateScheduledPermissionUser(u._id, "screenShare", !u.permissions?.screenShare)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors ${u.permissions?.screenShare ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" : "bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-700"}`}
+                              >
+                                <Monitor className="w-3 h-3" />
+                                Share
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500">No participants added yet. Add participants in the meeting form above.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveScheduledPermissions();
+                    }}
+                    className="px-4 py-2.5 rounded-lg bg-zinc-700 text-white text-sm font-medium hover:bg-zinc-600"
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </div>
           )}

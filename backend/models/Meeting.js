@@ -60,6 +60,74 @@ const meetingSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    lobby_bypass_users: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    instant_permissions: {
+      mic: {
+        mode: {
+          type: String,
+          enum: ["everyone", "selected", "none"],
+          default: "everyone",
+        },
+        users: [
+          {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        ],
+      },
+      camera: {
+        mode: {
+          type: String,
+          enum: ["everyone", "selected", "none"],
+          default: "everyone",
+        },
+        users: [
+          {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        ],
+      },
+      screenShare: {
+        mode: {
+          type: String,
+          enum: ["everyone", "selected", "none"],
+          default: "everyone",
+        },
+        users: [
+          {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        ],
+      },
+    },
+    instant_user_permissions: [
+      {
+        user: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        mic: {
+          type: Boolean,
+          default: true,
+        },
+        camera: {
+          type: Boolean,
+          default: true,
+        },
+        screenShare: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     is_instant: {
       type: Boolean,
       default: false,

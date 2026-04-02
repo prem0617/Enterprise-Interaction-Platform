@@ -1,6 +1,7 @@
 // controllers/directChat.controller.js
 import User from "../../models/User.js";
 import Employee from "../../models/Employee.js";
+import Department from "../../models/Department.js";
 import { ChatChannel } from "../../models/ChatChannel.js";
 import { ChannelMember } from "../../models/ChannelMember.js";
 import { Message } from "../../models/Message.js";
@@ -105,18 +106,21 @@ export const searchUsers = async (req, res) => {
       return res.status(400).json({ error: "Search query is required" });
     }
 
+    const normalizedLimit = Math.max(1, parseInt(limit, 10) || 10);
+    const searchRegex = { $regex: query.trim(), $options: "i" };
+
     // Search users by name or email
     const users = await User.find({
       _id: { $ne: currentUserId }, // Exclude current user
       status: "active", // Only active users
       $or: [
-        { first_name: { $regex: query, $options: "i" } },
-        { last_name: { $regex: query, $options: "i" } },
-        { email: { $regex: query, $options: "i" } },
+        { first_name: searchRegex },
+        { last_name: searchRegex },
+        { email: searchRegex },
       ],
     })
       .select("first_name last_name email user_type country profile_picture")
-      .limit(parseInt(limit));
+      .limit(normalizedLimit);
 
     // Get employee details if user is employee
     const usersWithDetails = await Promise.all(
@@ -152,10 +156,92 @@ export const searchUsers = async (req, res) => {
       })
     );
 
+    const groups = await Department.find({
+      is_active: true,
+      $or: [{ name: searchRegex }, { code: searchRegex }],
+      type: { $in: ["department", "team"] },
+    })
+      .select("name code type chat_channel_id")
+      .lean();
+
+    const groupsWithMembers = await Promise.all(
+      groups.map(async (group) => {
+        let memberUserIds = [];
+
+        if (group.type === "team" && group.chat_channel_id) {
+          const teamMembers = await ChannelMember.find({
+            channel_id: group.chat_channel_id,
+          })
+            .select("user_id")
+            .lean();
+          memberUserIds = teamMembers.map((m) => String(m.user_id));
+        }
+
+        if (!memberUserIds.length) {
+          const employeeMembers = await Employee.find({
+            department: group._id,
+            is_active: true,
+          })
+            .select("user_id")
+            .lean();
+          memberUserIds = employeeMembers.map((m) => String(m.user_id));
+        }
+
+        const uniqueMemberUserIds = [...new Set(memberUserIds)].filter(
+          (id) => id !== String(currentUserId)
+        );
+
+        if (!uniqueMemberUserIds.length) {
+          return null;
+        }
+
+        const memberUsers = await User.find({
+          _id: { $in: uniqueMemberUserIds },
+          status: "active",
+        })
+          .select("first_name last_name email user_type country profile_picture")
+          .lean();
+
+        if (!memberUsers.length) {
+          return null;
+        }
+
+        const members = memberUsers.map((user) => ({
+          _id: user._id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          full_name: `${user.first_name} ${user.last_name}`,
+          email: user.email,
+          user_type: user.user_type,
+          country: user.country,
+          profile_picture: user.profile_picture,
+        }));
+
+        return {
+          _id: group._id,
+          entityType: group.type === "team" ? "team" : "department",
+          name: group.name,
+          code: group.code,
+          full_name: group.name,
+          members,
+          member_count: members.length,
+        };
+      })
+    );
+
+    const filteredGroups = groupsWithMembers.filter(Boolean);
+    const resultUsers = usersWithDetails.map((user) => ({
+      ...user,
+      entityType: "user",
+    }));
+
     res.json({
       count: usersWithDetails.length,
+      group_count: filteredGroups.length,
       query,
       users: usersWithDetails,
+      groups: filteredGroups,
+      results: [...resultUsers, ...filteredGroups],
     });
   } catch (error) {
     console.error("Search users error:", error);
