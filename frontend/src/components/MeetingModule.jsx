@@ -2204,37 +2204,12 @@ const MeetingModule = ({ isVisible = true, onMeetingStateChange, readOnly = fals
   }, [socket, currentUserId]);
 
   // ---- Meeting reminders ----
+  // Reminders are now sent as desktop push notifications from the backend
+  // Socket event listener removed - desktop notifications handled by service worker
   useEffect(() => {
-    if (!socket) return;
-
-    const handleReminder = (payload) => {
-      toast(
-        (t) => (
-          <div className="text-left">
-            <div className="flex items-center gap-2 mb-1">
-              <CalendarDays className="w-4 h-4 text-indigo-400" />
-              <span className="text-sm font-semibold text-white">
-                Upcoming meeting
-              </span>
-            </div>
-            <p className="text-sm text-zinc-200">{payload.title}</p>
-            <p className="text-xs text-zinc-400">
-              Starts in {payload.minutes_before} minutes
-            </p>
-          </div>
-        ),
-        {
-          duration: 8000,
-          id: `meeting-${payload.meetingId}-${payload.minutes_before}`,
-        }
-      );
-    };
-
-    socket.on("meeting-reminder", handleReminder);
-    return () => {
-      socket.off("meeting-reminder", handleReminder);
-    };
-  }, [socket]);
+    // Reminder notifications are triggered by backend push service
+    // No UI toast - only desktop notifications when current time <= reminder trigger time
+  }, []);
 
   // ---- Meeting room socket events ----
   useEffect(() => {

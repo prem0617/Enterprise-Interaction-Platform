@@ -38,13 +38,16 @@ function scheduleRemindersForMeeting(meeting) {
   const now = Date.now();
   const timeouts = [];
 
-  const allParticipantIds = new Set();
-  if (meeting.host_id) allParticipantIds.add(String(meeting.host_id));
+  // Only add explicitly added participants (not host)
+  const participantIds = new Set();
   if (Array.isArray(meeting.participants)) {
     meeting.participants.forEach((p) => {
-      if (p) allParticipantIds.add(String(p._id || p));
+      if (p) participantIds.add(String(p._id || p));
     });
   }
+
+  // If no participants added, don't schedule reminders
+  if (participantIds.size === 0) return;
 
   reminderDefs.forEach((rem) => {
     const minutesBefore = Number(rem.minutes_before);
@@ -52,7 +55,33 @@ function scheduleRemindersForMeeting(meeting) {
 
     const triggerAt = scheduledTime - minutesBefore * 60 * 1000;
     const delay = triggerAt - now;
-    if (delay <= 0) return;
+
+    // If we're already past the trigger time, send immediately
+    if (delay <= 0) {
+      (async () => {
+        const fresh = await Meeting.findById(meetingId).lean();
+        if (!fresh || fresh.status === "cancelled") return;
+
+        const when =
+          minutesBefore === 0
+            ? "Starting now"
+            : `In ${minutesBefore} min`;
+
+        await Promise.all(
+          [...participantIds].map(async (userId) => {
+            const url = await buildMeetingDeepLink(userId, fresh.meeting_code);
+            return sendPushToUser(userId, {
+              title: `Meeting reminder · ${when}`,
+              body: fresh.title,
+              url,
+              tag: `eip-mtg-rem-${meetingId}-${minutesBefore}-${userId}`,
+              data: { type: "meeting_reminder", meetingId },
+            });
+          })
+        );
+      })();
+      return;
+    }
 
     const timeoutId = setTimeout(async () => {
       const payload = {
@@ -74,15 +103,8 @@ function scheduleRemindersForMeeting(meeting) {
           ? "Starting now"
           : `In ${minutesBefore} min`;
 
-      allParticipantIds.forEach((userId) => {
-        const socketId = getReceiverSocketId(userId);
-        if (socketId) {
-          io.to(socketId).emit("meeting-reminder", payload);
-        }
-      });
-
       await Promise.all(
-        [...allParticipantIds].map(async (userId) => {
+        [...participantIds].map(async (userId) => {
           const url = await buildMeetingDeepLink(userId, fresh.meeting_code);
           return sendPushToUser(userId, {
             title: `Meeting reminder · ${when}`,
